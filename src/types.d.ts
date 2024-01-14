@@ -10,6 +10,7 @@ export type LNBitsInvoiceData = {
   memo?: string;
   webhook?: string;
   description_hash?: string;
+  unhashed_description?: string;
 };
 
 export type LNBitsInvoiceResponse = {

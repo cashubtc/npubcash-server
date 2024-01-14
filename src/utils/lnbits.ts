@@ -6,6 +6,7 @@ export async function getInvoice(
   memo?: string,
   webhook?: string,
   descHash?: string,
+  unhashedDesc?: string,
 ): Promise<LNBitsInvoiceResponse> {
   checkEnvVars(["LNBITS_INVOICE"]);
 
@@ -21,7 +22,9 @@ export async function getInvoice(
   if (descHash) {
     invoiceBody.description_hash = descHash;
   }
-
+  if (unhashedDesc) {
+    invoiceBody.unhashed_description = unhashedDesc;
+  }
   const invoiceRes = await fetch("https://legend.lnbits.com/api/v1/payments", {
     method: "POST",
     body: JSON.stringify(invoiceBody),
