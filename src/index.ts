@@ -1,9 +1,11 @@
 import express, { NextFunction, Request, Response } from "express";
 import bodyparser from "body-parser";
 import { CashuMint, CashuWallet, getEncodedToken } from "@cashu/cashu-ts";
-import { payInvoice } from "./utils/lnbits";
+import { getInvoice, payInvoice } from "./utils/lnbits";
 import { parseInvoice } from "./utils/lightning";
 import { MintData } from "./types";
+import { encryptString } from "./utils/encryption";
+import { createHash } from "crypto";
 
 const wallet = new CashuWallet(new CashuMint("https://8333.space:3338"));
 
@@ -14,25 +16,36 @@ app.use(bodyparser.json());
 app.get(
   "/.well-known/lnurlp/test",
   async (
-    req: Request<unknown, unknown, unknown, { amount: number }>,
+    req: Request<unknown, unknown, unknown, { amount?: number }>,
     res: Response,
     next: NextFunction,
   ) => {
     const { amount } = req.query;
+    const metadata = "A cashu lightning address! Neat!";
+    if (!amount) {
+      return res.json({
+        callback: "",
+        maxSendable: 1000,
+        minSendable: 250000,
+        metadata: [["text/plain", metadata]],
+        tag: "payRequest",
+      });
+    }
     const { pr, hash } = await wallet.requestMint(Math.floor(amount / 1000));
     const { amount: mintAmount } = parseInvoice(pr);
-    const invoiceRes = await fetch(
-      "https://legend.lnbits.com/api/v1/payments",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          out: false,
-          amount: mintAmount,
-          memo: JSON.stringify({ mintPr: pr, mintHash: hash, user: "test" }),
-          webhook: "https://cashu.my2sats.space/paid",
-        }),
-      },
+    const paymentMemo = encryptString(
+      JSON.stringify({ mintPr: pr, mintHash: hash, user: "test" }),
     );
+    const invoiceRes = await getInvoice(
+      mintAmount,
+      paymentMemo,
+      "https://cashu.my2sats.space/paid",
+      createHash("sha256").update(metadata).digest("hex"),
+    );
+    res.json({
+      payment_request: invoiceRes.payment_request,
+      payment_hash: invoiceRes.payment_hash,
+    });
   },
 );
 
