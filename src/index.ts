@@ -3,9 +3,8 @@ import bodyparser from "body-parser";
 import { CashuMint, CashuWallet, getEncodedToken } from "@cashu/cashu-ts";
 import { getInvoice, payInvoice } from "./utils/lnbits";
 import { parseInvoice } from "./utils/lightning";
-import { MintData } from "./types";
-import { encryptString } from "./utils/encryption";
-import { createHash } from "crypto";
+import { Transaction } from "./models/transaction";
+import { Claim } from "./models/proof";
 
 const wallet = new CashuWallet(new CashuMint("https://8333.space:3338"));
 
@@ -31,21 +30,29 @@ app.get(
         tag: "payRequest",
       });
     }
+    if (amount > 250000 || amount < 1000) {
+      const err = new Error("Invalid amount");
+      return next(err);
+    }
     const { pr, hash } = await wallet.requestMint(Math.floor(amount / 1000));
     const { amount: mintAmount } = parseInvoice(pr);
-    const paymentMemo = encryptString(
-      JSON.stringify({ mintPr: pr, mintHash: hash, user: "test" }),
-    );
-    const invoiceRes = await getInvoice(
-      mintAmount,
-      paymentMemo,
-      "https://cashu.my2sats.space/paid",
-      createHash("sha256").update(metadata).digest("hex"),
-    );
-    res.json({
-      payment_request: invoiceRes.payment_request,
-      payment_hash: invoiceRes.payment_hash,
-    });
+    const transaction = await Transaction.createTransaction(pr, hash);
+    try {
+      const invoiceRes = await getInvoice(
+        mintAmount,
+        JSON.stringify({ id: transaction.id }),
+        "https://cashu.my2sats.space/paid",
+      );
+      console.log(invoiceRes);
+      res.json({
+        payment_request: invoiceRes.payment_request,
+        payment_hash: invoiceRes.payment_hash,
+      });
+    } catch (e) {
+      console.log(e);
+      res.status(500);
+      res.json({ error: true, message: "Something went wrong..." });
+    }
   },
 );
 
@@ -57,14 +64,20 @@ app.post(
     next: NextFunction,
   ) => {
     const { amount, memo } = req.body;
-    const mintInfo = JSON.parse(memo) as MintData;
-    const paymentData = await payInvoice(mintInfo.mintPr);
-    const { proofs } = await wallet.requestTokens(amount, mintInfo.mintHash);
+    const mintInfo = JSON.parse(memo) as { id: number };
+    const transaction = await Transaction.getTransactionFromDb(mintInfo.id);
+    const paymentData = await payInvoice(transaction.mint_pr);
+    console.log(paymentData);
+    const { proofs } = await wallet.requestTokens(
+      amount,
+      transaction.mint_hash,
+    );
     const encoded = getEncodedToken({
       token: [{ mint: "https://8333.space:3338", proofs }],
     });
+    Claim.createClaim("test", encoded);
     console.log(encoded);
-    // save encoded token in DB for user to claim later
+    res.sendStatus(200);
   },
 );
 
