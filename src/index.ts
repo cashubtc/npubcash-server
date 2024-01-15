@@ -35,13 +35,20 @@ app.get(
       const err = new Error("Invalid amount");
       return next(err);
     }
-    const { pr, hash } = await wallet.requestMint(Math.floor(amount / 1000));
-    const { amount: mintAmount } = parseInvoice(pr);
-    const transaction = await Transaction.createTransaction(pr, hash);
+    const { pr: mintPr, hash: mintHash } = await wallet.requestMint(
+      Math.floor(amount / 1000),
+    );
+    const { amount: mintAmount } = parseInvoice(mintPr);
     try {
       const invoiceRes = await createInvoice(
         mintAmount / 1000,
-        JSON.stringify({ id: transaction.id }),
+        "Cashu Address",
+      );
+      await Transaction.createTransaction(
+        mintPr,
+        mintHash,
+        invoiceRes.paymentRequest,
+        invoiceRes.paymentHash,
       );
       res.json({
         pr: invoiceRes.paymentRequest,
@@ -63,25 +70,28 @@ app.post(
       unknown,
       {
         eventType: string;
-        transaction: { memo: string; settlementAmount: number };
+        transaction: {
+          memo: string;
+          settlementAmount: number;
+          initiationVia: { paymentHash: string };
+        };
       },
       unknown
     >,
     res: Response,
-    next: NextFunction,
   ) => {
     const { eventType, transaction } = req.body;
     if (eventType === "receive.lightning") {
-      console.log(transaction);
-      const mintInfo = JSON.parse(transaction.memo) as { id: number };
-      const internalTx = await Transaction.getTransactionFromDb(mintInfo.id);
-      const paymentData = await payInvoice(internalTx.mint_pr);
+      const reqHash = transaction.initiationVia.paymentHash;
+      const internalTx = await Transaction.getTransactionByHash(reqHash);
+      const paymentData = await sendPayment(internalTx.mint_pr);
+      console.log(paymentData);
       const { proofs } = await wallet.requestTokens(
         transaction.settlementAmount,
         internalTx.mint_hash,
       );
       const encoded = getEncodedToken({
-        token: [{ mint: "https://8333.space:3338", proofs }],
+        token: [{ mint: process.env.MINTURL!, proofs }],
       });
       Claim.createClaim("test", encoded);
       console.log(encoded);
