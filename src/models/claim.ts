@@ -13,7 +13,7 @@ export class Claim {
 
   static async createClaim(user: string, token: string) {
     const res = await queryWrapper(
-      `INSERT INTO l_claims (user, token, claimed) VALUES ($1, $2, false)`,
+      `INSERT INTO l_claims ("user", token, claimed) VALUES ($1, $2, false)`,
       [user, token],
     );
     if (res.rowCount === 0) {
