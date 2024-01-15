@@ -5,6 +5,7 @@ import { getInvoice, payInvoice } from "./utils/lnbits";
 import { parseInvoice } from "./utils/lightning";
 import { Transaction } from "./models/transaction";
 import { Claim } from "./models/claim";
+import { createInvoice, sendPayment } from "./utils/blink";
 
 const wallet = new CashuWallet(new CashuMint(process.env.MINTURL!));
 
@@ -38,14 +39,13 @@ app.get(
     const { amount: mintAmount } = parseInvoice(pr);
     const transaction = await Transaction.createTransaction(pr, hash);
     try {
-      const invoiceRes = await getInvoice(
+      const invoiceRes = await createInvoice(
         mintAmount / 1000,
         JSON.stringify({ id: transaction.id }),
-        "https://cashu.my2sats.space/paid",
       );
       res.json({
-        payment_request: invoiceRes.payment_request,
-        payment_hash: invoiceRes.payment_hash,
+        pr: invoiceRes.paymentRequest,
+        routes: [],
       });
     } catch (e) {
       console.log(e);
@@ -58,24 +58,37 @@ app.get(
 app.post(
   "/paid",
   async (
-    req: Request<unknown, unknown, { amount: number; memo: string }, unknown>,
+    req: Request<
+      unknown,
+      unknown,
+      {
+        eventType: string;
+        transaction: { memo: string; settlementAmount: number };
+      },
+      unknown
+    >,
     res: Response,
     next: NextFunction,
   ) => {
-    const { amount, memo } = req.body;
-    const mintInfo = JSON.parse(memo) as { id: number };
-    const transaction = await Transaction.getTransactionFromDb(mintInfo.id);
-    const paymentData = await payInvoice(transaction.mint_pr);
-    const { proofs } = await wallet.requestTokens(
-      amount,
-      transaction.mint_hash,
-    );
-    const encoded = getEncodedToken({
-      token: [{ mint: "https://8333.space:3338", proofs }],
-    });
-    Claim.createClaim("test", encoded);
-    console.log(encoded);
-    res.sendStatus(200);
+    const { eventType, transaction } = req.body;
+    if (eventType === "receive.lightning") {
+      console.log(transaction);
+      const mintInfo = JSON.parse(transaction.memo) as { id: number };
+      const internalTx = await Transaction.getTransactionFromDb(mintInfo.id);
+      const paymentData = await payInvoice(internalTx.mint_pr);
+      const { proofs } = await wallet.requestTokens(
+        transaction.settlementAmount,
+        internalTx.mint_hash,
+      );
+      const encoded = getEncodedToken({
+        token: [{ mint: "https://8333.space:3338", proofs }],
+      });
+      Claim.createClaim("test", encoded);
+      console.log(encoded);
+      res.sendStatus(200);
+    } else {
+      return res.sendStatus(200);
+    }
   },
 );
 

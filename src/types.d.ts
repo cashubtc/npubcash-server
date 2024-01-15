@@ -19,3 +19,20 @@ export type LNBitsInvoiceResponse = {
   checking_id: string;
   lnurl_response?: string;
 };
+
+export type BlinkInvoiceResponse = {
+  lnInvoiceCreateOnBehalfOfRecipient: {
+    invoice: {
+      paymentRequest: string;
+      paymentHash: string;
+      paymentSecret: string;
+      satoshis: number;
+    };
+  };
+};
+
+export type BlinkPaymentResponse = {
+  lnInvoicePaymentSend: {
+    status: string;
+  };
+};
