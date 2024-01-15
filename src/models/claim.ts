@@ -23,7 +23,7 @@ export class Claim {
 
   static async getUserClaims(user: string) {
     const res = await queryWrapper<Claim>(
-      `SELECT * FROM l_claims WHERE user = $1`,
+      `SELECT * FROM l_claims WHERE "user" = $1`,
       [user],
     );
     if (res.rowCount === 0) {

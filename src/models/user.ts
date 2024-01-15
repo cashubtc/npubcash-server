@@ -19,4 +19,14 @@ export class User {
     }
     return new User(pubkey, name);
   }
+  static async getUserByPubkey(pubkey: string) {
+    const res = await queryWrapper<User>(
+      `SELECT * FROM l_users WHERE pubkey = $1`,
+      [pubkey],
+    );
+    if (res.rowCount === 0) {
+      return undefined;
+    }
+    return new User(res.rows[0].pubkey, res.rows[0].name);
+  }
 }

@@ -6,6 +6,17 @@ import { parseInvoice } from "./utils/lightning";
 import { Transaction } from "./models/transaction";
 import { Claim } from "./models/claim";
 import { createInvoice, sendPayment } from "./utils/blink";
+import {
+  Event,
+  finalizeEvent,
+  generateSecretKey,
+  getEventHash,
+  getPublicKey,
+  nip98,
+  verifyEvent,
+} from "nostr-tools";
+import { verifyAuth } from "./utils/auth";
+import { User } from "./models/user";
 
 const wallet = new CashuWallet(new CashuMint(process.env.MINTURL!));
 
@@ -108,6 +119,23 @@ app.get("/claim", async (req: Request, res: Response, next: NextFunction) => {
     res.status(401);
     return next(new Error("Unauthorized"));
   }
+  const isAuth = await verifyAuth(
+    authHeader,
+    "http://localhost:8000/claim",
+    "GET",
+  );
+  if (!isAuth.authorized) {
+    res.status(401);
+    return next(new Error("Unauthorized"));
+  }
+  const user = await User.getUserByPubkey(isAuth.data.pubkey);
+  if (!user) {
+    res.status(404);
+    return next(new Error("User not found"));
+  }
+  console.log(user);
+  const claims = await Claim.getUserClaims(user.name);
+  console.log(claims);
 });
 
 app.listen(process.env.PORT || 8000);
