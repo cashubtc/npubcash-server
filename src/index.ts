@@ -24,9 +24,9 @@ app.get(
     const metadata = "A cashu lightning address! Neat!";
     if (!amount) {
       return res.json({
-        callback: "",
-        maxSendable: 1000,
-        minSendable: 250000,
+        callback: "https://cashu.my2sats.space/.well-known/lnurlp/test",
+        maxSendable: 250000,
+        minSendable: 1,
         metadata: [["text/plain", metadata]],
         tag: "payRequest",
       });
