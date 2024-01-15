@@ -29,4 +29,14 @@ export class User {
     }
     return new User(res.rows[0].pubkey, res.rows[0].name);
   }
+  static async getUserByName(name: string) {
+    const res = await queryWrapper<User>(
+      `SELECT * FROM l_users WHERE name = $1`,
+      [name],
+    );
+    if (res.rowCount === 0) {
+      return undefined;
+    }
+    return new User(res.rows[0].pubkey, res.rows[0].name);
+  }
 }

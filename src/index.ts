@@ -1,20 +1,11 @@
 import express, { NextFunction, Request, Response } from "express";
 import bodyparser from "body-parser";
 import { CashuMint, CashuWallet, getEncodedToken } from "@cashu/cashu-ts";
-import { getInvoice, payInvoice } from "./utils/lnbits";
 import { parseInvoice } from "./utils/lightning";
 import { Transaction } from "./models/transaction";
 import { Claim } from "./models/claim";
 import { createInvoice, sendPayment } from "./utils/blink";
-import {
-  Event,
-  finalizeEvent,
-  generateSecretKey,
-  getEventHash,
-  getPublicKey,
-  nip98,
-  verifyEvent,
-} from "nostr-tools";
+import { finalizeEvent, getPublicKey } from "nostr-tools";
 import { verifyAuth } from "./utils/auth";
 import { User } from "./models/user";
 
@@ -25,17 +16,22 @@ const app = express();
 app.use(bodyparser.json());
 
 app.get(
-  "/.well-known/lnurlp/test",
+  "/.well-known/lnurlp/:user",
   async (
-    req: Request<unknown, unknown, unknown, { amount?: number }>,
+    req: Request<{ user: string }, unknown, unknown, { amount?: number }>,
     res: Response,
     next: NextFunction,
   ) => {
     const { amount } = req.query;
+    const user = await User.getUserByName(req.params.user);
+    if (!user) {
+      res.status(404);
+      return next(new Error("User not found"));
+    }
     const metadata = "A cashu lightning address! Neat!";
     if (!amount) {
       return res.json({
-        callback: "https://cashu.my2sats.space/.well-known/lnurlp/test",
+        callback: `https://cashu.my2sats.space/.well-known/lnurlp/${user?.name}`,
         maxSendable: 250000,
         minSendable: 1,
         metadata: [["text/plain", metadata]],
