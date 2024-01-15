@@ -4,9 +4,9 @@ import { CashuMint, CashuWallet, getEncodedToken } from "@cashu/cashu-ts";
 import { getInvoice, payInvoice } from "./utils/lnbits";
 import { parseInvoice } from "./utils/lightning";
 import { Transaction } from "./models/transaction";
-import { Claim } from "./models/proof";
+import { Claim } from "./models/claim";
 
-const wallet = new CashuWallet(new CashuMint("https://8333.space:3338"));
+const wallet = new CashuWallet(new CashuMint(process.env.MINTURL!));
 
 const app = express();
 
@@ -39,11 +39,10 @@ app.get(
     const transaction = await Transaction.createTransaction(pr, hash);
     try {
       const invoiceRes = await getInvoice(
-        mintAmount,
+        mintAmount / 1000,
         JSON.stringify({ id: transaction.id }),
         "https://cashu.my2sats.space/paid",
       );
-      console.log(invoiceRes);
       res.json({
         payment_request: invoiceRes.payment_request,
         payment_hash: invoiceRes.payment_hash,
@@ -67,7 +66,6 @@ app.post(
     const mintInfo = JSON.parse(memo) as { id: number };
     const transaction = await Transaction.getTransactionFromDb(mintInfo.id);
     const paymentData = await payInvoice(transaction.mint_pr);
-    console.log(paymentData);
     const { proofs } = await wallet.requestTokens(
       amount,
       transaction.mint_hash,
@@ -80,5 +78,13 @@ app.post(
     res.sendStatus(200);
   },
 );
+
+app.get("/claim", async (req: Request, res: Response, next: NextFunction) => {
+  const authHeader = req.header("Authorization");
+  if (!authHeader) {
+    res.status(401);
+    return next(new Error("Unauthorized"));
+  }
+});
 
 app.listen(process.env.PORT || 8000);

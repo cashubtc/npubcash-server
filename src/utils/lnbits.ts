@@ -8,7 +8,7 @@ export async function getInvoice(
   descHash?: string,
   unhashedDesc?: string,
 ): Promise<LNBitsInvoiceResponse> {
-  checkEnvVars(["LNBITS_INVOICE"]);
+  checkEnvVars(["LNBITS_INVOICE", "LNBITSURL"]);
 
   const invoiceBody = {
     out: false,
@@ -25,7 +25,7 @@ export async function getInvoice(
   if (unhashedDesc) {
     invoiceBody.unhashed_description = unhashedDesc;
   }
-  const invoiceRes = await fetch("https://legend.lnbits.com/api/v1/payments", {
+  const invoiceRes = await fetch(`${process.env.LNBITSURL}/api/v1/payments`, {
     method: "POST",
     body: JSON.stringify(invoiceBody),
     headers: {
@@ -38,8 +38,8 @@ export async function getInvoice(
 }
 
 export async function payInvoice(invoice: string) {
-  checkEnvVars(["LNBITS_ADMIN"]);
-  const payRes = await fetch("https://legen.lnbits.com/api/v1/payments", {
+  checkEnvVars(["LNBITS_ADMIN", "LNBITSURL"]);
+  const payRes = await fetch(`${process.env.LNBITSURL}/api/v1/payments`, {
     method: "POST",
     body: JSON.stringify({
       out: true,
