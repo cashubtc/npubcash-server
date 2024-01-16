@@ -15,7 +15,7 @@ export async function claimController(
   }
   const isAuth = await verifyAuth(
     authHeader,
-    "http://localhost:8000/claim",
+    "https://cashu.my2sats.space/claim",
     "GET",
   );
   if (!isAuth.authorized) {
