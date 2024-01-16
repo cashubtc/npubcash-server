@@ -35,7 +35,6 @@ export class Transaction {
     if (res.rowCount === 0) {
       throw new Error("Failed to create new Transaction");
     }
-    console.log(res);
     return new Transaction(
       mint_pr,
       mint_hash,
