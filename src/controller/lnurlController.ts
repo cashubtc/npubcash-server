@@ -42,6 +42,7 @@ export async function lnurlController(
       mintHash,
       invoiceRes.paymentRequest,
       invoiceRes.paymentHash,
+      user.name,
     );
     res.json({
       pr: invoiceRes.paymentRequest,

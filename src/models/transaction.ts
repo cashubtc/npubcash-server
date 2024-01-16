@@ -1,11 +1,11 @@
 import { queryWrapper } from "../utils/database";
 
 export class Transaction {
-  id: string;
   mint_pr: string;
   mint_hash: string;
   server_pr: string;
   server_hash: string;
+  user: string;
   created_at: number;
 
   constructor(
@@ -13,12 +13,14 @@ export class Transaction {
     mintHash: string,
     serverPr: string,
     serverHash: string,
+    user: string,
     createdAt: number,
   ) {
     this.mint_pr = mintPr;
     this.mint_hash = mintHash;
     this.server_pr = serverPr;
     this.server_hash = serverHash;
+    this.user = user;
     this.created_at = createdAt;
   }
 
@@ -27,10 +29,11 @@ export class Transaction {
     mint_hash: string,
     server_pr: string,
     server_hash: string,
+    user: string,
   ) {
     const res = await queryWrapper<Transaction>(
-      `INSERT INTO l_transactions (mint_pr, mint_hash, server_pr, server_hash) VALUES ($1, $2, $3, $4) RETURNING id, created_at`,
-      [mint_pr, mint_hash, server_pr, server_hash],
+      `INSERT INTO l_transactions (mint_pr, mint_hash, server_pr, server_hash, "user") VALUES ($1, $2, $3, $4, $5) RETURNING id, created_at`,
+      [mint_pr, mint_hash, server_pr, server_hash, user],
     );
     if (res.rowCount === 0) {
       throw new Error("Failed to create new Transaction");
@@ -40,6 +43,7 @@ export class Transaction {
       mint_hash,
       server_pr,
       server_hash,
+      user,
       Math.floor(new Date(res.rows[0].created_at).getTime() / 1000),
     );
   }
@@ -57,6 +61,7 @@ export class Transaction {
       res.rows[0].mint_hash,
       res.rows[0].server_pr,
       res.rows[0].server_hash,
+      res.rows[0].user,
       Math.floor(new Date(res.rows[0].created_at).getTime() / 1000),
     );
   }

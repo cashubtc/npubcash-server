@@ -20,13 +20,16 @@ export async function paidController(
     unknown
   >,
   res: Response,
-  next: NextFunction,
 ) {
   const { eventType, transaction } = req.body;
   if (eventType === "receive.lightning") {
     const reqHash = transaction.initiationVia.paymentHash;
     const internalTx = await Transaction.getTransactionByHash(reqHash);
-    const paymentData = await sendPayment(internalTx.mint_pr);
+    try {
+      await sendPayment(internalTx.mint_pr);
+    } catch (e) {
+      // TO-DO log failed payment and retry
+    }
     const { proofs } = await wallet.requestTokens(
       transaction.settlementAmount,
       internalTx.mint_hash,
@@ -34,7 +37,7 @@ export async function paidController(
     const encoded = getEncodedToken({
       token: [{ mint: process.env.MINTURL!, proofs }],
     });
-    Claim.createClaim("test", encoded);
+    Claim.createClaim(internalTx.user, encoded);
     res.sendStatus(200);
   } else {
     return res.sendStatus(200);
