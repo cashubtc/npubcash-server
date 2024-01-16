@@ -23,10 +23,13 @@ export async function claimController(
     return next(new Error("Unauthorized"));
   }
   const user = await User.getUserByPubkey(isAuth.data.pubkey);
-  if (!user) {
-    res.status(404);
-    return next(new Error("User not found"));
+  if (user) {
+    console.log("is user");
+    const userClaims = await Claim.getUserClaims(user.name);
+    const npubClaims = await Claim.getUserClaims(isAuth.data.npub);
+    return res.json({ error: false, data: [...userClaims, ...npubClaims] });
+  } else {
+    const npubClaims = await Claim.getUserClaims(isAuth.data.npub);
+    return res.json({ error: false, data: npubClaims });
   }
-  const claims = await Claim.getUserClaims(user.name);
-  res.json({ error: false, data: claims });
 }

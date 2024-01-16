@@ -5,29 +5,43 @@ import { parseInvoice } from ".././utils/lightning";
 import { createInvoice } from ".././utils/blink";
 import { Transaction } from ".././models/transaction";
 import { wallet } from "..";
+import { nip19 } from "nostr-tools";
 
+const metadata = "A cashu lightning address! Neat!";
 export async function lnurlController(
   req: Request<{ user: string }, unknown, unknown, { amount?: number }>,
   res: Response,
   next: NextFunction,
 ) {
   const { amount } = req.query;
-  const user = await User.getUserByName(req.params.user);
-  if (!user) {
-    res.status(404);
-    return next(new Error("User not found"));
+  const userParam = req.params.user;
+  let username: string | User | undefined;
+  if (userParam.startsWith("npub")) {
+    try {
+      nip19.decode(userParam as `npub1${string}`);
+      username = userParam;
+    } catch {
+      res.status(401);
+      return next(new Error("Invalid npub / public key"));
+    }
+  } else {
+    const userObj = await User.getUserByName(userParam);
+    if (!userObj) {
+      res.status(404);
+      return next(new Error("User not found"));
+    }
+    username = userObj.name;
   }
-  const metadata = "A cashu lightning address! Neat!";
   if (!amount) {
     return res.json({
-      callback: `https://cashu.my2sats.space/.well-known/lnurlp/${user?.name}`,
+      callback: `https://cashu.my2sats.space/.well-known/lnurlp/${username}`,
       maxSendable: 250000,
-      minSendable: 1,
+      minSendable: 10000,
       metadata: [["text/plain", metadata]],
       tag: "payRequest",
     });
   }
-  if (amount > 250000 || amount < 1000) {
+  if (amount > 250000 || amount < 10000) {
     const err = new Error("Invalid amount");
     return next(err);
   }
@@ -42,7 +56,7 @@ export async function lnurlController(
       mintHash,
       invoiceRes.paymentRequest,
       invoiceRes.paymentHash,
-      user.name,
+      username,
     );
     res.json({
       pr: invoiceRes.paymentRequest,

@@ -27,7 +27,7 @@ export class Claim {
       [user],
     );
     if (res.rowCount === 0) {
-      throw new Error("No Claims found in db");
+      return [];
     }
     return res.rows.map((row) => new Claim(row.user, row.token, row.claimed));
   }

@@ -1,8 +1,8 @@
-import { nip98 } from "nostr-tools";
+import { nip19, nip98 } from "nostr-tools";
 
 type AuthData =
   | { authorized: false }
-  | { authorized: true; data: { pubkey: string } };
+  | { authorized: true; data: { pubkey: string; npub: string } };
 
 export async function verifyAuth(
   authHeader: string,
@@ -15,7 +15,10 @@ export async function verifyAuth(
       return { authorized: false };
     }
     const event = await nip98.unpackEventFromToken(authHeader);
-    return { authorized: true, data: { pubkey: event.pubkey } };
+    return {
+      authorized: true,
+      data: { pubkey: event.pubkey, npub: nip19.npubEncode(event.pubkey) },
+    };
   } catch (e) {
     return { authorized: false };
   }

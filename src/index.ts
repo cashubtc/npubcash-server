@@ -3,6 +3,7 @@ import bodyparser from "body-parser";
 import cors from "cors";
 import { CashuMint, CashuWallet } from "@cashu/cashu-ts";
 import routes from "./routes";
+import { finalizeEvent, nip19, nip98 } from "nostr-tools";
 
 export const wallet = new CashuWallet(new CashuMint(process.env.MINTURL!));
 const app = express();
