@@ -8,13 +8,21 @@ export async function verifyAuth(
   authHeader: string,
   url: string,
   method: string,
+  body?: any,
 ): Promise<AuthData> {
   try {
-    const isValid = await nip98.validateToken(authHeader, url, method);
+    let isValid: boolean;
+    const event = await nip98.unpackEventFromToken(authHeader).catch((err) => {
+      throw err;
+    });
+    if (Boolean(body) && Object.keys(body).length > 0) {
+      isValid = await nip98.validateEvent(event, url, method, body);
+    } else {
+      isValid = await nip98.validateEvent(event, url, method);
+    }
     if (!isValid) {
       return { authorized: false };
     }
-    const event = await nip98.unpackEventFromToken(authHeader);
     return {
       authorized: true,
       data: { pubkey: event.pubkey, npub: nip19.npubEncode(event.pubkey) },
