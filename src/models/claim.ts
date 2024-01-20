@@ -1,20 +1,31 @@
+import { Proof } from "@cashu/cashu-ts";
 import { queryWrapper } from "../utils/database";
 
 export class Claim {
+  id: number;
   user: string;
-  token: string;
-  claimed: boolean;
+  mint_url: string;
+  proofs: Proof[];
+  status: "ready" | "inflight" | "spent";
 
-  constructor(user: string, token: string, claimed: boolean) {
+  constructor(
+    id: number,
+    user: string,
+    mint_url: string,
+    proofs: Proof[],
+    status: "ready" | "inflight" | "spent",
+  ) {
+    this.id = id;
     this.user = user;
-    this.token = token;
-    this.claimed = claimed;
+    this.mint_url = mint_url;
+    this.proofs = proofs;
+    this.status = status;
   }
 
-  static async createClaim(user: string, token: string) {
+  static async createClaim(user: string, mint_url: string, proofs: Proof[]) {
     const res = await queryWrapper(
-      `INSERT INTO l_claims ("user", token, claimed) VALUES ($1, $2, false)`,
-      [user, token],
+      `INSERT INTO l_claims_2 ("user", mint_url, proofs, status) VALUES ($1, $2, $3, "ready")`,
+      [user, mint_url, proofs],
     );
     if (res.rowCount === 0) {
       throw new Error("Failed to create new Transaction");
@@ -29,6 +40,9 @@ export class Claim {
     if (res.rowCount === 0) {
       return [];
     }
-    return res.rows.map((row) => new Claim(row.user, row.token, row.claimed));
+    return res.rows.map(
+      (row) =>
+        new Claim(row.id, row.user, row.mint_url, row.proofs, row.status),
+    );
   }
 }
