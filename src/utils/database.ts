@@ -1,10 +1,10 @@
-import { Pool, QueryResultRow } from "pg";
+import { Pool, QueryConfig, QueryResultRow } from "pg";
 
 const pool = new Pool();
 
 export function queryWrapper<T extends QueryResultRow>(
-  query: string,
-  values: string[],
+  query: string | QueryConfig<any[]>,
+  values: any[],
 ) {
   return pool.query<T>(query, values);
 }
