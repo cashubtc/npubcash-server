@@ -24,8 +24,8 @@ export class Claim {
 
   static async createClaim(user: string, mint_url: string, proofs: Proof[]) {
     const res = await queryWrapper(
-      `INSERT INTO l_claims_2 ("user", mint_url, proofs, status) VALUES ($1, $2, $3, "ready")`,
-      [user, mint_url, proofs],
+      `INSERT INTO l_claims_2 ("user", mint_url, proofs, status) VALUES ($1, $2, $3, $4)`,
+      [user, mint_url, JSON.stringify(proofs), "ready"],
     );
     if (res.rowCount === 0) {
       throw new Error("Failed to create new Transaction");
@@ -34,7 +34,7 @@ export class Claim {
 
   static async getUserClaims(user: string) {
     const res = await queryWrapper<Claim>(
-      `SELECT * FROM l_claims WHERE "user" = $1`,
+      `SELECT * FROM l_claims_2 WHERE "user" = $1`,
       [user],
     );
     if (res.rowCount === 0) {

@@ -14,7 +14,7 @@ export async function getInfoController(
   }
   const isAuth = await verifyAuth(
     authHeader,
-    `${process.env.HOSTNAME}/api/v1/wallet/info`,
+    `${process.env.HOSTNAME}/api/v1/info`,
     "GET",
   );
   if (!isAuth.authorized) {

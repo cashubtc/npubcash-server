@@ -25,6 +25,7 @@ export async function paidController(
     const newAmount =
       Number(transaction.settlementAmount) -
       Math.floor(Math.max(Number(transaction.settlementAmount) / 100, 1));
+    console.log(newAmount);
     const reqHash = transaction.initiationVia.paymentHash;
     const internalTx = await Transaction.getTransactionByHash(reqHash);
     try {

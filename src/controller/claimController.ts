@@ -16,7 +16,7 @@ export async function balanceController(
   }
   const isAuth = await verifyAuth(
     authHeader,
-    `${process.env.HOSTNAME}api/v1/balance`,
+    `${process.env.HOSTNAME}/api/v1/balance`,
     "GET",
   );
   if (!isAuth.authorized) {
