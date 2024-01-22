@@ -8,6 +8,7 @@ import { wallet } from "..";
 import { nip19 } from "nostr-tools";
 
 const metadata = "A cashu lightning address! Neat!";
+
 export async function lnurlController(
   req: Request<{ user: string }, unknown, unknown, { amount?: number }>,
   res: Response,

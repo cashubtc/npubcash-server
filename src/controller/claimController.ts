@@ -2,14 +2,7 @@ import { NextFunction, Request, Response } from "express";
 import { verifyAuth } from "../utils/auth";
 import { User } from "../models/user";
 import { Claim } from "../models/claim";
-import {
-  CashuMint,
-  CashuWallet,
-  Proof,
-  TokenEntry,
-  getDecodedToken,
-  getEncodedToken,
-} from "@cashu/cashu-ts";
+import { CashuMint, getEncodedToken } from "@cashu/cashu-ts";
 
 export async function balanceController(
   req: Request,
@@ -23,7 +16,7 @@ export async function balanceController(
   }
   const isAuth = await verifyAuth(
     authHeader,
-    "https://cashu.my2sats.space/balance",
+    `${process.env.HOSTNAME}api/v1/balance`,
     "GET",
   );
   if (!isAuth.authorized) {
@@ -40,13 +33,7 @@ export async function balanceController(
     const npubClaims = await Claim.getUserClaims(isAuth.data.npub);
     allClaims = npubClaims;
   }
-  const decodedToken = allClaims.map((claim) => getDecodedToken(claim.token));
-  const proofs: Proof[] = [];
-  decodedToken.forEach((token) => {
-    token.token.forEach((entry) => {
-      entry.proofs.forEach((p) => proofs.push(p));
-    });
-  });
+  const proofs = allClaims.map((claim) => claim.proofs).flat();
   const payload = {
     proofs: proofs.map((p) => ({ secret: p.secret })),
   };
@@ -70,7 +57,7 @@ export async function claimGetController(
   }
   const isAuth = await verifyAuth(
     authHeader,
-    "https://cashu.my2sats.space/claim",
+    `${process.env.HOSTNAME}/api/v1/claim`,
     "GET",
   );
   if (!isAuth.authorized) {
@@ -86,13 +73,7 @@ export async function claimGetController(
   } else {
     allClaims = await Claim.getUserClaims(isAuth.data.npub);
   }
-  const decodedToken = allClaims.map(
-    (claim) => getDecodedToken(claim.token).token,
-  );
-  const proofs: Proof[] = [];
-  decodedToken.forEach((token) => {
-    token.forEach((e) => e.proofs.forEach((proof) => proofs.push(proof)));
-  });
+  const proofs = allClaims.map((claim) => claim.proofs).flat();
   const payload = { proofs: proofs.map((p) => ({ secret: p.secret })) };
   const { spendable } = await new CashuMint(process.env.MINTURL!).check(
     payload,
@@ -106,26 +87,4 @@ export async function claimGetController(
     return res.json({ error: true, message: "No proofs to claim" });
   }
   res.json({ error: false, data: { token: token } });
-}
-
-export async function claimPostController(
-  req: Request,
-  res: Response,
-  next: NextFunction,
-) {
-  const authHeader = req.header("Authorization");
-  if (!authHeader) {
-    res.status(401);
-    return next(new Error("Missing Authorization Header"));
-  }
-  const isAuth = await verifyAuth(
-    authHeader,
-    "https://cashu.my2sats.space/claim",
-    "POST",
-    req.body,
-  );
-  if (!isAuth.authorized) {
-    res.status(401);
-    return next(new Error("Invalid Authorization Header"));
-  }
 }
