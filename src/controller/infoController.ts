@@ -1,5 +1,4 @@
 import { NextFunction, Request, Response } from "express";
-import { verifyAuth } from "../utils/auth";
 import { User } from "../models/user";
 
 export async function getInfoController(
@@ -7,24 +6,37 @@ export async function getInfoController(
   res: Response,
   next: NextFunction,
 ) {
-  const authHeader = req.header("Authorization");
-  if (!authHeader) {
-    res.status(401);
-    return next(new Error("Missing Authorization Header"));
-  }
-  const isAuth = await verifyAuth(
-    authHeader,
-    `${process.env.HOSTNAME}/api/v1/info`,
-    "GET",
-  );
-  if (!isAuth.authorized) {
-    res.status(401);
-    return next(new Error("Invalid Authorization Header"));
-  }
-  const username = await User.getUserByPubkey(isAuth.data.pubkey);
+  const username = await User.getUserByPubkey(req.authData?.data.pubkey!);
+  console.log(username);
   res.json({
-    username: username ? username : null,
-    npub: isAuth.data.npub,
-    mintUrl: process.env.MINTURL!,
+    username: username ? username.name : null,
+    npub: req.authData?.data.npub!,
+    mintUrl: username ? username.mint_url : process.env.MINTURL!,
   });
+}
+
+export async function putMintInfoController(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  const { mintUrl } = req.body;
+  try {
+    new URL(mintUrl);
+  } catch {
+    res.status(400);
+    return next(new Error("Invalid URL"));
+  }
+  if (!mintUrl) {
+    res.status(400);
+    return next(new Error("Missing parameters"));
+  }
+  try {
+    await User.upsertMintByPubkey(req.authData?.data.pubkey!, mintUrl);
+  } catch (e) {
+    console.log(e);
+    res.status(500);
+    return next(new Error("Failed to update DB"));
+  }
+  res.status(204).send();
 }
