@@ -1,8 +1,5 @@
 import { nip19, nip98 } from "nostr-tools";
-
-type AuthData =
-  | { authorized: false }
-  | { authorized: true; data: { pubkey: string; npub: string } };
+import { AuthData } from "../types";
 
 export async function verifyAuth(
   authHeader: string,

@@ -1,3 +1,22 @@
+import { JwtPayload } from "jsonwebtoken";
+
+declare global {
+  namespace Express {
+    interface Request {
+      authData?: SuccessfullAuthData;
+    }
+  }
+}
+
+export type AuthData =
+  | { authorized: false }
+  | { authorized: true; data: { pubkey: string; npub: string } };
+
+export type SuccessfullAuthData = {
+  authorized: true;
+  data: { pubkey: string; npub: string };
+};
+
 export type MintData = {
   mintPr: string;
   mintHash: string;
@@ -36,3 +55,18 @@ export type BlinkPaymentResponse = {
     status: string;
   };
 };
+
+export type BlinkStatusReponse = {
+  lnInvoicePaymentStatus: {
+    status: "PAID" | "PENDING" | "EXPIRED";
+    errors?: {
+      message: string;
+    };
+  };
+};
+
+export interface PaymentJWTPayload extends JwtPayload {
+  username?: string;
+  pubkey?: string;
+  paymentHash?: string;
+}
