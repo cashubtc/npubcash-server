@@ -5,12 +5,26 @@ import {
   balanceController,
   claimGetController,
 } from "./controller/claimController";
-import { getInfoController } from "./controller/infoController";
+import {
+  getInfoController,
+  putMintInfoController,
+} from "./controller/infoController";
+import { isAuthMiddleware } from "./middleware/auth";
 
 const routes = Router();
 
 routes.get("/.well-known/lnurlp/:user", lnurlController);
-routes.get("/api/v1/info", getInfoController);
+
+routes.get(
+  "/api/v1/info",
+  isAuthMiddleware(`${process.env.HOSTNAME}/api/v1/info`, "GET"),
+  getInfoController,
+);
+routes.put(
+  "/api/v1/info/mint",
+  isAuthMiddleware(`${process.env.HOSTNAME}/api/v1/info/mint`, "PUT"),
+  putMintInfoController,
+);
 routes.post("/api/v1/paid", paidController);
 routes.get("/api/v1/claim", claimGetController);
 routes.get("/api/v1/balance", balanceController);
