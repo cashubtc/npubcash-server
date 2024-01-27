@@ -1,7 +1,6 @@
 import { Request, Response } from "express";
-import { Transaction } from "../models/transaction";
 import { lnProvider, wallet } from "..";
-import { Claim } from "../models/claim";
+import { Claim, Transaction } from "../models";
 
 export async function paidController(
   req: Request<

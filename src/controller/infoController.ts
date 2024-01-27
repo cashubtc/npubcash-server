@@ -1,5 +1,5 @@
 import { NextFunction, Request, Response } from "express";
-import { User } from "../models/user";
+import { User } from "../models";
 
 export async function getInfoController(
   req: Request,
@@ -7,7 +7,6 @@ export async function getInfoController(
   next: NextFunction,
 ) {
   const username = await User.getUserByPubkey(req.authData?.data.pubkey!);
-  console.log(username);
   res.json({
     username: username ? username.name : null,
     npub: req.authData?.data.npub!,

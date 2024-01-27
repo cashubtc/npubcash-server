@@ -1,8 +1,7 @@
 import { NextFunction, Request, Response } from "express";
 import { verifyAuth } from "../utils/auth";
-import { User } from "../models/user";
-import { Claim } from "../models/claim";
 import { CashuMint, getEncodedToken } from "@cashu/cashu-ts";
+import { Claim, User } from "../models";
 
 export async function balanceController(
   req: Request,

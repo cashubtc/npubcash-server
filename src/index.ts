@@ -1,7 +1,8 @@
-import express, { Request, Response } from "express";
+import express, { Response } from "express";
 import bodyparser from "body-parser";
 import cors from "cors";
 import { CashuMint, CashuWallet } from "@cashu/cashu-ts";
+
 import routes from "./routes";
 import { LightningHandler } from "./utils/lightning";
 import { BlinkProvider } from "./utils/blink";
@@ -14,7 +15,7 @@ const app = express();
 app.use(bodyparser.json());
 app.use(cors());
 app.use(routes);
-app.get("/", (req: Request, res: Response) => {
+app.get("/", (_, res: Response) => {
   res.redirect("https://app.cashu-address.com");
 });
 

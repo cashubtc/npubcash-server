@@ -1,10 +1,9 @@
 import { NextFunction, Request, Response } from "express";
 import { nip19 } from "nostr-tools";
 
-import { User } from ".././models/user";
 import { parseInvoice } from ".././utils/lightning";
-import { Transaction } from ".././models/transaction";
 import { lnProvider, wallet } from "..";
+import { Transaction, User } from "../models";
 
 const metadata = "A cashu lightning address! Neat!";
 
