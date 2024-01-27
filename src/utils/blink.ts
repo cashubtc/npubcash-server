@@ -1,5 +1,36 @@
 import { gql, GraphQLClient } from "graphql-request";
-import { BlinkInvoiceResponse, BlinkPaymentResponse } from "../types";
+import { PaymentProvider } from "../types";
+
+export type BlinkInvoiceResponse = {
+  lnInvoiceCreateOnBehalfOfRecipient: {
+    invoice: {
+      paymentRequest: string;
+      paymentHash: string;
+      paymentSecret: string;
+      satoshis: number;
+    };
+  };
+};
+
+export type BlinkPaymentResponse = {
+  lnInvoicePaymentSend: {
+    status: string;
+    transaction: {
+      settlementVia: {
+        preimage: string;
+      };
+    };
+  };
+};
+
+export type BlinkStatusReponse = {
+  lnInvoicePaymentStatus: {
+    status: "PAID" | "PENDING" | "EXPIRED";
+    errors?: {
+      message: string;
+    };
+  };
+};
 
 const endpoint = `${process.env.BLINK_URL!}`;
 
@@ -10,11 +41,40 @@ const graphQLClient = new GraphQLClient(endpoint, {
   },
 });
 
-export async function sendPayment(invoice: string) {
+export class BlinkProvider implements PaymentProvider {
+  async createInvoice(amount: number, memo?: string) {
+    const invoice = await createBlinkInvoice(amount, memo ? memo : "");
+    return {
+      paymentRequest: invoice.paymentRequest,
+      paymentHash: invoice.paymentHash,
+      paymentSecret: invoice.paymentSecret,
+    };
+  }
+  async payInvoice(invoice: string) {
+    return sendPayment(invoice);
+  }
+  async checkPayment(invoice: string) {
+    return checkPaymentStatus(invoice);
+  }
+}
+
+export async function sendPayment(
+  invoice: string,
+): Promise<{ paid: false } | { paid: true; preimage: string }> {
   const mutation = gql`
     mutation lnInvoicePaymentSend($input: LnInvoicePaymentInput!) {
       lnInvoicePaymentSend(input: $input) {
         status
+        transaction {
+          settlementVia {
+            ... on SettlementViaIntraLedger {
+              preImage
+            }
+            ... on SettlementViaLn {
+              preImage
+            }
+          }
+        }
         errors {
           message
           path
@@ -34,12 +94,15 @@ export async function sendPayment(invoice: string) {
     variables,
   )) as BlinkPaymentResponse;
   if (data.lnInvoicePaymentSend.status !== "SUCCESS") {
-    throw new Error("Wallet returned an error");
+    return { paid: false };
   }
-  return data.lnInvoicePaymentSend.status;
+  return {
+    paid: true,
+    preimage: data.lnInvoicePaymentSend.transaction.settlementVia.preimage,
+  };
 }
 
-export async function createInvoice(amountInSats: number, memo: string) {
+export async function createBlinkInvoice(amountInSats: number, memo: string) {
   const mutation = gql`
     mutation LnInvoiceCreateOnBehalfOfRecipient(
       $input: LnInvoiceCreateOnBehalfOfRecipientInput!
@@ -75,4 +138,32 @@ export async function createInvoice(amountInSats: number, memo: string) {
     throw new Error("Failed to retrieve invoice");
   }
   return data.lnInvoiceCreateOnBehalfOfRecipient.invoice;
+}
+
+export async function checkPaymentStatus(paymentRequest: string) {
+  const query = gql`
+    query LnInvoicePaymentStatus($input: LnInvoicePaymentStatusInput!) {
+      lnInvoicePaymentStatus(input: $input) {
+        status
+        errors {
+          message
+        }
+      }
+    }
+  `;
+
+  const variables = {
+    input: {
+      paymentRequest: paymentRequest,
+    },
+  };
+
+  const data = (await graphQLClient.request(
+    query,
+    variables,
+  )) as BlinkStatusReponse;
+  if (data.lnInvoicePaymentStatus.errors?.message) {
+    return { paid: false };
+  }
+  return { paid: data.lnInvoicePaymentStatus.status === "PAID" };
 }

@@ -1,7 +1,9 @@
 import { decode } from "light-bolt11-decoder";
+import { PaymentProvider } from "../types";
 
 type InvoiceData = {
   amount: number;
+  paymentHash: string;
   memo?: string;
 };
 
@@ -15,6 +17,25 @@ export function parseInvoice(invoice: string): InvoiceData {
     if (sections[i].name === "description") {
       invoiceData.memo = sections[i].value;
     }
+    if (sections[i].name === "payment_hash") {
+      invoiceData.paymentHash = sections[i].value;
+    }
   }
   return invoiceData;
+}
+
+export class LightningHandler {
+  provider: PaymentProvider;
+  constructor(provider: PaymentProvider) {
+    this.provider = provider;
+  }
+  async createInvoice(amount: number, memo?: string) {
+    return this.provider.createInvoice(amount, memo);
+  }
+  async payInvoice(invoice: string) {
+    return this.provider.payInvoice(invoice);
+  }
+  async checkPayment(invoice: string) {
+    return this.provider.checkPayment(invoice);
+  }
 }
