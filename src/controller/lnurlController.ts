@@ -1,11 +1,10 @@
 import { NextFunction, Request, Response } from "express";
+import { nip19 } from "nostr-tools";
 
 import { User } from ".././models/user";
 import { parseInvoice } from ".././utils/lightning";
-import { createInvoice } from ".././utils/blink";
 import { Transaction } from ".././models/transaction";
-import { wallet } from "..";
-import { nip19 } from "nostr-tools";
+import { lnProvider, wallet } from "..";
 
 const metadata = "A cashu lightning address! Neat!";
 
@@ -51,7 +50,10 @@ export async function lnurlController(
   );
   const { amount: mintAmount } = parseInvoice(mintPr);
   try {
-    const invoiceRes = await createInvoice(mintAmount / 1000, "Cashu Address");
+    const invoiceRes = await lnProvider.createInvoice(
+      mintAmount / 1000,
+      "Cashu Address",
+    );
     await Transaction.createTransaction(
       mintPr,
       mintHash,

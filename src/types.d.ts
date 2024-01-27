@@ -8,6 +8,23 @@ declare global {
   }
 }
 
+export interface PaymentProvider {
+  createInvoice: (
+    amount: number,
+    memo?: string,
+  ) => Promise<{
+    paymentRequest: string;
+    paymentHash: string;
+    paymentSecret: string;
+  }>;
+  payInvoice: (invoice: string) => Promise<PaymentResponse>;
+  checkPayment: (invoice: string) => Promise<{ paid: boolean }>;
+}
+
+type PaymentResponse<TStatus = boolean> = TStatus extends true
+  ? { paid: TStatus; preimage: string }
+  : { paid: TStatus };
+
 export type AuthData =
   | { authorized: false }
   | { authorized: true; data: { pubkey: string; npub: string } };
@@ -37,32 +54,6 @@ export type LNBitsInvoiceResponse = {
   payment_request: string;
   checking_id: string;
   lnurl_response?: string;
-};
-
-export type BlinkInvoiceResponse = {
-  lnInvoiceCreateOnBehalfOfRecipient: {
-    invoice: {
-      paymentRequest: string;
-      paymentHash: string;
-      paymentSecret: string;
-      satoshis: number;
-    };
-  };
-};
-
-export type BlinkPaymentResponse = {
-  lnInvoicePaymentSend: {
-    status: string;
-  };
-};
-
-export type BlinkStatusReponse = {
-  lnInvoicePaymentStatus: {
-    status: "PAID" | "PENDING" | "EXPIRED";
-    errors?: {
-      message: string;
-    };
-  };
 };
 
 export interface PaymentJWTPayload extends JwtPayload {

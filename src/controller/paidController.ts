@@ -1,7 +1,6 @@
 import { Request, Response } from "express";
 import { Transaction } from "../models/transaction";
-import { sendPayment } from "../utils/blink";
-import { wallet } from "..";
+import { lnProvider, wallet } from "..";
 import { Claim } from "../models/claim";
 
 export async function paidController(
@@ -25,11 +24,10 @@ export async function paidController(
     const newAmount =
       Number(transaction.settlementAmount) -
       Math.floor(Math.max(Number(transaction.settlementAmount) / 100, 1));
-    console.log(newAmount);
     const reqHash = transaction.initiationVia.paymentHash;
     const internalTx = await Transaction.getTransactionByHash(reqHash);
     try {
-      await sendPayment(internalTx.mint_pr);
+      await lnProvider.payInvoice(internalTx.mint_pr);
     } catch (e) {
       // TO-DO log failed payment and retry
     }
