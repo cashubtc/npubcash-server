@@ -24,18 +24,22 @@ export async function paidController(
       Number(transaction.settlementAmount) -
       Math.floor(Math.max(Number(transaction.settlementAmount) / 100, 1));
     const reqHash = transaction.initiationVia.paymentHash;
-    const internalTx = await Transaction.getTransactionByHash(reqHash);
     try {
-      await lnProvider.payInvoice(internalTx.mint_pr);
-    } catch (e) {
-      // TO-DO log failed payment and retry
+      const internalTx = await Transaction.getTransactionByHash(reqHash);
+      try {
+        await lnProvider.payInvoice(internalTx.mint_pr);
+      } catch (e) {
+        // TO-DO log failed payment and retry
+      }
+      const { proofs } = await wallet.requestTokens(
+        newAmount,
+        internalTx.mint_hash,
+      );
+      Claim.createClaim(internalTx.user, process.env.MINTURL!, proofs);
+      res.sendStatus(200);
+    } catch {
+      return res.sendStatus(200);
     }
-    const { proofs } = await wallet.requestTokens(
-      newAmount,
-      internalTx.mint_hash,
-    );
-    Claim.createClaim(internalTx.user, process.env.MINTURL!, proofs);
-    res.sendStatus(200);
   } else {
     return res.sendStatus(200);
   }
