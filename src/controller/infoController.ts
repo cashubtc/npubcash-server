@@ -77,5 +77,12 @@ export async function putUsernameInfoController(
   if (!paid) {
     return res.status(402).json({ error: true, message: "Invoice unpaid..." });
   }
+  try {
+    await User.upsertUsernameByPubkey(req.authData.data.pubkey, username);
+  } catch (e) {
+    console.log(e);
+    res.status(500);
+    return next(new Error("Failed to update db"));
+  }
   res.json({ error: false });
 }

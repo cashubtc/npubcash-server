@@ -57,6 +57,20 @@ DO UPDATE SET mint_url = $2`;
     }
   }
 
+  static async upsertUsernameByPubkey(pubkey: string, username: string) {
+    const query = `
+INSERT INTO l_users (pubkey, mint_url, name)
+VALUES ($1, $2, $3)
+ON CONFLICT (pubkey)
+DO UPDATE SET name = $3
+WHERE l_users.name IS NULL;`;
+    const params = [pubkey, process.env.MINTURL, username];
+    const queryRes = await queryWrapper(query, params);
+    if (queryRes.rowCount === 0) {
+      throw new Error("Did not update username");
+    }
+  }
+
   async upsertMintByPubkey(mintUrl: string) {
     await User.upsertMintByPubkey(this.pubkey, mintUrl);
     this.mint_url = this.mint_url;
