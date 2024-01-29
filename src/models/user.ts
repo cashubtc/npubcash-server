@@ -75,4 +75,15 @@ WHERE l_users.name IS NULL;`;
     await User.upsertMintByPubkey(this.pubkey, mintUrl);
     this.mint_url = this.mint_url;
   }
+
+  static async checkIfUsernameExists(username: string) {
+    const query = `
+SELECT * from l_users WHERE name = $1`;
+    const params = [username];
+    const queryRes = await queryWrapper(query, params);
+    if (queryRes.rows.length === 0) {
+      return false;
+    }
+    return true;
+  }
 }

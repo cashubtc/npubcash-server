@@ -55,8 +55,13 @@ export async function putUsernameInfoController(
   }
   const user = await User.getUserByPubkey(req.authData!.data.pubkey!);
   if (user && user.name) {
-    res.status(409);
+    res.status(400);
     return next(new Error("Username already set"));
+  }
+  const usernameExists = await User.checkIfUsernameExists(username);
+  if (usernameExists) {
+    res.status(400);
+    return next(new Error("Username already taken"));
   }
   if (!paymentToken) {
     const { paymentRequest } = await lnProvider.createInvoice(5);
