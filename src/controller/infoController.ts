@@ -48,19 +48,20 @@ export async function putUsernameInfoController(
   res: Response,
   next: NextFunction,
 ) {
-  if (!req.authData || !req.authData.authorized) {
-    res.status(402);
-    return next(new Error("Unauthorized!"));
-  }
   const { username, paymentToken } = req.body;
   if (!username) {
     res.status(400);
     return next(new Error("Missing parameters"));
   }
+  const user = await User.getUserByPubkey(req.authData!.data.pubkey!);
+  if (user && user.name) {
+    res.status(409);
+    return next(new Error("Username already set"));
+  }
   if (!paymentToken) {
     const { paymentRequest } = await lnProvider.createInvoice(5);
     const token = sign(
-      { pubkey: req.authData.data.pubkey, username, paymentRequest },
+      { pubkey: req.authData!.data.pubkey, username, paymentRequest },
       process.env.JWT_SECRET!,
     );
     return res.status(402).json({
@@ -78,7 +79,7 @@ export async function putUsernameInfoController(
     return res.status(402).json({ error: true, message: "Invoice unpaid..." });
   }
   try {
-    await User.upsertUsernameByPubkey(req.authData.data.pubkey, username);
+    await User.upsertUsernameByPubkey(req.authData!.data.pubkey, username);
   } catch (e) {
     console.log(e);
     res.status(500);
