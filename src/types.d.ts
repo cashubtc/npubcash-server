@@ -57,7 +57,7 @@ export type LNBitsInvoiceResponse = {
 };
 
 export interface PaymentJWTPayload extends JwtPayload {
-  username?: string;
-  pubkey?: string;
-  paymentHash?: string;
+  username: string;
+  pubkey: string;
+  paymentRequest: string;
 }

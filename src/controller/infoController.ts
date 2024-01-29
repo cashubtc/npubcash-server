@@ -1,5 +1,8 @@
 import { NextFunction, Request, Response } from "express";
 import { User } from "../models";
+import { JwtPayload, sign, verify } from "jsonwebtoken";
+import { lnProvider } from "..";
+import { PaymentJWTPayload } from "../types";
 
 export async function getInfoController(
   req: Request,
@@ -38,4 +41,41 @@ export async function putMintInfoController(
     return next(new Error("Failed to update DB"));
   }
   res.status(204).send();
+}
+
+export async function putUsernameInfoController(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  if (!req.authData || !req.authData.authorized) {
+    res.status(402);
+    return next(new Error("Unauthorized!"));
+  }
+  const { username, paymentToken } = req.body;
+  if (!username) {
+    res.status(400);
+    return next(new Error("Missing parameters"));
+  }
+  if (!paymentToken) {
+    const { paymentRequest } = await lnProvider.createInvoice(5);
+    const token = sign(
+      { pubkey: req.authData.data.pubkey, username, paymentRequest },
+      process.env.JWT_SECRET!,
+    );
+    return res.status(402).json({
+      error: true,
+      message: "Payment required",
+      data: { paymentToken: token, paymentRequest },
+    });
+  }
+  const payload = verify(
+    paymentToken,
+    process.env.JWT_SECRET!,
+  ) as PaymentJWTPayload;
+  const { paid } = await lnProvider.checkPayment(payload.paymentRequest);
+  if (!paid) {
+    return res.status(402).json({ error: true, message: "Invoice unpaid..." });
+  }
+  res.json({ error: false });
 }
