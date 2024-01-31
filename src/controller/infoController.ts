@@ -66,7 +66,7 @@ export async function putUsernameInfoController(
     return next(new Error("Username already taken"));
   }
   if (!paymentToken) {
-    const { paymentRequest } = await lnProvider.createInvoice(5);
+    const { paymentRequest } = await lnProvider.createInvoice(5000);
     const token = sign(
       {
         pubkey: req.authData!.data.pubkey,
