@@ -8,6 +8,7 @@ import {
 import {
   getInfoController,
   putMintInfoController,
+  putUsernameInfoController,
 } from "./controller/infoController";
 import { isAuthMiddleware } from "./middleware/auth";
 
@@ -24,6 +25,11 @@ routes.put(
   "/api/v1/info/mint",
   isAuthMiddleware(`${process.env.HOSTNAME}/api/v1/info/mint`, "PUT"),
   putMintInfoController,
+);
+routes.put(
+  "/api/v1/info/username",
+  isAuthMiddleware(`${process.env.HOSTNAME}/api/v1/info/username`, "PUT"),
+  putUsernameInfoController,
 );
 routes.post("/api/v1/paid", paidController);
 routes.get("/api/v1/claim", claimGetController);
