@@ -5,8 +5,6 @@ import { parseInvoice } from ".././utils/lightning";
 import { lnProvider, wallet } from "..";
 import { Transaction, User } from "../models";
 
-const metadata = "A cashu lightning address! Neat!";
-
 export async function lnurlController(
   req: Request<{ user: string }, unknown, unknown, { amount?: number }>,
   res: Response,
@@ -33,10 +31,12 @@ export async function lnurlController(
   }
   if (!amount) {
     return res.json({
-      callback: `https://cashu.my2sats.space/.well-known/lnurlp/${username}`,
+      callback: `https://cashu-address.com/.well-known/lnurlp/${username}`,
       maxSendable: 250000,
       minSendable: 10000,
-      metadata: [["text/plain", metadata]],
+      metadata: JSON.stringify([
+        ["text/plain", "A cashu lightning address... Neat!"],
+      ]),
       tag: "payRequest",
     });
   }
