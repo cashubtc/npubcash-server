@@ -1,3 +1,4 @@
+import { Event } from "nostr-tools";
 import { queryWrapper } from "../utils/database";
 
 export class Transaction {
@@ -7,7 +8,7 @@ export class Transaction {
   server_hash: string;
   user: string;
   created_at: number;
-  zapRequest?: string;
+  zapRequest?: Event;
 
   constructor(
     mintPr: string,
@@ -16,7 +17,7 @@ export class Transaction {
     serverHash: string,
     user: string,
     createdAt: number,
-    zapRequest?: string,
+    zapRequest?: Event,
   ) {
     this.mint_pr = mintPr;
     this.mint_hash = mintHash;
@@ -33,7 +34,7 @@ export class Transaction {
     server_pr: string,
     server_hash: string,
     user: string,
-    zapRequest?: string,
+    zapRequest?: Event,
   ) {
     const res = await queryWrapper<Transaction>(
       `INSERT INTO l_transactions
