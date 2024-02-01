@@ -42,8 +42,12 @@ const graphQLClient = new GraphQLClient(endpoint, {
 });
 
 export class BlinkProvider implements PaymentProvider {
-  async createInvoice(amount: number, memo?: string) {
-    const invoice = await createBlinkInvoice(amount, memo ? memo : "");
+  async createInvoice(amount: number, memo?: string, descriptionHash?: string) {
+    const invoice = await createBlinkInvoice(
+      amount,
+      memo ? memo : "",
+      descriptionHash,
+    );
     return {
       paymentRequest: invoice.paymentRequest,
       paymentHash: invoice.paymentHash,
@@ -102,7 +106,11 @@ export async function sendPayment(
   };
 }
 
-export async function createBlinkInvoice(amountInSats: number, memo: string) {
+export async function createBlinkInvoice(
+  amountInSats: number,
+  memo: string,
+  descriptionHash?: string,
+) {
   const mutation = gql`
     mutation LnInvoiceCreateOnBehalfOfRecipient(
       $input: LnInvoiceCreateOnBehalfOfRecipientInput!
@@ -125,6 +133,7 @@ export async function createBlinkInvoice(amountInSats: number, memo: string) {
     input: {
       amount: amountInSats,
       memo,
+      descriptionHash,
       recipientWalletId: process.env.BLINK_WALLET_ID,
     },
   };
@@ -135,6 +144,7 @@ export async function createBlinkInvoice(amountInSats: number, memo: string) {
   )) as BlinkInvoiceResponse;
 
   if (!data.lnInvoiceCreateOnBehalfOfRecipient.invoice) {
+    console.log(data.lnInvoiceCreateOnBehalfOfRecipient.errors);
     throw new Error("Failed to retrieve invoice");
   }
   return data.lnInvoiceCreateOnBehalfOfRecipient.invoice;
