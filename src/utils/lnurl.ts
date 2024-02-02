@@ -1,5 +1,5 @@
 export function createLnurlResponse(username: string) {
-  if (process.env.ZAP_PUBKEY) {
+  if (process.env.ZAP_SECRET_KEY) {
     return {
       callback: `https://cashu-address.com/.well-known/lnurlp/${username}`,
       maxSendable: 250000,
