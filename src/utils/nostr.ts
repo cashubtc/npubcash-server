@@ -1,5 +1,11 @@
-import { Event, validateEvent } from "nostr-tools";
+import {
+  Event,
+  EventTemplate,
+  finalizeEvent,
+  validateEvent,
+} from "nostr-tools";
 import { ZapRequestData } from "../types";
+import { ZAP_PUBKEY } from "..";
 
 export function getTagValues(e: Event, tag: string, position: number) {
   const tags = e.tags;
@@ -34,6 +40,29 @@ export function extractZapRequestData(e: Event) {
     }
   }
   return zapRequestData;
+}
+
+export function createZapReceipt(
+  paidAt: number,
+  pTag: string,
+  eTag: string,
+  invoice: string,
+  encodedZapRequest: string,
+) {
+  const event: EventTemplate = {
+    content: "",
+    kind: 9735,
+    created_at: paidAt,
+    tags: [
+      ["p", pTag],
+      ["bolt11", invoice],
+      ["description", encodedZapRequest],
+    ],
+  };
+  if (eTag) {
+    event.tags.push(["e", eTag]);
+  }
+  return finalizeEvent(event, Buffer.from(process.env.ZAP_SECRET_KEY!, "hex"));
 }
 
 export function decodeAndValidateZapRequest(
