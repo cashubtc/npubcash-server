@@ -1,3 +1,5 @@
+import { ZAP_PUBKEY } from "..";
+
 export function createLnurlResponse(username: string) {
   if (process.env.ZAP_SECRET_KEY) {
     return {
@@ -9,7 +11,7 @@ export function createLnurlResponse(username: string) {
       ]),
       tag: "payRequest",
       allowsNostr: true,
-      nostrPubkey: process.env.ZAP_PUBKEY,
+      nostrPubkey: ZAP_PUBKEY,
     };
   } else {
     return {

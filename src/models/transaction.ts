@@ -8,7 +8,7 @@ export class Transaction {
   server_hash: string;
   user: string;
   created_at: number;
-  zapRequest?: Event;
+  zap_request?: Event;
 
   constructor(
     mintPr: string,
@@ -25,7 +25,7 @@ export class Transaction {
     this.server_hash = serverHash;
     this.user = user;
     this.created_at = createdAt;
-    this.zapRequest = zapRequest;
+    this.zap_request = zapRequest;
   }
 
   static async createTransaction(
@@ -71,7 +71,7 @@ VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, created_at`,
       res.rows[0].server_hash,
       res.rows[0].user,
       Math.floor(new Date(res.rows[0].created_at).getTime() / 1000),
-      res.rows[0].zapRequest,
+      res.rows[0].zap_request,
     );
   }
 }

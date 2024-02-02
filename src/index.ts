@@ -7,6 +7,7 @@ import routes from "./routes";
 import { LightningHandler } from "./utils/lightning";
 import { BlinkProvider } from "./utils/blink";
 import { SimplePool, getPublicKey } from "nostr-tools";
+import "websocket-polyfill";
 
 export const wallet = new CashuWallet(new CashuMint(process.env.MINTURL!));
 export const lnProvider = new LightningHandler(new BlinkProvider());

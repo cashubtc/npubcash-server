@@ -37,21 +37,21 @@ export async function paidController(
     const reqHash = transaction.initiationVia.paymentHash;
     try {
       const internalTx = await Transaction.getTransactionByHash(reqHash);
-      if (internalTx.zapRequest) {
+      if (internalTx.zap_request && process.env.ZAP_SECRET_KEY) {
         try {
-          const zapRequestData = extractZapRequestData(internalTx.zapRequest);
+          const zapRequestData = extractZapRequestData(internalTx.zap_request);
           const zapReceipt = createZapReceipt(
             Math.floor(Date.now() / 1000),
             zapRequestData.pTags[0],
             zapRequestData.eTags[0],
             internalTx.server_pr,
-            JSON.stringify(internalTx.zapRequest),
+            JSON.stringify(internalTx.zap_request),
           );
-          await Promise.allSettled(
+          //@ts-ignore
+          await Promise.any(
             nostrPool.publish(zapRequestData.relays || relays, zapReceipt),
           );
         } catch (e) {
-          console.log("Nostr Zap Failed:");
           console.log(e);
         }
       }

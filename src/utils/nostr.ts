@@ -83,8 +83,6 @@ export function decodeAndValidateZapRequest(
 }
 
 export function isValidZapRequestData(z: ZapRequestData, lnurlAmount: number) {
-  console.log(z);
-  console.log(lnurlAmount);
   if (z.pTags.length === 0 || z.pTags.length > 1 || z.eTags.length > 1) {
     return false;
   }
