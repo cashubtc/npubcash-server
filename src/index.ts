@@ -8,6 +8,9 @@ import { LightningHandler } from "./utils/lightning";
 import { BlinkProvider } from "./utils/blink";
 import { SimplePool, getPublicKey } from "nostr-tools";
 import "websocket-polyfill";
+import { checkEnvVars } from "./utils/general";
+
+checkEnvVars(["LNURL_MAX_AMOUNT", "LNURL_MIN_AMOUNT", "MINTURL"]);
 
 export const wallet = new CashuWallet(new CashuMint(process.env.MINTURL!));
 export const lnProvider = new LightningHandler(new BlinkProvider());

@@ -43,7 +43,10 @@ export async function lnurlController(
     return res.json(lnurlResponse);
   }
   const parsedAmount = parseInt(amount);
-  if (parsedAmount > 250000 || parsedAmount < 10000) {
+  if (
+    parsedAmount > Number(process.env.LNURL_MAX_AMOUNT) ||
+    parsedAmount < Number(process.env.LNURL_MIN_AMOUNT)
+  ) {
     const err = new Error("Invalid amount");
     return next(err);
   }
