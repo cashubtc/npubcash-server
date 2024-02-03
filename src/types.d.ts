@@ -12,6 +12,7 @@ export interface PaymentProvider {
   createInvoice: (
     amount: number,
     memo?: string,
+    descriptionHash?: string,
   ) => Promise<{
     paymentRequest: string;
     paymentHash: string;
@@ -61,3 +62,10 @@ export interface PaymentJWTPayload extends JwtPayload {
   pubkey: string;
   paymentRequest: string;
 }
+
+export type ZapRequestData = {
+  pTags: string[];
+  eTags: string[];
+  relays: string[];
+  amount?: number;
+};

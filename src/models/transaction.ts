@@ -1,3 +1,4 @@
+import { Event } from "nostr-tools";
 import { queryWrapper } from "../utils/database";
 
 export class Transaction {
@@ -7,6 +8,7 @@ export class Transaction {
   server_hash: string;
   user: string;
   created_at: number;
+  zap_request?: Event;
 
   constructor(
     mintPr: string,
@@ -15,6 +17,7 @@ export class Transaction {
     serverHash: string,
     user: string,
     createdAt: number,
+    zapRequest?: Event,
   ) {
     this.mint_pr = mintPr;
     this.mint_hash = mintHash;
@@ -22,6 +25,7 @@ export class Transaction {
     this.server_hash = serverHash;
     this.user = user;
     this.created_at = createdAt;
+    this.zap_request = zapRequest;
   }
 
   static async createTransaction(
@@ -30,10 +34,13 @@ export class Transaction {
     server_pr: string,
     server_hash: string,
     user: string,
+    zapRequest?: Event,
   ) {
     const res = await queryWrapper<Transaction>(
-      `INSERT INTO l_transactions (mint_pr, mint_hash, server_pr, server_hash, "user") VALUES ($1, $2, $3, $4, $5) RETURNING id, created_at`,
-      [mint_pr, mint_hash, server_pr, server_hash, user],
+      `INSERT INTO l_transactions
+(mint_pr, mint_hash, server_pr, server_hash, "user", zap_request)
+VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, created_at`,
+      [mint_pr, mint_hash, server_pr, server_hash, user, zapRequest],
     );
     if (res.rowCount === 0) {
       throw new Error("Failed to create new Transaction");
@@ -45,6 +52,7 @@ export class Transaction {
       server_hash,
       user,
       Math.floor(new Date(res.rows[0].created_at).getTime() / 1000),
+      zapRequest,
     );
   }
 
@@ -63,6 +71,7 @@ export class Transaction {
       res.rows[0].server_hash,
       res.rows[0].user,
       Math.floor(new Date(res.rows[0].created_at).getTime() / 1000),
+      res.rows[0].zap_request,
     );
   }
 }

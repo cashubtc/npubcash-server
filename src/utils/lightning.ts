@@ -29,8 +29,8 @@ export class LightningHandler {
   constructor(provider: PaymentProvider) {
     this.provider = provider;
   }
-  async createInvoice(amount: number, memo?: string) {
-    return this.provider.createInvoice(amount, memo);
+  async createInvoice(amount: number, memo?: string, descriptionHash?: string) {
+    return this.provider.createInvoice(amount, memo, descriptionHash);
   }
   async payInvoice(invoice: string) {
     return this.provider.payInvoice(invoice);
