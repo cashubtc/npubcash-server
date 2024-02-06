@@ -64,7 +64,12 @@ export async function paidController(
         newAmount,
         internalTx.mint_hash,
       );
-      Claim.createClaim(internalTx.user, process.env.MINTURL!, proofs);
+      Claim.createClaims(
+        internalTx.user,
+        process.env.MINTURL!,
+        proofs,
+        internalTx.id,
+      );
       res.sendStatus(200);
     } catch {
       return res.sendStatus(200);
