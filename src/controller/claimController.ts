@@ -25,11 +25,11 @@ export async function balanceController(
   const user = await User.getUserByPubkey(isAuth.data.pubkey);
   let allClaims: Claim[];
   if (user) {
-    const userClaims = await Claim.getUserClaims(user.name);
-    const npubClaims = await Claim.getUserClaims(isAuth.data.npub);
+    const userClaims = await Claim.getUserReadyClaims(user.name);
+    const npubClaims = await Claim.getUserReadyClaims(isAuth.data.npub);
     allClaims = [...userClaims, ...npubClaims];
   } else {
-    const npubClaims = await Claim.getUserClaims(isAuth.data.npub);
+    const npubClaims = await Claim.getUserReadyClaims(isAuth.data.npub);
     allClaims = npubClaims;
   }
   const proofs = allClaims.map((claim) => claim.proof);
@@ -78,11 +78,11 @@ export async function claimGetController(
   const user = await User.getUserByPubkey(isAuth.data.pubkey);
   let allClaims: Claim[];
   if (user) {
-    const userClaims = await Claim.getUserClaims(user.name);
-    const npubClaims = await Claim.getUserClaims(isAuth.data.npub);
+    const userClaims = await Claim.getUserReadyClaims(user.name);
+    const npubClaims = await Claim.getUserReadyClaims(isAuth.data.npub);
     allClaims = [...userClaims, ...npubClaims];
   } else {
-    allClaims = await Claim.getUserClaims(isAuth.data.npub);
+    allClaims = await Claim.getUserReadyClaims(isAuth.data.npub);
   }
   const proofs = allClaims.map((claim) => claim.proof);
   const payload = { proofs: proofs.map((p) => ({ secret: p.secret })) };
