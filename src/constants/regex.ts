@@ -1,1 +1,1 @@
-export const usernameRegex = /[^\W_]/g;
+export const usernameRegex = /^(?!npub1)[a-zA-Z0-9]+$/g;

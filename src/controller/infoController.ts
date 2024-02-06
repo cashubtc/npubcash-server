@@ -51,7 +51,7 @@ export async function putUsernameInfoController(
     return res.json({ error: true, message: "Missing parameters" });
   }
   const parsedUsername = username.toLowerCase().trim();
-  if (!parsedUsername.match(usernameRegex)) {
+  if (!parsedUsername.match(usernameRegex) || parsedUsername.length < 3) {
     res.status(400);
     return res.json({ error: true, message: "Invalid username" });
   }
