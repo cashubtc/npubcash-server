@@ -43,3 +43,7 @@ export function createBulkInsertQuery<T extends QueryResultRow>(
   };`;
   return pool.query<T>(query, payload.flatValues);
 }
+
+export function createSanitizedValueString(n) {
+  return `(${Array.from({ length: n }, (_, i) => `$${i + 1}`).join(", ")})`;
+}

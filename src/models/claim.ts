@@ -1,5 +1,10 @@
 import { Proof } from "@cashu/cashu-ts";
-import { createBulkInsertQuery, queryWrapper } from "../utils/database";
+import {
+  createBulkInsertQuery,
+  createSanitizedValueString,
+  queryWrapper,
+} from "../utils/database";
+import { ClaimStatus } from "../types";
 
 export class Claim {
   id: number;
@@ -39,6 +44,14 @@ export class Claim {
       throw new Error("Failed to create new Transaction");
     }
   }
+
+  static async updateClaimsStatus(ids: number[], status: ClaimStatus) {
+    const list = createSanitizedValueString(ids.length);
+    const query = `UPDATE l_claims_3 SET status = 'spent' WHERE id in ${list}`;
+    const res = await queryWrapper<Claim>(query, ids);
+    return res;
+  }
+
   static async getUserReadyClaims(user: string) {
     const res = await queryWrapper<Claim>(
       `SELECT * FROM l_claims_3 WHERE "user" = $1 and status = $2`,

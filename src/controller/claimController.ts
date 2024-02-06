@@ -48,7 +48,10 @@ export async function balanceController(
       unspendableClaims.push(allClaims[i]);
     }
   }
-
+  Claim.updateClaimsStatus(
+    unspendableClaims.map((claim) => claim.id),
+    "spent",
+  );
   const balance = spendableProofs.reduce((a, c) => a + c.amount, 0);
   return res.json({ error: false, data: balance });
 }
