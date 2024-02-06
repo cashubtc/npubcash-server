@@ -45,7 +45,10 @@ export class Claim {
     }
   }
 
-  static async updateClaimsStatus(ids: number[], status: ClaimStatus) {
+  static async updateClaimsStatus(ids: number[]) {
+    if (ids.length === 0) {
+      return;
+    }
     const list = createSanitizedValueString(ids.length);
     const query = `UPDATE l_claims_3 SET status = 'spent' WHERE id in ${list}`;
     const res = await queryWrapper<Claim>(query, ids);
