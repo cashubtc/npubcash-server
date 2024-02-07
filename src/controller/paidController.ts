@@ -31,9 +31,6 @@ export async function paidController(
 ) {
   const { eventType, transaction } = req.body;
   if (eventType === "receive.lightning") {
-    const newAmount =
-      Number(transaction.settlementAmount) -
-      Math.floor(Math.max(Number(transaction.settlementAmount) / 100, 1));
     const reqHash = transaction.initiationVia.paymentHash;
     try {
       const internalTx = await Transaction.getTransactionByHash(reqHash);
@@ -58,10 +55,11 @@ export async function paidController(
       try {
         await lnProvider.payInvoice(internalTx.mint_pr);
       } catch (e) {
-        // TO-DO log failed payment and retry
+        console.error(e);
+        console.error("Could not pay mint invoice!");
       }
       const { proofs } = await wallet.requestTokens(
-        newAmount,
+        transaction.settlementAmount,
         internalTx.mint_hash,
       );
       Claim.createClaims(
@@ -71,7 +69,9 @@ export async function paidController(
         internalTx.id,
       );
       res.sendStatus(200);
-    } catch {
+    } catch (e) {
+      console.error(e);
+      console.error("Failed to create Claim");
       return res.sendStatus(200);
     }
   } else {
