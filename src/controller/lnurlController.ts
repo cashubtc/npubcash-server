@@ -31,7 +31,7 @@ export async function lnurlController(
       return next(new Error("Invalid npub / public key"));
     }
   } else {
-    const userObj = await User.getUserByName(userParam);
+    const userObj = await User.getUserByName(userParam.toLowerCase());
     if (!userObj) {
       res.status(404);
       return next(new Error("User not found"));
