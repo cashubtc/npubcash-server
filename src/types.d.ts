@@ -69,3 +69,5 @@ export type ZapRequestData = {
   relays: string[];
   amount?: number;
 };
+
+export type ClaimStatus = "ready" | "inflight" | "spent";
