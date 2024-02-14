@@ -1,8 +1,15 @@
 import { NextFunction, Request, Response } from "express";
 import { verifyAuth } from "../utils/auth";
 
-export function isAuthMiddleware(url: string, method: string) {
+export function isAuthMiddleware(path: string, method: string) {
   async function isAuth(req: Request, res: Response, next: NextFunction) {
+    const hostname = req.header("host");
+    const protocol = req.protocol;
+    if (!hostname) {
+      res.status(400);
+      return next(new Error("Missing host header"));
+    }
+    const url = protocol + "://" + hostname + path;
     const authHeader = req.header("Authorization");
     if (!authHeader) {
       res.status(401);
