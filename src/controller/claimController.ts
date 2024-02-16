@@ -15,6 +15,9 @@ export async function balanceController(req: Request, res: Response) {
     allClaims = npubClaims;
   }
   const proofs = allClaims.map((claim) => claim.proof);
+  if (allClaims.length === 0) {
+    return res.json({ error: false, data: 0 });
+  }
   const payload = {
     proofs: proofs.map((p) => ({ secret: p.secret })),
   };
