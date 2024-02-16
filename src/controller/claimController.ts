@@ -5,15 +5,10 @@ import { Claim, User } from "../models";
 export async function balanceController(req: Request, res: Response) {
   const isAuth = req.authData!;
   const user = await User.getUserByPubkey(isAuth.data.pubkey);
-  let allClaims: Claim[];
-  if (user) {
-    const userClaims = await Claim.getUserReadyClaims(user.name);
-    const npubClaims = await Claim.getUserReadyClaims(isAuth.data.npub);
-    allClaims = [...userClaims, ...npubClaims];
-  } else {
-    const npubClaims = await Claim.getUserReadyClaims(isAuth.data.npub);
-    allClaims = npubClaims;
-  }
+  let allClaims = await Claim.getAllUserReadyClaims(
+    req.authData!.data.npub,
+    user?.name,
+  );
   const proofs = allClaims.map((claim) => claim.proof);
   if (allClaims.length === 0) {
     return res.json({ error: false, data: 0 });
@@ -40,13 +35,12 @@ export async function balanceController(req: Request, res: Response) {
 
 export async function claimGetController(req: Request, res: Response) {
   const user = await User.getUserByPubkey(req.authData!.data.pubkey);
-  let allClaims: Claim[];
-  if (user) {
-    const userClaims = await Claim.getUserReadyClaims(user.name);
-    const npubClaims = await Claim.getUserReadyClaims(req.authData!.data.npub);
-    allClaims = [...userClaims, ...npubClaims];
-  } else {
-    allClaims = await Claim.getUserReadyClaims(req.authData!.data.npub);
+  let allClaims = await Claim.getAllUserReadyClaims(
+    req.authData!.data.npub,
+    user?.name,
+  );
+  if (allClaims.length === 0) {
+    return res.json({ error: true, message: "No proofs to claim" });
   }
   const proofs = allClaims.map((claim) => claim.proof);
   const payload = { proofs: proofs.map((p) => ({ secret: p.secret })) };
