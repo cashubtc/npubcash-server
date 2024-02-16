@@ -10,6 +10,7 @@ import { SimplePool, getPublicKey } from "nostr-tools";
 import "websocket-polyfill";
 import { checkEnvVars } from "./utils/general";
 import path from "path";
+import { requireHTTPS } from "./middleware/https";
 
 checkEnvVars(["LNURL_MAX_AMOUNT", "LNURL_MIN_AMOUNT", "MINTURL"]);
 
@@ -26,6 +27,8 @@ const app = express();
 
 app.use(bodyparser.json());
 app.use(cors());
+
+app.use(requireHTTPS);
 app.use(routes);
 app.use("/", express.static(path.join(__dirname, "../frontend")));
 app.get("*", (req, res) => {
