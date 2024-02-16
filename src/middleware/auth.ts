@@ -9,14 +9,12 @@ export function isAuthMiddleware(path: string, method: string) {
       res.status(400);
       return next(new Error("Missing host header"));
     }
-    console.log(hostname);
     const url = protocol + "://" + hostname + path;
     const authHeader = req.header("Authorization");
     if (!authHeader) {
       res.status(401);
       return next(new Error("Missing Authorization Header"));
     }
-    console.log(url);
     const isAuth = await verifyAuth(authHeader, url, method);
     if (!isAuth.authorized) {
       res.status(401);
