@@ -55,6 +55,18 @@ export class Claim {
     return res;
   }
 
+  static async getAllUserReadyClaims(npub: string, username?: string) {
+    let allClaims: Claim[];
+    if (username) {
+      const userClaims = await Claim.getUserReadyClaims(username);
+      const npubClaims = await Claim.getUserReadyClaims(npub);
+      allClaims = [...userClaims, ...npubClaims];
+    } else {
+      allClaims = await Claim.getUserReadyClaims(npub);
+    }
+    return allClaims;
+  }
+
   static async getUserReadyClaims(user: string) {
     const res = await queryWrapper<Claim>(
       `SELECT * FROM l_claims_3 WHERE "user" = $1 and status = $2`,
