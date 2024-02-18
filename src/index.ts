@@ -9,6 +9,8 @@ import { BlinkProvider } from "./utils/blink";
 import { SimplePool, getPublicKey } from "nostr-tools";
 import "websocket-polyfill";
 import { checkEnvVars } from "./utils/general";
+import path from "path";
+import { requireHTTPS } from "./middleware/https";
 
 checkEnvVars(["LNURL_MAX_AMOUNT", "LNURL_MIN_AMOUNT", "MINTURL"]);
 
@@ -25,9 +27,12 @@ const app = express();
 
 app.use(bodyparser.json());
 app.use(cors());
+
+app.use(requireHTTPS);
 app.use(routes);
-app.get("/", (_, res: Response) => {
-  res.redirect("https://app.cashu-address.com");
+app.use("/", express.static(path.join(__dirname, "../frontend")));
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "../frontend/index.html"));
 });
 
 app.listen(process.env.PORT || 8000);
