@@ -11,10 +11,12 @@ import {
   putUsernameInfoController,
 } from "./controller/infoController";
 import { isAuthMiddleware } from "./middleware/auth";
+import { nip05Controller } from "./controller/nip05Controller";
 
 const routes = Router();
 
 routes.get("/.well-known/lnurlp/:user", lnurlController);
+routes.get("/.well-known/nostr.json", nip05Controller);
 
 routes.get(
   "/api/v1/info",
