@@ -11,6 +11,7 @@ import "websocket-polyfill";
 import { checkEnvVars } from "./utils/general";
 import path from "path";
 import { requireHTTPS } from "./middleware/https";
+import compression from "compression";
 
 checkEnvVars(["LNURL_MAX_AMOUNT", "LNURL_MIN_AMOUNT", "MINTURL"]);
 
@@ -26,6 +27,7 @@ if (process.env.ZAP_SECRET_KEY) {
 const app = express();
 
 app.use(bodyparser.json());
+app.use(compression());
 app.use(cors());
 app.use(requireHTTPS);
 
