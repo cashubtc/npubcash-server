@@ -78,6 +78,7 @@ export async function lnurlController(
       invoiceRes.paymentHash,
       username,
       zapRequest,
+      parsedAmount / 1000,
     );
     res.json({
       pr: invoiceRes.paymentRequest,
