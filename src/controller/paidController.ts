@@ -62,12 +62,13 @@ export async function paidController(
         transaction.settlementAmount,
         internalTx.mint_hash,
       );
-      Claim.createClaims(
+      await Claim.createClaims(
         internalTx.user,
         process.env.MINTURL!,
         proofs,
         internalTx.id,
       );
+      await Transaction.setToFulfilled(internalTx.id);
       res.sendStatus(200);
     } catch (e) {
       console.error(e);

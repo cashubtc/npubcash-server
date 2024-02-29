@@ -63,7 +63,7 @@ export async function putUsernameInfoController(
   const usernameExists = await User.checkIfUsernameExists(parsedUsername);
   if (usernameExists) {
     res.status(400);
-    return next(new Error("Username already taken"));
+    return res.json({ error: true, message: "This username is already taken" });
   }
   if (!paymentToken) {
     const { paymentRequest } = await lnProvider.createInvoice(5000);

@@ -6,11 +6,17 @@ import { CashuMint, CashuWallet } from "@cashu/cashu-ts";
 import routes from "./routes";
 import { LightningHandler } from "./utils/lightning";
 import { BlinkProvider } from "./utils/blink";
-import { SimplePool, getPublicKey } from "nostr-tools";
-import "websocket-polyfill";
+import {
+  SimplePool,
+  getPublicKey,
+  useWebSocketImplementation,
+} from "nostr-tools";
 import { checkEnvVars } from "./utils/general";
 import path from "path";
 import { requireHTTPS } from "./middleware/https";
+import compression from "compression";
+
+useWebSocketImplementation(require("ws"));
 
 checkEnvVars(["LNURL_MAX_AMOUNT", "LNURL_MIN_AMOUNT", "MINTURL"]);
 
@@ -26,6 +32,7 @@ if (process.env.ZAP_SECRET_KEY) {
 const app = express();
 
 app.use(bodyparser.json());
+app.use(compression());
 app.use(cors());
 app.use(requireHTTPS);
 
