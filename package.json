@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "NODE_ENV=development nodemon",
     "build": "node build.js",
-    "start": "node dist/index.js"
+    "start:standalone": "NPC_MODE=standalone node dist/index.js"
   },
   "main": "index.js",
   "keywords": [],
