@@ -16,8 +16,6 @@ import path from "path";
 import { requireHTTPS } from "./middleware/https";
 import compression from "compression";
 
-console.log(process.env.NPC_MODE);
-
 useWebSocketImplementation(require("ws"));
 
 checkEnvVars(["LNURL_MAX_AMOUNT", "LNURL_MIN_AMOUNT", "MINTURL"]);
@@ -39,11 +37,15 @@ app.use(cors());
 app.use(requireHTTPS);
 
 app.use(routes);
-app.use("/", express.static(path.join(__dirname, "../frontend")));
-app.get("*", (_, res: Response) => {
-  res.sendFile(path.join(__dirname, "../frontend/index.html"));
-});
 
-app.listen(process.env.PORT || 8000, () => {
-  console.log("Running on ", process.env.PORT);
+if (process.env.NPC_MODE != "standalone") {
+  app.use("/", express.static(path.join(__dirname, "../frontend")));
+  app.get("*", (_, res: Response) => {
+    res.sendFile(path.join(__dirname, "../frontend/index.html"));
+  });
+}
+
+const port = process.env.PORT || 8000;
+app.listen(port, () => {
+  console.log(`Started server on port ${port}`);
 });
