@@ -28,5 +28,6 @@ USER npc
 EXPOSE 8080
 
 ENV PORT 8080 
+ENV NPC_MODE standalone
 
 CMD ["node", "index.js"]
