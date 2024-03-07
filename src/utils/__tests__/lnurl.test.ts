@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, jest, test } from "@jest/globals";
-import { createLnurlResponse } from "./lnurl";
+import { createLnurlResponse } from "../lnurl";
 
-jest.mock("../index.ts", () => ({
+jest.mock("../../index.ts", () => ({
   get ZAP_PUBKEY() {
     return "123";
   },
