@@ -1,5 +1,5 @@
 import { describe, expect, test } from "@jest/globals";
-import { parseInvoice } from "./lightning";
+import { parseInvoice } from "../lightning";
 
 describe("Parsing Lightning Invoice", () => {
   test("Valid invoice...", () => {

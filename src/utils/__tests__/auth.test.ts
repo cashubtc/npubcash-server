@@ -1,12 +1,11 @@
 import { describe, expect, test } from "@jest/globals";
-import { parseInvoice } from "./lightning";
 import {
   finalizeEvent,
   generateSecretKey,
   getPublicKey,
   nip19,
 } from "nostr-tools";
-import { verifyAuth } from "./auth";
+import { verifyAuth } from "../auth";
 
 const sk = generateSecretKey();
 

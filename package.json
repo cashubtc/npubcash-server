@@ -4,6 +4,7 @@
   "description": "",
   "scripts": {
     "dev": "NODE_ENV=development nodemon",
+    "test": "npx jest",
     "build": "node build.js",
     "start": "node dist/index.js"
   },

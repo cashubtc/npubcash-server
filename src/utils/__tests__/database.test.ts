@@ -1,5 +1,5 @@
 import { describe, expect, test } from "@jest/globals";
-import { createBulkInsertPayload } from "./database";
+import { createBulkInsertPayload } from "../database";
 
 describe("Bulk Insert", () => {
   test("create buld insert string", () => {

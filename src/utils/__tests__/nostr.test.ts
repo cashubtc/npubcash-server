@@ -4,7 +4,7 @@ import {
   decodeZapRequestParameter,
   extractZapRequestData,
   isValidZapRequestData,
-} from "./nostr";
+} from "../nostr";
 import { generateSecretKey, getPublicKey, validateEvent } from "nostr-tools";
 
 const invalidZapRequest = {
