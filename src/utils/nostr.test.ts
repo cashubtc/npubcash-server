@@ -1,10 +1,11 @@
-import { describe, expect, test } from "@jest/globals";
+import { afterEach, describe, expect, test } from "@jest/globals";
 import {
+  createZapReceipt,
   decodeZapRequestParameter,
   extractZapRequestData,
   isValidZapRequestData,
 } from "./nostr";
-import { validateZapRequest } from "nostr-tools/lib/types/nip57";
+import { generateSecretKey, getPublicKey, validateEvent } from "nostr-tools";
 
 const invalidZapRequest = {
   kind: 9734,
@@ -84,5 +85,35 @@ describe("Zap Request", () => {
     expect(isValid2).toBe(false);
     const isValid3 = isValidZapRequestData(invalidZapRequestData, 21000);
     expect(isValid3).toBe(false);
+  });
+});
+
+describe("Zap Receipt", () => {
+  const originalEnv = { ...process.env };
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+  test("Creating a zap receipt", async () => {
+    const skHex = Buffer.from(generateSecretKey()).toString("hex");
+    const eTag =
+      "fe964e758903360f28d8424d092da8494ed207cba823110be3a57dfe4b578734";
+    const pTag =
+      "63fe6318dc58583cfe16810f86dd09e18bfd76aabc24a0081ce2856f330504ed";
+    const invoice =
+      "lnbc15u1p3xnhl2pp5jptserfk3zk4qy42tlucycrfwxhydvlemu9pqr93tuzlv9cc7g3sdqsvfhkcap3xyhx7un8cqzpgxqzjcsp5f8c52y2stc300gl6s4xswtjpc37hrnnr3c9wvtgjfuvqmpm35evq9qyyssqy4lgd8tj637qcjp05rdpxxykjenthxftej7a2zzmwrmrl70fyj9hvj0rewhzj7jfyuwkwcg9g2jpwtk3wkjtwnkdks84hsnu8xps5vsq4gj5hs";
+    const now = Math.floor(Date.now() / 1000);
+    process.env.ZAP_SECRET_KEY = skHex;
+    const receipt = createZapReceipt(now, pTag, eTag, invoice, "12345");
+    expect(validateEvent(receipt)).toBe(true);
+    expect(receipt).toMatchObject({
+      pubkey: getPublicKey(Buffer.from(skHex, "hex")),
+      tags: [
+        ["p", pTag],
+        ["bolt11", invoice],
+        ["description", "12345"],
+        ["e", eTag],
+      ],
+    });
   });
 });
