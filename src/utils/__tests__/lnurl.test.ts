@@ -1,7 +1,7 @@
-import { afterEach, describe, expect, jest, test } from "@jest/globals";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { createLnurlResponse } from "../lnurl";
 
-jest.mock("../../index.ts", () => ({
+vi.mock("../../index.ts", () => ({
   get ZAP_PUBKEY() {
     return "123";
   },
@@ -24,6 +24,7 @@ describe("Generating LNURL response", () => {
       callback: `${host}/.well-known/lnurlp/test`,
       allowsNostr: true,
       maxSendable: 10,
+      metadata: '[["text/plain","A cashu lightning address... Neat!"]]',
       minSendable: 1,
       tag: "payRequest",
       nostrPubkey: "123",
@@ -38,6 +39,7 @@ describe("Generating LNURL response", () => {
     expect(response).toMatchObject({
       maxSendable: 100,
       minSendable: 10,
+      metadata: '[["text/plain","A cashu lightning address... Neat!"]]',
       tag: "payRequest",
       callback: `${host}/.well-known/lnurlp/test`,
     });
