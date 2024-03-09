@@ -47,7 +47,7 @@ export function createZapReceipt(
   pTag: string,
   eTag: string,
   invoice: string,
-  encodedZapRequest: string,
+  zapRequest: Event,
 ) {
   const event: EventTemplate = {
     content: "",
@@ -55,8 +55,9 @@ export function createZapReceipt(
     created_at: paidAt,
     tags: [
       ["p", pTag],
+      ["P", zapRequest.pubkey],
       ["bolt11", invoice],
-      ["description", encodedZapRequest],
+      ["description", JSON.stringify(zapRequest)],
     ],
   };
   if (eTag) {
