@@ -59,11 +59,11 @@ export async function lnurlController(
         .json({ error: true, message: "Invalid zap request" });
     }
   }
-  const { pr: mintPr, hash: mintHash } = await wallet.requestMint(
-    Math.floor(parsedAmount / 1000),
-  );
-  const { amount: mintAmount } = parseInvoice(mintPr);
   try {
+    const { pr: mintPr, hash: mintHash } = await wallet.requestMint(
+      Math.floor(parsedAmount / 1000),
+    );
+    const { amount: mintAmount } = parseInvoice(mintPr);
     const invoiceRes = await lnProvider.createInvoice(
       mintAmount / 1000,
       "Cashu Address",
