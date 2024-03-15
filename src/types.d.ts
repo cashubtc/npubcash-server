@@ -8,6 +8,17 @@ declare global {
   }
 }
 
+export type FailedPayment = {
+  id: number;
+  created_at: string;
+  server_pr: string;
+  mint_pr: string;
+  quote: string;
+  user: string;
+  amount: number;
+  transaction_id: number;
+};
+
 export interface PaymentProvider {
   createInvoice: (
     amount: number,
