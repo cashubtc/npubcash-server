@@ -1,7 +1,14 @@
-import { beforeEach, describe, test, vi } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import request from "supertest";
-import { Claim, Transaction } from "../models";
+import { Claim, Transaction, User } from "../models";
 import { app } from "..";
+import {
+  finalizeEvent,
+  generateSecretKey,
+  getPublicKey,
+  nip19,
+  nip98,
+} from "nostr-tools";
 
 const tx: Transaction = {
   id: 40,
@@ -59,26 +66,49 @@ beforeEach(() => {
   vi.resetModules();
 });
 
-describe("Paid Request", () => {
-  test("Everything okay", async () => {
-    vi.spyOn(Transaction, "getTransactionByHash").mockImplementation(
-      async () => tx,
+describe("GET /info", () => {
+  test("Authed Request, no username", async () => {
+    vi.spyOn(User, "getUserByPubkey").mockImplementation(async () => undefined);
+    const sk = generateSecretKey();
+    const authHeader = await nip98.getToken(
+      "https://npub.cash/api/v1/info",
+      "GET",
+      (e) => finalizeEvent(e, sk),
     );
-    vi.spyOn(Claim, "createClaims").mockImplementation(async () => {});
-    vi.spyOn(Transaction, "setToFulfilled").mockImplementation(async () => tx);
-    vi.mock("../utils/blink.ts", () => {
-      const BlinkProvider = class {
-        constructor() {
-          return null;
-        }
-        payInvoice() {
-          return null;
-        }
-      };
-      return { BlinkProvider };
+    const res = await request(app)
+      .get("/api/v1/info")
+      .set("Authorization", authHeader)
+      .set("host", "npub.cash")
+      .set("X-Forwarded-Proto", "https");
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toMatchObject({
+      username: null,
+      npub: nip19.npubEncode(getPublicKey(sk)),
     });
+  });
 
-    const res = await request(app).post("/api/v1/paid").send(body);
-    console.log(res.statusCode);
+  test("Authed Request, with username", async () => {
+    const sk = generateSecretKey();
+    vi.spyOn(User, "getUserByPubkey").mockImplementation(async () => ({
+      upsertMintByPubkey: async () => {},
+      pubkey: "1223",
+      name: "egge",
+      mint_url: "mint",
+    }));
+    const authHeader = await nip98.getToken(
+      "https://npub.cash/api/v1/info",
+      "GET",
+      (e) => finalizeEvent(e, sk),
+    );
+    const res = await request(app)
+      .get("/api/v1/info")
+      .set("Authorization", authHeader)
+      .set("host", "npub.cash")
+      .set("X-Forwarded-Proto", "https");
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toMatchObject({
+      username: "egge",
+      npub: nip19.npubEncode(getPublicKey(sk)),
+    });
   });
 });
