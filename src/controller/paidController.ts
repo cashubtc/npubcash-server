@@ -32,8 +32,9 @@ export async function paidController(
   const { eventType, transaction } = req.body;
   if (eventType === "receive.lightning") {
     const reqHash = transaction.initiationVia.paymentHash;
+    let internalTx: Transaction | undefined;
     try {
-      const internalTx = await Transaction.getTransactionByHash(reqHash);
+      internalTx = await Transaction.getTransactionByHash(reqHash);
       if (internalTx.zap_request && process.env.ZAP_SECRET_KEY) {
         try {
           const zapRequestData = extractZapRequestData(internalTx.zap_request);
@@ -71,8 +72,11 @@ export async function paidController(
       await Transaction.setToFulfilled(internalTx.id);
       res.sendStatus(200);
     } catch (e) {
+      if (internalTx) {
+        await internalTx.recordFailedPayment();
+        console.error("Failed to create Claim");
+      }
       console.error(e);
-      console.error("Failed to create Claim");
       return res.sendStatus(200);
     }
   } else {

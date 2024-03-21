@@ -1,5 +1,6 @@
 import { Event } from "nostr-tools";
 import { queryWrapper } from "../utils/database";
+import { FailedPayment } from "../types";
 
 export class Transaction {
   id: number;
@@ -35,6 +36,23 @@ export class Transaction {
     this.zap_request = zapRequest;
     this.fulfilled = fulfilled;
     this.amount = amount;
+  }
+
+  async recordFailedPayment() {
+    const res = await queryWrapper<FailedPayment>(
+      `INSERT INTO l_failed_payments (server_pr, mint_pr, quote, "user", amount, transaction_id) VALUES ($1, $2, $3, $4, $5, $6)`,
+      [
+        this.server_pr,
+        this.mint_pr,
+        this.mint_hash,
+        this.user,
+        this.amount,
+        this.id,
+      ],
+    );
+    if (res.rowCount === 0) {
+      console.error("Failed to record failed payment!!");
+    }
   }
 
   static async setToFulfilled(id: number) {
