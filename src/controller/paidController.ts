@@ -43,7 +43,7 @@ export async function paidController(
             zapRequestData.pTags[0],
             zapRequestData.eTags[0],
             internalTx.server_pr,
-            JSON.stringify(internalTx.zap_request),
+            internalTx.zap_request,
           );
           //@ts-ignore
           await Promise.any(
