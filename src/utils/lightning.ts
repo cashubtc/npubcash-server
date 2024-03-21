@@ -2,6 +2,7 @@ import { decode } from "light-bolt11-decoder";
 import { PaymentProvider } from "../types";
 
 type InvoiceData = {
+  // FIX: parseInvoice returns amount: string
   amount: number;
   paymentHash: string;
   memo?: string;
