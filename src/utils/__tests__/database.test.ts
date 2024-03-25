@@ -1,5 +1,8 @@
 import { describe, expect, test } from "vitest";
-import { createBulkInsertPayload } from "../database";
+import {
+  createBulkInsertPayload,
+  createSanitizedValueString,
+} from "../database";
 
 describe("Bulk Insert", () => {
   test("create buld insert string", () => {
@@ -14,5 +17,16 @@ describe("Bulk Insert", () => {
     const insertString = createBulkInsertPayload(columns, values);
     expect(insertString.flatValues.length).toBe(12);
     expect(() => createBulkInsertPayload(columns, invalidValues)).toThrow();
+  });
+});
+
+describe("Create Value Strings", () => {
+  test("Value string without offset", () => {
+    const string = createSanitizedValueString(3);
+    expect(string).toEqual("($1, $2, $3)");
+  });
+  test("Value string with offset", () => {
+    const string = createSanitizedValueString(3, 2);
+    expect(string).toEqual("($3, $4, $5)");
   });
 });
