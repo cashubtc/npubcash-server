@@ -17,6 +17,7 @@ describe("Generating LNURL response", () => {
     process.env.ZAP_SECRET_KEY = "secret";
     process.env.LNURL_MAX_AMOUNT = "10";
     process.env.LNURL_MIN_AMOUNT = "1";
+    process.env.HOSTNAME = "https://npub.cash";
     const host = "https://npub.cash";
     // @ts-ignore
     const response = createLnurlResponse("test", host);
@@ -33,6 +34,7 @@ describe("Generating LNURL response", () => {
   test("Nostr key is not set", () => {
     process.env.LNURL_MAX_AMOUNT = "100";
     process.env.LNURL_MIN_AMOUNT = "10";
+    process.env.HOSTNAME = "https://npub.cash";
     const host = "https://npub.cash";
     // @ts-ignore
     const response = createLnurlResponse("test", host);
