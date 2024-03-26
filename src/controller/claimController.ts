@@ -47,13 +47,35 @@ export async function claimGetController(req: Request, res: Response) {
   const { spendable } = await new CashuMint(process.env.MINTURL!).check(
     payload,
   );
-  const spendableProofs = proofs.filter((_, i) => spendable[i]);
+  const spendableClaims: Claim[] = [];
+  const unspendableClaims: Claim[] = [];
+  for (let i = 0; i < proofs.length; i++) {
+    if (spendable[i]) {
+      spendableClaims.push(allClaims[i]);
+    } else {
+      unspendableClaims.push(allClaims[i]);
+    }
+  }
+  const spendableProofs = spendableClaims.map((claim) => claim.proof);
   const token = getEncodedToken({
     memo: "",
     token: [{ mint: process.env.MINTURL!, proofs: spendableProofs }],
   });
   if (spendableProofs.length === 0) {
     return res.json({ error: true, message: "No proofs to claim" });
+  }
+  try {
+    await Claim.updateClaimsStatus(
+      spendableClaims.map((claim) => claim.id),
+      "inflight",
+    );
+    await Claim.updateClaimsStatus(
+      unspendableClaims.map((claim) => claim.id),
+      "spent",
+    );
+  } catch {
+    res.status(500);
+    return res.json({ error: true, message: "internal server error" });
   }
   res.json({ error: false, data: { token: token } });
 }
