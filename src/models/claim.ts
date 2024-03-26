@@ -11,7 +11,7 @@ export class Claim {
   user: string;
   mint_url: string;
   proof: Proof;
-  status: "ready" | "inflight" | "spent";
+  status: ClaimStatus;
   transaction_id?: number;
 
   constructor(
@@ -19,7 +19,7 @@ export class Claim {
     user: string,
     mint_url: string,
     proof: Proof,
-    status: "ready" | "inflight" | "spent",
+    status: ClaimStatus,
     transaction_id?: number,
   ) {
     this.id = id;
@@ -45,13 +45,13 @@ export class Claim {
     }
   }
 
-  static async updateClaimsStatus(ids: number[]) {
+  static async updateClaimsStatus(ids: number[], newStatus: ClaimStatus) {
     if (ids.length === 0) {
       return;
     }
-    const list = createSanitizedValueString(ids.length);
-    const query = `UPDATE l_claims_3 SET status = 'spent' WHERE id in ${list}`;
-    const res = await queryWrapper<Claim>(query, ids);
+    const list = createSanitizedValueString(ids.length, 1);
+    const query = `UPDATE l_claims_3 SET status = $1 WHERE id in ${list}`;
+    const res = await queryWrapper<Claim>(query, [newStatus, ...ids]);
     return res;
   }
 
