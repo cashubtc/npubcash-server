@@ -13,6 +13,7 @@ export class Transaction {
   zap_request: Event | undefined;
   fulfilled: boolean;
   amount: number;
+  mint_url: string;
 
   constructor(
     id: number,
@@ -25,6 +26,7 @@ export class Transaction {
     zapRequest: Event | undefined,
     fulfilled: boolean,
     amount: number,
+    mint_url: string,
   ) {
     this.id = id;
     this.mint_pr = mintPr;
@@ -36,6 +38,7 @@ export class Transaction {
     this.zap_request = zapRequest;
     this.fulfilled = fulfilled;
     this.amount = amount;
+    this.mint_url = mint_url;
   }
 
   async recordFailedPayment() {
@@ -74,11 +77,12 @@ export class Transaction {
     user: string,
     zapRequest: Event | undefined,
     amount: number,
+    mint_url: string,
   ) {
     const res = await queryWrapper<Transaction>(
       `INSERT INTO l_transactions
-(mint_pr, mint_hash, server_pr, server_hash, "user", zap_request, fulfilled, amount)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, created_at`,
+(mint_pr, mint_hash, server_pr, server_hash, "user", zap_request, fulfilled, amount, mint_url)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id, created_at`,
       [
         mint_pr,
         mint_hash,
@@ -88,6 +92,7 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, created_at`,
         zapRequest,
         false,
         amount,
+        mint_url,
       ],
     );
     if (res.rowCount === 0) {
@@ -104,6 +109,7 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, created_at`,
       zapRequest,
       false,
       amount,
+      mint_url,
     );
   }
 
@@ -126,6 +132,7 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, created_at`,
       res.rows[0].zap_request,
       res.rows[0].fulfilled,
       res.rows[0].amount,
+      res.rows[0].mint_url,
     );
   }
 }
