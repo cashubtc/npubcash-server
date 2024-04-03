@@ -2,11 +2,12 @@ import { NextFunction, Request, Response } from "express";
 import { Event, nip19 } from "nostr-tools";
 
 import { parseInvoice } from ".././utils/lightning";
-import { lnProvider, wallet } from "..";
+import { lnProvider } from "..";
 import { Transaction, User } from "../models";
 import { createLnurlResponse } from "../utils/lnurl";
 import { decodeAndValidateZapRequest } from "../utils/nostr";
 import { createHash } from "crypto";
+import { getWalletFromCache } from "../utils/mint";
 
 export async function lnurlController(
   req: Request<
@@ -21,11 +22,22 @@ export async function lnurlController(
   const { amount, nostr } = req.query;
   const userParam = req.params.user;
   let username: string | User | undefined;
+  let mintUrl: string = process.env.MINTURL!;
   let zapRequest: Event | undefined;
   if (userParam.startsWith("npub")) {
     try {
-      nip19.decode(userParam as `npub1${string}`);
+      const pk = nip19.decode(userParam as `npub1${string}`).data;
       username = userParam;
+      try {
+        const userObj = await User.getUserByPubkey(pk);
+        if (userObj) {
+          mintUrl = userObj.mint_url;
+        }
+      } catch (e) {
+        console.log(e);
+        res.status(500);
+        return res.json({ error: true, message: "internal server error" });
+      }
     } catch {
       res.status(401);
       return next(new Error("Invalid npub / public key"));
@@ -37,6 +49,7 @@ export async function lnurlController(
       return next(new Error("User not found"));
     }
     username = userObj.name;
+    mintUrl = userObj.mint_url;
   }
   if (!amount) {
     const lnurlResponse = createLnurlResponse(username);
@@ -60,6 +73,7 @@ export async function lnurlController(
     }
   }
   try {
+    const wallet = getWalletFromCache(mintUrl);
     const { pr: mintPr, hash: mintHash } = await wallet.requestMint(
       Math.floor(parsedAmount / 1000),
     );
@@ -79,6 +93,7 @@ export async function lnurlController(
       username,
       zapRequest,
       parsedAmount / 1000,
+      mintUrl,
     );
     res.json({
       pr: invoiceRes.paymentRequest,
