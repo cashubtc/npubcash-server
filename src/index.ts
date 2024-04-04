@@ -1,7 +1,6 @@
 import express, { Response } from "express";
 import bodyparser from "body-parser";
 import cors from "cors";
-import { CashuMint, CashuWallet } from "@cashu/cashu-ts";
 
 import routes from "./routes";
 import { LightningHandler } from "./utils/lightning";
@@ -20,7 +19,6 @@ useWebSocketImplementation(require("ws"));
 
 checkEnvVars(["LNURL_MAX_AMOUNT", "LNURL_MIN_AMOUNT", "MINTURL"]);
 
-export const wallet = new CashuWallet(new CashuMint(process.env.MINTURL!));
 export const lnProvider = new LightningHandler(new BlinkProvider());
 export const nostrPool = new SimplePool();
 
