@@ -16,7 +16,7 @@ export async function balanceController(req: Request, res: Response) {
   const payload = {
     proofs: proofs.map((p) => ({ secret: p.secret })),
   };
-  const { spendable } = await new CashuMint(process.env.MINTURL!).check(
+  const { spendable } = await new CashuMint(allClaims[0].mint_url).check(
     payload,
   );
   const spendableProofs: Proof[] = [];
@@ -50,7 +50,7 @@ export async function claimGetController(req: Request, res: Response) {
   const spendableProofs = proofs.filter((_, i) => spendable[i]);
   const token = getEncodedToken({
     memo: "",
-    token: [{ mint: process.env.MINTURL!, proofs: spendableProofs }],
+    token: [{ mint: allClaims[0].mint_url, proofs: spendableProofs }],
   });
   if (spendableProofs.length === 0) {
     return res.json({ error: true, message: "No proofs to claim" });

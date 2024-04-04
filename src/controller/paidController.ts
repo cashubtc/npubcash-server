@@ -67,7 +67,7 @@ export async function paidController(
       );
       await Claim.createClaims(
         internalTx.user,
-        process.env.MINTURL!,
+        internalTx.mint_url,
         proofs,
         internalTx.id,
       );
