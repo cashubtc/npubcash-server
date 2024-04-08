@@ -1,9 +1,10 @@
 import { NextFunction, Request, Response } from "express";
-import { User } from "../models";
+import { Claim, User } from "../models";
 import { sign, verify } from "jsonwebtoken";
 import { lnProvider } from "..";
 import { PaymentJWTPayload } from "../types";
 import { usernameRegex } from "../constants/regex";
+import { isValidMint } from "../utils/mint";
 
 export async function getInfoController(req: Request, res: Response) {
   const username = await User.getUserByPubkey(req.authData?.data.pubkey!);
@@ -19,16 +20,28 @@ export async function putMintInfoController(
   res: Response,
   next: NextFunction,
 ) {
+  const authData = req.authData!;
   const { mintUrl } = req.body;
-  try {
-    new URL(mintUrl);
-  } catch {
-    res.status(400);
-    return next(new Error("Invalid URL"));
-  }
   if (!mintUrl) {
     res.status(400);
-    return next(new Error("Missing parameters"));
+    return res.json({ error: true, message: "missing parameters" });
+  }
+  const userObj = await User.getUserByPubkey(authData.data.pubkey);
+  const activeClaims = await Claim.getAllUserReadyClaims(
+    authData.data.pubkey,
+    userObj?.name,
+  );
+  if (activeClaims.length > 0) {
+    res.status(400);
+    return res.json({
+      error: true,
+      message: "can not change mint with balance. Please claim balance first",
+    });
+  }
+  const isValid = await isValidMint(mintUrl);
+  if (!isValid) {
+    res.status(400);
+    return res.json({ error: true, message: "invalid mint url" });
   }
   try {
     await User.upsertMintByPubkey(req.authData?.data.pubkey!, mintUrl);
@@ -37,7 +50,7 @@ export async function putMintInfoController(
     res.status(500);
     return next(new Error("Failed to update DB"));
   }
-  res.status(204).send();
+  res.json({ error: false, data: { mintUrl } });
 }
 
 export async function putUsernameInfoController(

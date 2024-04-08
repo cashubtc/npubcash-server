@@ -1,7 +1,8 @@
 import { Request, Response } from "express";
-import { lnProvider, nostrPool, wallet } from "..";
+import { lnProvider, nostrPool } from "..";
 import { Claim, Transaction } from "../models";
 import { createZapReceipt, extractZapRequestData } from "../utils/nostr";
+import { getWalletFromCache } from "../utils/mint";
 
 const relays = [
   "wss://relay.current.fyi",
@@ -59,13 +60,14 @@ export async function paidController(
         console.error(e);
         console.error("Could not pay mint invoice!");
       }
+      const wallet = getWalletFromCache(internalTx.mint_url);
       const { proofs } = await wallet.requestTokens(
         transaction.settlementAmount,
         internalTx.mint_hash,
       );
       await Claim.createClaims(
         internalTx.user,
-        process.env.MINTURL!,
+        internalTx.mint_url,
         proofs,
         internalTx.id,
       );
