@@ -37,9 +37,9 @@ app.use(cors());
 app.use(requireHTTPS);
 
 app.use(routes);
-app.use("/", express.static(path.join(__dirname, "../frontend")));
+app.use("/", express.static(path.join(__dirname, "../npubcash-website/dist")));
 app.get("*", (_, res: Response) => {
-  res.sendFile(path.join(__dirname, "../frontend/index.html"));
+  res.sendFile(path.join(__dirname, "../npubcash-website/dist/index.html"));
 });
 
 app.listen(process.env.PORT || 8000);
