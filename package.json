@@ -2,11 +2,15 @@
   "name": "cashu-address",
   "version": "1.0.0",
   "description": "",
+  "workspaces": [
+    "npubcash-website"
+  ],
   "scripts": {
     "dev": "NODE_ENV=development nodemon",
     "test": "npx vitest run",
-    "build": "node build.js",
-    "start": "node dist/index.js"
+    "build": "npm run build:frontend && node build.js",
+    "start": "node dist/index.js",
+    "build:frontend": "npm run build --workspace=npubcash-website"
   },
   "main": "index.js",
   "keywords": [],
