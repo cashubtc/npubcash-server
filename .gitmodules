@@ -1,0 +1,3 @@
+[submodule "npubcash-website"]
+	path = npubcash-website
+	url = https://github.com/lightning-digital-entertainment/npubcash-website.git
