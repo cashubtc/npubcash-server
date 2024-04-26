@@ -63,6 +63,7 @@ export async function lnurlController(
     const { pr: mintPr, hash: mintHash } = await wallet.requestMint(
       Math.floor(parsedAmount / 1000),
     );
+    console.log("created mint request");
     const { amount: mintAmount } = parseInvoice(mintPr);
     const invoiceRes = await lnProvider.createInvoice(
       mintAmount / 1000,
@@ -71,6 +72,7 @@ export async function lnurlController(
         ? createHash("sha256").update(JSON.stringify(zapRequest)).digest("hex")
         : undefined,
     );
+    console.log("created payment request");
     await Transaction.createTransaction(
       mintPr,
       mintHash,
