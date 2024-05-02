@@ -59,18 +59,37 @@ export async function lnurlController(
         .json({ error: true, message: "Invalid zap request" });
     }
   }
+  let mintPr: string,
+    mintHash: string,
+    invoiceRes: { paymentRequest: string; paymentHash: string };
   try {
-    const { pr: mintPr, hash: mintHash } = await wallet.requestMint(
-      Math.floor(parsedAmount / 1000),
-    );
-    const { amount: mintAmount } = parseInvoice(mintPr);
-    const invoiceRes = await lnProvider.createInvoice(
+    const mintRes = await wallet.requestMint(Math.floor(parsedAmount / 1000));
+    ({ pr: mintPr, hash: mintHash } = mintRes);
+  } catch (e) {
+    console.log("Failed to create invoice: Mint failed");
+    console.log(e);
+    res.status(500);
+    return res.json({ error: true, message: "Something went wrong..." });
+  }
+
+  const { amount: mintAmount } = parseInvoice(mintPr);
+
+  try {
+    invoiceRes = await lnProvider.createInvoice(
       mintAmount / 1000,
       "Cashu Address",
       zapRequest
         ? createHash("sha256").update(JSON.stringify(zapRequest)).digest("hex")
         : undefined,
     );
+  } catch (e) {
+    console.log("Failed to create invoice: Invoice creation failed");
+    console.log(e);
+    res.status(500);
+    return res.json({ error: true, message: "Something went wrong..." });
+  }
+
+  try {
     await Transaction.createTransaction(
       mintPr,
       mintHash,
@@ -85,8 +104,9 @@ export async function lnurlController(
       routes: [],
     });
   } catch (e) {
+    console.log("Failed to create invoice: Database connection failed");
     console.log(e);
     res.status(500);
-    res.json({ error: true, message: "Something went wrong..." });
+    return res.json({ error: true, message: "Something went wrong..." });
   }
 }
