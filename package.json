@@ -9,8 +9,9 @@
     "dev": "NODE_ENV=development nodemon",
     "test": "npx vitest run",
     "build": "npm run build:frontend && node build.js",
-    "start": "node dist/index.js",
-    "build:frontend": "npm run build --workspace=npubcash-website"
+    "start": "npm run db:up && node dist/index.js",
+    "build:frontend": "npm run build --workspace=npubcash-website",
+    "db:up": "npx node-pg-migrate up"
   },
   "main": "index.js",
   "keywords": [],
@@ -42,6 +43,7 @@
     "@vitest/ui": "^1.6.0",
     "dotenv": "^16.3.1",
     "esbuild": "^0.19.11",
+    "node-pg-migrate": "^7.3.2",
     "nodemon": "^3.0.2",
     "supertest": "^6.3.4",
     "typescript": "^5.3.3",
