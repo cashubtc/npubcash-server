@@ -1,7 +1,7 @@
 import { NextFunction, Request, Response } from "express";
 import { User } from "../models";
 import { sign, verify } from "jsonwebtoken";
-import { lnProvider } from "..";
+import { lnProvider } from "../config";
 import { PaymentJWTPayload } from "../types";
 import { usernameRegex } from "../constants/regex";
 

@@ -2,7 +2,7 @@ import { NextFunction, Request, Response } from "express";
 import { Event, nip19 } from "nostr-tools";
 
 import { parseInvoice } from ".././utils/lightning";
-import { lnProvider, wallet } from "..";
+import { lnProvider, wallet } from "../config";
 import { Transaction, User } from "../models";
 import { createLnurlResponse } from "../utils/lnurl";
 import { decodeAndValidateZapRequest } from "../utils/nostr";
@@ -74,6 +74,7 @@ export async function lnurlController(
 
   const { amount: mintAmount } = parseInvoice(mintPr);
 
+  //TODO:)Parse invoice for expiry and pass it to blink
   try {
     invoiceRes = await lnProvider.createInvoice(
       mintAmount / 1000,

@@ -4,7 +4,6 @@ import {
   createSanitizedValueString,
   queryWrapper,
 } from "../utils/database";
-import { ClaimStatus } from "../types";
 
 export class Claim {
   id: number;
