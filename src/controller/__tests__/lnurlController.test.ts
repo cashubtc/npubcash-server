@@ -128,10 +128,12 @@ describe("lnurlController", () => {
       pr: "lnbc15u1p3xnhl2pp5jptserfk3zk4qy42tlucycrfwxhydvlemu9pqr93tuzlv9cc7g3sdqsvfhkcap3xyhx7un8cqzpgxqzjcsp5f8c52y2stc300gl6s4xswtjpc37hrnnr3c9wvtgjfuvqmpm35evq9qyyssqy4lgd8tj637qcjp05rdpxxykjenthxftej7a2zzmwrmrl70fyj9hvj0rewhzj7jfyuwkwcg9g2jpwtk3wkjtwnkdks84hsnu8xps5vsq4gj5hs",
       hash: "456",
     });
-    vi.mocked(lnProvider.createInvoice, { partial: true }).mockResolvedValue({
-      paymentRequest: "invoice",
-      paymentHash: "hash",
-    });
+    const lnProviderMock = vi
+      .mocked(lnProvider.createInvoice, { partial: true })
+      .mockResolvedValue({
+        paymentRequest: "invoice",
+        paymentHash: "hash",
+      });
     vi.mocked(Transaction.createTransaction, {
       partial: true,
     }).mockResolvedValue({
@@ -150,6 +152,12 @@ describe("lnurlController", () => {
 
     const res = await request(app).get(
       "/.well-known/lnurlp/testUser?amount=21000",
+    );
+
+    expect(lnProviderMock).toHaveBeenCalledWith(
+      1500,
+      "Cashu Address",
+      undefined,
     );
 
     expect(res.status).toBe(200);
