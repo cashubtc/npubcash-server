@@ -11,7 +11,7 @@ export async function setupDatabase() {
 
   await migrate({
     databaseUrl: dbConfig.connectionString,
-    dir: path.resolve(__dirname, "migrations"),
+    dir: "migrations",
     direction: "up",
     migrationsTable: "pgmigrations",
     count: Infinity,
