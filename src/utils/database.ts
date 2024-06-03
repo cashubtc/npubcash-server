@@ -1,6 +1,23 @@
 import { Pool, QueryConfig, QueryResultRow } from "pg";
+import migrate from "node-pg-migrate";
+import path from "path";
 
 const pool = new Pool();
+
+export async function setupDatabase() {
+  const dbConfig = {
+    connectionString: `postgres://${process.env.PGUSER}:${process.env.PGPASSWORD}@${process.env.PGHOST}:${process.env.PGPORT}/${process.env.PGDATABASE}`,
+  };
+
+  await migrate({
+    databaseUrl: dbConfig.connectionString,
+    dir: path.resolve(__dirname, "migrations"),
+    direction: "up",
+    migrationsTable: "pgmigrations",
+    count: Infinity,
+    log: console.log,
+  });
+}
 
 export function queryWrapper<T extends QueryResultRow>(
   query: string | QueryConfig<any[]>,
