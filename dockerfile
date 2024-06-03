@@ -25,7 +25,7 @@ ENV NODE_ENV production
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 npc
 
-COPY --from=builder --chown=npc:nodejs /app/dist ./
+COPY --from=builder --chown=npc:nodejs /app/dist ./dist
 COPY --from=builder --chown=npc:nodejs /app/migrations ./migrations
  
 USER npc
@@ -35,4 +35,4 @@ EXPOSE 8000
 ENV PORT 8000 
 
 
-CMD HOSTNAME="0.0.0.0" node index.js
+CMD HOSTNAME="0.0.0.0" node dist/index.js
