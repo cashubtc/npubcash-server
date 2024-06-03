@@ -242,53 +242,31 @@ ALTER TABLE ONLY "public"."l_payments"
     ADD CONSTRAINT "public_l_payments_transaction_id_fkey" FOREIGN KEY ("transaction_id") REFERENCES "public"."l_transactions"("id") ON UPDATE CASCADE ON DELETE SET NULL;
 
 
-ALTER PUBLICATION "supabase_realtime" OWNER TO "postgres";
 
 GRANT USAGE ON SCHEMA "public" TO "postgres";
-GRANT USAGE ON SCHEMA "public" TO "service_role";
 
-GRANT ALL ON FUNCTION "public"."notify_payment"() TO "service_role";
 
-GRANT ALL ON FUNCTION "public"."notify_test"() TO "service_role";
 
-GRANT ALL ON FUNCTION "public"."notify_test_2"() TO "service_role";
 
-GRANT ALL ON TABLE "public"."l_alias_requests" TO "service_role";
 
-GRANT ALL ON SEQUENCE "public"."l_alias_requests_id_seq" TO "service_role";
 
-GRANT ALL ON TABLE "public"."l_claims_3" TO "service_role";
 
-GRANT ALL ON SEQUENCE "public"."l_claims_3_id_seq" TO "service_role";
 
-GRANT ALL ON TABLE "public"."l_failed_payments" TO "service_role";
 
-GRANT ALL ON SEQUENCE "public"."l_failed_payments_id_seq" TO "service_role";
 
-GRANT ALL ON TABLE "public"."l_inflight" TO "service_role";
 
-GRANT ALL ON SEQUENCE "public"."l_inflight_id_seq" TO "service_role";
 
-GRANT ALL ON TABLE "public"."l_payments" TO "service_role";
 
-GRANT ALL ON SEQUENCE "public"."l_payments_id_seq" TO "service_role";
 
-GRANT ALL ON TABLE "public"."l_transactions" TO "service_role";
 
-GRANT ALL ON SEQUENCE "public"."l_transactions_id_seq" TO "service_role";
 
-GRANT ALL ON TABLE "public"."l_users" TO "service_role";
 
-GRANT ALL ON SEQUENCE "public"."l_users_id_seq" TO "service_role";
 
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON SEQUENCES  TO "postgres";
-ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON SEQUENCES  TO "service_role";
 
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON FUNCTIONS  TO "postgres";
-ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON FUNCTIONS  TO "service_role";
 
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES  TO "postgres";
-ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES  TO "service_role";
 
 `);
 };
