@@ -16,7 +16,7 @@ Deploying npubcash-server is easy. There are two ways to deploy the app:
 npub.cash ships with a dockerfile. Clone the repository, build the image and deploy it.
 
 ```sh
-git clone -b migrations https://github.com/cashubtc/npubcash-server.git
+git clone -b migrations --recurse-submodules https://github.com/cashubtc/npubcash-server.git
 
 cd npubcash-server
 
@@ -30,7 +30,7 @@ Once deployed make sure to set your environment variables accordingly (see below
 You can also build the application code yourself and deploy it Manually
 
 ```sh
-git clone -b migrations https://github.com/cashubtc/npubcash-server.git
+git clone -b migrations --recurse-submodules https://github.com/cashubtc/npubcash-server.git
 
 cd npubcash-server
 
