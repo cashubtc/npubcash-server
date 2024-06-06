@@ -7,6 +7,7 @@ RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
+COPY npubcash-website/package.json npubcash-website/package-lock.json* ./npubcash-website/
 
 RUN npm ci
 
