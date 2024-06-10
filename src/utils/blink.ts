@@ -1,6 +1,10 @@
 import { gql, GraphQLClient } from "graphql-request";
 import { PaymentProvider } from "../types";
 
+type BlinkCallbackQueryResponse = {
+  me: { defaultAccount: { callbackEndpoints: { url: string }[] } };
+};
+
 export type BlinkInvoiceResponse = {
   lnInvoiceCreateOnBehalfOfRecipient: {
     invoice: {
@@ -176,4 +180,73 @@ export async function checkPaymentStatus(paymentRequest: string) {
     return { paid: false };
   }
   return { paid: data.lnInvoicePaymentStatus.status === "PAID" };
+}
+
+export async function registerCallback(endpoint: string) {
+  const query = gql`
+    mutation CallbackEndpointAdd($input: CallbackEndpointAddInput!) {
+      callbackEndpointAdd(input: $input) {
+        errors {
+          code
+          message
+        }
+        id
+      }
+    }
+  `;
+
+  const variables = {
+    input: {
+      url: endpoint,
+    },
+  };
+
+  const data = (await graphQLClient.request(query, variables)) as {
+    callbackEndpointAdd: {
+      errors?: { code: string; message: string };
+      id: string;
+    };
+  };
+  if (data.callbackEndpointAdd.errors?.message) {
+    throw new Error(data.callbackEndpointAdd.errors.message);
+  }
+  return data.callbackEndpointAdd.id;
+}
+
+export async function getCallbackEndpoints() {
+  const query = gql`
+    query CallbackEndpoints {
+      me {
+        defaultAccount {
+          callbackEndpoints {
+            url
+          }
+        }
+      }
+    }
+  `;
+
+  const data = (await graphQLClient.request(
+    query,
+  )) as BlinkCallbackQueryResponse;
+  return data.me.defaultAccount.callbackEndpoints.map((cb) => cb.url);
+}
+
+export function isCallbackSetup(res: string[], endpoint: string) {
+  for (let i = 0; i < res.length; i++) {
+    if (res[i] === endpoint) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export async function setupCallbacks() {
+  console.log("Setting up callback: ", process.env.HOSTNAME);
+  const res = await getCallbackEndpoints();
+  const isSetup = isCallbackSetup(res, `${process.env.HOSTNAME}/api/v1/paid`);
+  if (!isSetup) {
+    console.log("Registering callback with blink...");
+    await registerCallback(`${process.env.HOSTNAME}/api/v1/paid`);
+  }
 }
