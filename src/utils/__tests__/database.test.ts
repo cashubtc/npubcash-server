@@ -41,7 +41,7 @@ describe("Bulk Insert", () => {
         ["Steve", 36, "male"],
         ["Steve", 36, "male"],
       ],
-    ).then((e) => {
+    ).then(() => {
       expect(mockedMethod).toHaveBeenCalledWith(
         "INSERT INTO test (name,age,gender) VALUES ($1,$2,$3),($4,$5,$6),($7,$8,$9),($10,$11,$12);",
         [
