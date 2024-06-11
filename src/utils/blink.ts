@@ -244,9 +244,12 @@ export function isCallbackSetup(res: string[], endpoint: string) {
 export async function setupCallbacks() {
   console.log("Setting up callback: ", process.env.HOSTNAME);
   const res = await getCallbackEndpoints();
+  console.log(res);
   const isSetup = isCallbackSetup(res, `${process.env.HOSTNAME}/api/v1/paid`);
+  console.log(isSetup);
   if (!isSetup) {
     console.log("Registering callback with blink...");
-    await registerCallback(`${process.env.HOSTNAME}/api/v1/paid`);
+    const cbRes = await registerCallback(`${process.env.HOSTNAME}/api/v1/paid`);
+    console.log(cbRes);
   }
 }
