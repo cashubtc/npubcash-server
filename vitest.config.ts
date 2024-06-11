@@ -1,11 +1,16 @@
 import { defineConfig } from "vite";
-import { configDefaults } from "vitest/config";
+import { configDefaults, coverageConfigDefaults } from "vitest/config";
 
 export default defineConfig({
   test: {
     exclude: [...configDefaults.exclude, "npubcash-website"],
     coverage: {
-      exclude: ["npubcash-website"],
+      exclude: [
+        ...coverageConfigDefaults.exclude,
+        "npubcash-website",
+        "build.js",
+        "migrations",
+      ],
     },
   },
 });
