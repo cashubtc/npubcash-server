@@ -10,6 +10,7 @@ export default defineConfig({
         "npubcash-website",
         "build.js",
         "migrations",
+        "**/blink.ts",
       ],
     },
   },
