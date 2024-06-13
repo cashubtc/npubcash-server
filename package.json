@@ -10,8 +10,7 @@
     "test": "npx vitest run",
     "build": "npm run build:frontend && node build.js",
     "start": "node dist/index.js",
-    "build:frontend": "npm run build --workspace=npubcash-website",
-    "db:up": "npx node-pg-migrate up"
+    "build:frontend": "npm run build --workspace=npubcash-website"
   },
   "main": "index.js",
   "keywords": [],
