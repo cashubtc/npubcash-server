@@ -52,6 +52,7 @@ class JwtTokenVerifier implements TokenVerifier {
 }
 
 class AuthHandler {
+  static singleton: AuthHandler;
   private verifiers: { [tokenType: string]: TokenVerifier };
 
   setVerifier(tokenType: string, verifier: TokenVerifier) {
@@ -60,6 +61,16 @@ class AuthHandler {
 
   getTokenType(header: string) {
     return header.split(" ")[0].toLowerCase();
+  }
+
+  static getInstance() {
+    if (this.singleton) {
+      return this.singleton;
+    }
+    const instance = new AuthHandler();
+    instance.setVerifier("nostr", new NostrTokenVerifier());
+    instance.setVerifier("bearer", new JwtTokenVerifier());
+    return instance;
   }
 
   async verifyToken(header: string, url: string, method: string) {
@@ -77,10 +88,6 @@ class AuthHandler {
   }
 }
 
-const authHandlerImpl = new AuthHandler();
-authHandlerImpl.setVerifier("nostr", new NostrTokenVerifier());
-authHandlerImpl.setVerifier("bearer", new JwtTokenVerifier());
-
 export function isAuthMiddleware(path: string, method: string) {
   async function isAuth(req: Request, res: Response, next: NextFunction) {
     const hostname = req.header("host");
@@ -95,12 +102,13 @@ export function isAuthMiddleware(path: string, method: string) {
       res.status(401);
       return next(new Error("Missing Authorization Header"));
     }
-    const isAuth = await verifyAuth(authHeader, url, method);
-    if (!isAuth.authorized) {
+    const handler = AuthHandler.getInstance();
+    const authData = await handler.verifyToken(authHeader, url, method);
+    if (!authData.authorized) {
       res.status(401);
       return next(new Error("Invalid Authorization Header"));
     } else {
-      req.authData = isAuth;
+      req.authData = authData;
     }
     next();
   }
