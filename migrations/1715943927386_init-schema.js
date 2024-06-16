@@ -241,26 +241,7 @@ ALTER TABLE ONLY "public"."l_failed_payments"
 ALTER TABLE ONLY "public"."l_payments"
     ADD CONSTRAINT "public_l_payments_transaction_id_fkey" FOREIGN KEY ("transaction_id") REFERENCES "public"."l_transactions"("id") ON UPDATE CASCADE ON DELETE SET NULL;
 
-
-
 GRANT USAGE ON SCHEMA "public" TO "postgres";
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON SEQUENCES  TO "postgres";
 
