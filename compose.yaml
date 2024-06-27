@@ -1,0 +1,37 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:alpine
+    ports:
+      - 5432:5432
+    environment:
+      - POSTGRES_PASSWORD=test
+      - POSTGRES_USER=postgres
+      - POSTGRES_DB=postgres
+    networks:
+      - common-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  server:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8000:5000"
+    environment:
+      - PGPASSWORD=test
+      - PGDATABASE=postgres
+      - PGUSER=postgres
+      - PGHOST=postgres
+      - PGPORT=5432
+    networks:
+      - common-net
+
+networks:
+  common-net: {}
