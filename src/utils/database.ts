@@ -19,6 +19,10 @@ export async function setupDatabase() {
   });
 }
 
+export async function getDbClient() {
+  return await pool.connect();
+}
+
 export function queryWrapper<T extends QueryResultRow>(
   query: string | QueryConfig<any[]>,
   values: any[],
