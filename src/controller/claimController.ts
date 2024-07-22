@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { CashuMint, Proof, getEncodedToken } from "@cashu/cashu-ts";
 import { Claim, User } from "../models";
+import { Withdrawal } from "../models/withdrawal";
 
 export async function balanceController(req: Request, res: Response) {
   const isAuth = req.authData!;
@@ -48,12 +49,20 @@ export async function claimGetController(req: Request, res: Response) {
     payload,
   );
   const spendableProofs = proofs.filter((_, i) => spendable[i]);
-  const token = getEncodedToken({
-    memo: "",
-    token: [{ mint: process.env.MINTURL!, proofs: spendableProofs }],
-  });
-  if (spendableProofs.length === 0) {
-    return res.json({ error: true, message: "No proofs to claim" });
+  const withdrawal = new Withdrawal(allClaims, req.authData!.data.pubkey);
+  try {
+    await withdrawal.addToDb();
+    const token = getEncodedToken({
+      memo: "",
+      token: [{ mint: process.env.MINTURL!, proofs: spendableProofs }],
+    });
+    if (spendableProofs.length === 0) {
+      return res.json({ error: true, message: "No proofs to claim" });
+    }
+    res.json({ error: false, data: { token: token } });
+  } catch (e) {
+    console.warn(e);
+    res.status(500);
+    res.json({ error: true, message: "Something went wrong..." });
   }
-  res.json({ error: false, data: { token: token } });
 }
