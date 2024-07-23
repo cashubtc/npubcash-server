@@ -54,6 +54,35 @@ export class Claim {
     return res;
   }
 
+  static async getPaginatedUserReadyClaims(
+    page: number,
+    npub: string,
+    username?: string,
+  ) {
+    const offset = (page - 1) * 100;
+    const whereClause = username
+      ? `WHERE ("user" = $1 OR "user" = $2) AND status = 'ready'`
+      : `WHERE "user" = $1 AND status = 'ready'`;
+    const query = `
+WITH total_count AS (
+    SELECT COUNT(*) AS count
+    FROM l_claims_3
+    ${whereClause}
+)
+SELECT l_claims_3.*, total_count.count
+FROM l_claims_3, total_count
+${whereClause}
+ORDER BY (proof->>'amount')::int DESC
+LIMIT 100
+OFFSET ${username ? "$3" : "$2"};
+`;
+    const res = await queryWrapper<Claim & { count: number }>(
+      query,
+      username ? [npub, username, offset] : [npub, offset],
+    );
+    return res;
+  }
+
   static async getAllUserReadyClaims(npub: string, username?: string) {
     let allClaims: Claim[];
     if (username) {
