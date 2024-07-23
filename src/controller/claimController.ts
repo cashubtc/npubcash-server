@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { CashuMint, Proof, getEncodedToken } from "@cashu/cashu-ts";
 import { Claim, User } from "../models";
-import { Withdrawal } from "../models/withdrawal";
+import { Withdrawal, WithdrawalStore } from "../models/withdrawal";
 
 export async function balanceController(req: Request, res: Response) {
   const isAuth = req.authData!;
@@ -36,22 +36,25 @@ export async function balanceController(req: Request, res: Response) {
 
 export async function claimGetController(req: Request, res: Response) {
   const user = await User.getUserByPubkey(req.authData!.data.pubkey);
-  let allClaims = await Claim.getAllUserReadyClaims(
+  const allClaims = await Claim.getPaginatedUserReadyClaims(
+    1,
     req.authData!.data.npub,
     user?.name,
   );
-  if (allClaims.length === 0) {
+  if (allClaims.count === 0) {
     return res.json({ error: true, message: "No proofs to claim" });
   }
-  const proofs = allClaims.map((claim) => claim.proof);
+  const proofs = allClaims.claims.map((claim) => claim.proof);
   const payload = { proofs: proofs.map((p) => ({ secret: p.secret })) };
   const { spendable } = await new CashuMint(process.env.MINTURL!).check(
     payload,
   );
   const spendableProofs = proofs.filter((_, i) => spendable[i]);
-  const withdrawal = new Withdrawal(allClaims, req.authData!.data.pubkey);
   try {
-    await withdrawal.addToDb();
+    WithdrawalStore.getInstance()?.saveWithdrawal(
+      allClaims.claims,
+      req.authData!.data.pubkey,
+    );
     const token = getEncodedToken({
       memo: "",
       token: [{ mint: process.env.MINTURL!, proofs: spendableProofs }],
@@ -59,7 +62,7 @@ export async function claimGetController(req: Request, res: Response) {
     if (spendableProofs.length === 0) {
       return res.json({ error: true, message: "No proofs to claim" });
     }
-    res.json({ error: false, data: { token: token } });
+    res.json({ error: false, data: { token: token, count: allClaims.count } });
   } catch (e) {
     console.warn(e);
     res.status(500);
