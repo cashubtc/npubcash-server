@@ -1,8 +1,13 @@
 import { Pool, QueryConfig, QueryResultRow } from "pg";
 import migrate from "node-pg-migrate";
 import path from "path";
+import { WithdrawalStore } from "../models/withdrawal";
 
 const pool = new Pool();
+
+export function setupStore() {
+  return WithdrawalStore.getInstance(pool);
+}
 
 export async function setupDatabase() {
   const dbConfig = {
