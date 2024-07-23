@@ -80,7 +80,23 @@ OFFSET ${username ? "$3" : "$2"};
       query,
       username ? [npub, username, offset] : [npub, offset],
     );
-    return res;
+    if (res.rowCount === 0) {
+      return { claims: [], count: 0 };
+    }
+    return {
+      claims: res.rows.map(
+        (row) =>
+          new Claim(
+            row.id,
+            row.user,
+            row.mint_url,
+            row.proof,
+            row.status,
+            row.transaction_id,
+          ),
+      ),
+      count: res.rows[0].count,
+    };
   }
 
   static async getAllUserReadyClaims(npub: string, username?: string) {
