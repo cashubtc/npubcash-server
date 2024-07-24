@@ -10,10 +10,16 @@ export async function getLatestWithdrawalsController(
   const authData = req.authData!;
   try {
     const withdrawals =
-      await WithdrawalStore.getInstance()?.getLastWithdrawlsByPubkey(
+      await WithdrawalStore.getInstance().getLastWithdrawlsByPubkey(
         authData.data.pubkey,
       );
-    res.status(200).json({ error: false, data: { withdrawals } });
+    res.status(200).json({
+      error: false,
+      data: {
+        count: withdrawals.count,
+        withdrawals: withdrawals.withdrawals,
+      },
+    });
   } catch (e) {
     console.warn("Failed to get latest withdrawals:");
     console.log(e);

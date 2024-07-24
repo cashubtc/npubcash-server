@@ -30,6 +30,7 @@ export class WithdrawalStore {
     } else {
       if (pool) {
         this.instance = new WithdrawalStore(pool);
+        return this.instance;
       } else {
         throw new Error("Not instantiated yet...");
       }
@@ -56,7 +57,7 @@ LIMIT 50;
       return { withdrawals: [], count: 0 };
     }
     return {
-      withdrawls: res.rows.map(
+      withdrawals: res.rows.map(
         (row) => new Withdrawal(row.id, row.claim_ids, row.pubkey, row.amount),
       ),
       count: res.rows[0].count,
