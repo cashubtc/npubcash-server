@@ -175,4 +175,24 @@ OFFSET ${username ? "$3" : "$2"};
       throw new Error("Failed to create new Claims...");
     }
   }
+
+  static async getClaimsByIds(ids: number[]) {
+    const list = createSanitizedValueString(ids.length);
+    const query = `SELECT * FROM l_claims_3 WHERE id IN ${list};`;
+    const res = await queryWrapper<Claim>(query, ids);
+    if (res.rowCount === 0) {
+      return [];
+    }
+    return res.rows.map(
+      (row) =>
+        new Claim(
+          row.id,
+          row.user,
+          row.mint_url,
+          row.proof,
+          row.status,
+          row.transaction_id,
+        ),
+    );
+  }
 }

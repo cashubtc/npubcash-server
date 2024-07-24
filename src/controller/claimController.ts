@@ -51,7 +51,7 @@ export async function claimGetController(req: Request, res: Response) {
   );
   const spendableProofs = proofs.filter((_, i) => spendable[i]);
   try {
-    WithdrawalStore.getInstance()?.saveWithdrawal(
+    await WithdrawalStore.getInstance()?.saveWithdrawal(
       allClaims.claims,
       req.authData!.data.pubkey,
     );
