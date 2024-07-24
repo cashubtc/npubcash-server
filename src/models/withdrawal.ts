@@ -5,14 +5,22 @@ import { Claim } from "./claim";
 export class Withdrawal {
   id: number;
   claim_ids: number[];
+  created_at: number;
   pubkey: string;
   amount: number;
 
-  constructor(id: number, claim_ids: number[], pubkey: string, amount: number) {
+  constructor(
+    id: number,
+    claim_ids: number[],
+    pubkey: string,
+    amount: number,
+    created_at: number,
+  ) {
     this.id = id;
     this.claim_ids = claim_ids;
     this.pubkey = pubkey;
     this.amount = amount;
+    this.created_at = created_at;
   }
 }
 
@@ -58,7 +66,14 @@ LIMIT 50;
     }
     return {
       withdrawals: res.rows.map(
-        (row) => new Withdrawal(row.id, row.claim_ids, row.pubkey, row.amount),
+        (row) =>
+          new Withdrawal(
+            row.id,
+            row.claim_ids,
+            row.pubkey,
+            row.amount,
+            Math.floor(new Date(row.created_at).getTime() / 1000),
+          ),
       ),
       count: res.rows[0].count,
     };
