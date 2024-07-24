@@ -12,6 +12,10 @@ import {
 } from "./controller/infoController";
 import { isAuthMiddleware } from "./middleware/auth";
 import { nip05Controller } from "./controller/nip05Controller";
+import {
+  getLatestWithdrawalsController,
+  getWithdrawalDetailsController,
+} from "./controller/withdrawalController";
 
 const routes = Router();
 
@@ -43,6 +47,17 @@ routes.get(
   "/api/v1/balance",
   isAuthMiddleware("/api/v1/balance", "GET"),
   balanceController,
+);
+routes.get(
+  "/api/v1/withdrawls",
+  isAuthMiddleware("/api/v1/withdrawls", "GET"),
+  getLatestWithdrawalsController,
+);
+
+routes.get(
+  "/api/v1/withdrawls/:id",
+  isAuthMiddleware("/api/v1/withdrawls/:id", "GET"),
+  getWithdrawalDetailsController,
 );
 
 export default routes;
