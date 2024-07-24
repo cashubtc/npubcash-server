@@ -1,13 +1,15 @@
 import { Pool } from "pg";
-import { createSanitizedValueString, getDbClient } from "../utils/database";
+import { createSanitizedValueString } from "../utils/database";
 import { Claim } from "./claim";
 
 export class Withdrawal {
+  id: number;
   claim_ids: number[];
   pubkey: string;
   amount: number;
 
-  constructor(claim_ids: number[], pubkey: string, amount: number) {
+  constructor(id: number, claim_ids: number[], pubkey: string, amount: number) {
+    this.id = id;
     this.claim_ids = claim_ids;
     this.pubkey = pubkey;
     this.amount = amount;
@@ -55,7 +57,7 @@ LIMIT 50;
     }
     return {
       withdrawls: res.rows.map(
-        (row) => new Withdrawal(row.claim_ids, row.pubkey, row.amount),
+        (row) => new Withdrawal(row.id, row.claim_ids, row.pubkey, row.amount),
       ),
       count: res.rows[0].count,
     };
