@@ -49,14 +49,14 @@ routes.get(
   balanceController,
 );
 routes.get(
-  "/api/v1/withdrawls",
-  isAuthMiddleware("/api/v1/withdrawls", "GET"),
+  "/api/v1/withdrawals",
+  isAuthMiddleware("/api/v1/withdrawals", "GET"),
   getLatestWithdrawalsController,
 );
 
 routes.get(
-  "/api/v1/withdrawls/:id",
-  isAuthMiddleware("/api/v1/withdrawls/:id", "GET"),
+  "/api/v1/withdrawals/:id",
+  isAuthMiddleware("/api/v1/withdrawals/:id", "GET"),
   getWithdrawalDetailsController,
 );
 

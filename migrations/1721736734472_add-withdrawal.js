@@ -8,7 +8,7 @@ exports.up = (pgm) => {
     id: "id",
     amount: { type: "integer", notNull: true },
     pubkey: { type: "varchar(50)", notNull: true },
-    createdAt: {
+    created_at: {
       type: "timestamp",
       notNull: true,
       default: pgm.func("now()"),
