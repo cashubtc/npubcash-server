@@ -49,7 +49,7 @@ export class WithdrawalStore {
     const res = await this.pool.query<Withdrawal & { count: number }>(
       `
 WITH total_count AS (
-  SELECT COUNT(*) AS count
+  SELECT COUNT(*)::integer AS count
   FROM l_withdrawals
   WHERE pubkey = $1
 )
