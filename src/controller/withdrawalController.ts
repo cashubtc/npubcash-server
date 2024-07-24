@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { WithdrawalStore } from "../models/withdrawal";
+import { Withdrawal, WithdrawalStore } from "../models/withdrawal";
 import { Claim } from "../models";
 import { queryWrapper } from "../utils/database";
 
@@ -42,11 +42,20 @@ WHERE
     l_withdrawals.id = $1
 AND
     l_withdrawals.pubkey = $2;`;
-    const queryRes = await queryWrapper(query, [
+    const queryRes = await queryWrapper<Claim & Withdrawal>(query, [
       withdrawlId,
       authData.data.pubkey,
     ]);
-    res.status(200).json({ error: false, data: { queryRes } });
+    if (queryRes.rowCount === 0) {
+      res.status(404).json({ error: true, message: "not found" });
+    }
+    res.status(200).json({
+      error: false,
+      data: {
+        amount: queryRes.rows[0].amount,
+        proofs: queryRes.rows.map((r) => r.proof),
+      },
+    });
   } catch (e) {
     console.warn("Failed to get withdrawal details");
     console.log(e);
