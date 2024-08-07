@@ -54,6 +54,24 @@ export class Claim {
     return res;
   }
 
+  static async getUserReadyClaimAmount(npub: string, username?: string) {
+    const whereClause = username
+      ? `WHERE ("user" = $1 OR "user" = $2) AND status = 'ready'`
+      : `WHERE "user" = $1 AND status = 'ready'`;
+    const query = `SELECT
+    SUM((proof ->> 'amount')::INT) AS total_amount
+    FROM
+    l_claims_3
+    ${whereClause};
+    `;
+    const res = await queryWrapper(query, username ? [npub, username] : [npub]);
+    console.log(res);
+    if (res.rows.length < 1 || !res.rows[0].total_amount) {
+      return 0;
+    }
+    return res.rows[0].total_amount;
+  }
+
   static async getPaginatedUserReadyClaims(
     page: number,
     npub: string,

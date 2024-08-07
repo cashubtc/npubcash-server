@@ -1,36 +1,15 @@
 import { Request, Response } from "express";
-import { CashuMint, Proof, getEncodedToken } from "@cashu/cashu-ts";
+import { CashuMint, getEncodedToken } from "@cashu/cashu-ts";
 import { Claim, User } from "../models";
-import { Withdrawal, WithdrawalStore } from "../models/withdrawal";
+import { WithdrawalStore } from "../models/withdrawal";
 
 export async function balanceController(req: Request, res: Response) {
   const isAuth = req.authData!;
   const user = await User.getUserByPubkey(isAuth.data.pubkey);
-  let allClaims = await Claim.getAllUserReadyClaims(
-    req.authData!.data.npub,
+  const balance = await Claim.getUserReadyClaimAmount(
+    isAuth.data.npub,
     user?.name,
   );
-  const proofs = allClaims.map((claim) => claim.proof);
-  if (allClaims.length === 0) {
-    return res.json({ error: false, data: 0 });
-  }
-  const payload = {
-    proofs: proofs.map((p) => ({ secret: p.secret })),
-  };
-  const { spendable } = await new CashuMint(process.env.MINTURL!).check(
-    payload,
-  );
-  const spendableProofs: Proof[] = [];
-  const unspendableClaims: Claim[] = [];
-  for (let i = 0; i < proofs.length; i++) {
-    if (spendable[i]) {
-      spendableProofs.push(proofs[i]);
-    } else {
-      unspendableClaims.push(allClaims[i]);
-    }
-  }
-  Claim.updateClaimsStatus(unspendableClaims.map((claim) => claim.id));
-  const balance = spendableProofs.reduce((a, c) => a + c.amount, 0);
   return res.json({ error: false, data: balance });
 }
 
