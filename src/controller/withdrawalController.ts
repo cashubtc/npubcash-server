@@ -59,6 +59,7 @@ AND
       error: false,
       data: {
         amount: queryRes.rows[0].amount,
+        mintUrl: queryRes.rows[0].mint_url,
         proofs: queryRes.rows.map((r) => r.proof),
       },
     });
