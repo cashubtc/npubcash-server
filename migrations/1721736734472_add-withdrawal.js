@@ -7,7 +7,7 @@ exports.up = (pgm) => {
   pgm.createTable("l_withdrawals", {
     id: "id",
     amount: { type: "integer", notNull: true },
-    pubkey: { type: "varchar(50)", notNull: true },
+    pubkey: { type: "text", notNull: true },
     created_at: {
       type: "timestamp",
       notNull: true,
