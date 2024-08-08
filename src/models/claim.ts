@@ -65,7 +65,6 @@ export class Claim {
     ${whereClause};
     `;
     const res = await queryWrapper(query, username ? [npub, username] : [npub]);
-    console.log(res);
     if (res.rows.length < 1 || !res.rows[0].total_amount) {
       return 0;
     }

@@ -96,11 +96,9 @@ LIMIT 50;
         pubkey,
         ids,
       ]);
-      console.log(res1);
       const list = createSanitizedValueString(ids.length);
       const claimUpdateQuery = `UPDATE l_claims_3 SET status = 'spent' WHERE id in ${list}`;
       const res2 = await client.query(claimUpdateQuery, ids);
-      console.log(res2);
       await client.query("COMMIT");
     } catch (e) {
       console.warn("Failed to create withdrawl... rolling back");
