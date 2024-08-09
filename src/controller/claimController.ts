@@ -46,7 +46,14 @@ export async function claimGetController(req: Request, res: Response) {
     if (spendableProofs.length === 0) {
       return res.json({ error: true, message: "No proofs to claim" });
     }
-    res.json({ error: false, data: { token: token, count: allClaims.count } });
+    res.json({
+      error: false,
+      data: {
+        token: token,
+        count: allClaims.claims.length,
+        totalPending: allClaims.count,
+      },
+    });
   } catch (e) {
     console.warn(e);
     res.status(500);

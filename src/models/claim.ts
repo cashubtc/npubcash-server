@@ -98,7 +98,7 @@ OFFSET ${username ? "$3" : "$2"};
       username ? [npub, username, offset] : [npub, offset],
     );
     if (res.rowCount === 0) {
-      return { claims: [], count: 0 };
+      return { claims: [], count: 0, totalPending: 0 };
     }
     return {
       claims: res.rows.map(
@@ -112,7 +112,8 @@ OFFSET ${username ? "$3" : "$2"};
             row.transaction_id,
           ),
       ),
-      count: res.rows[0].count,
+      count: res.rowCount,
+      totalPending: res.rows[0].count,
     };
   }
 
