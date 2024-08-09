@@ -59,10 +59,10 @@ export class Claim {
       ? `WHERE ("user" = $1 OR "user" = $2) AND status = 'ready'`
       : `WHERE "user" = $1 AND status = 'ready'`;
     const query = `SELECT
-    SUM((proof ->> 'amount')::INT) AS total_amount
-    FROM
-    l_claims_3
-    ${whereClause};
+      SUM((proof ->> 'amount')::INT) AS total_amount
+      FROM
+      l_claims_3
+      ${whereClause};
     `;
     const res = await queryWrapper(query, username ? [npub, username] : [npub]);
     if (res.rows.length < 1 || !res.rows[0].total_amount) {
