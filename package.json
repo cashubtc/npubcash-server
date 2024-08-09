@@ -9,9 +9,8 @@
     "dev": "NODE_ENV=development nodemon",
     "test": "npx vitest run",
     "build": "npm run build:frontend && node build.js",
-    "start": "npm run db:up && node dist/index.js",
-    "build:frontend": "npm run build --workspace=npubcash-website",
-    "db:up": "npx node-pg-migrate up"
+    "start": "node dist/index.js",
+    "build:frontend": "npm run build --workspace=npubcash-website"
   },
   "main": "index.js",
   "keywords": [],
