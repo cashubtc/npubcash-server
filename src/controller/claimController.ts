@@ -5,12 +5,17 @@ import { WithdrawalStore } from "../models/withdrawal";
 
 export async function balanceController(req: Request, res: Response) {
   const isAuth = req.authData!;
-  const user = await User.getUserByPubkey(isAuth.data.pubkey);
-  const balance = await Claim.getUserReadyClaimAmount(
-    isAuth.data.npub,
-    user?.name,
-  );
-  return res.json({ error: false, data: balance });
+  try {
+    const user = await User.getUserByPubkey(isAuth.data.pubkey);
+    const balance = await Claim.getUserReadyClaimAmount(
+      isAuth.data.npub,
+      user?.name,
+    );
+    return res.json({ error: false, data: balance });
+  } catch (e) {
+    console.warn(e);
+    res.status(500).json({ error: true, message: "Something went wrong..." });
+  }
 }
 
 export async function claimGetController(req: Request, res: Response) {
