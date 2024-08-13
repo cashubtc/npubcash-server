@@ -63,8 +63,10 @@ export async function lnurlController(
     mintHash: string,
     invoiceRes: { paymentRequest: string; paymentHash: string };
   try {
-    const mintRes = await wallet.requestMint(Math.floor(parsedAmount / 1000));
-    ({ pr: mintPr, hash: mintHash } = mintRes);
+    const mintRes = await wallet.createMintQuote(
+      Math.floor(parsedAmount / 1000),
+    );
+    ({ request: mintPr, quote: mintHash } = mintRes);
   } catch (e) {
     console.log("Failed to create invoice: Mint failed");
     console.log(e);
