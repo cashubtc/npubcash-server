@@ -4,7 +4,6 @@ import {
   createSanitizedValueString,
   queryWrapper,
 } from "../utils/database";
-import { ClaimStatus } from "../types";
 
 export class Claim {
   id: number;
@@ -53,6 +52,69 @@ export class Claim {
     const query = `UPDATE l_claims_3 SET status = 'spent' WHERE id in ${list}`;
     const res = await queryWrapper<Claim>(query, ids);
     return res;
+  }
+
+  static async getUserReadyClaimAmount(npub: string, username?: string) {
+    const whereClause = username
+      ? `WHERE ("user" = $1 OR "user" = $2) AND status = 'ready'`
+      : `WHERE "user" = $1 AND status = 'ready'`;
+    const query = `SELECT
+      SUM((proof ->> 'amount')::INT) AS total_amount
+      FROM
+      l_claims_3
+      ${whereClause};
+    `;
+    const res = await queryWrapper(query, username ? [npub, username] : [npub]);
+    if (res.rows.length < 1 || !res.rows[0].total_amount) {
+      return 0;
+    }
+    return res.rows[0].total_amount;
+  }
+
+  static async getPaginatedUserReadyClaims(
+    page: number,
+    npub: string,
+    username?: string,
+  ) {
+    const offset = (page - 1) * 100;
+    const whereClause = username
+      ? `WHERE ("user" = $1 OR "user" = $2) AND status = 'ready'`
+      : `WHERE "user" = $1 AND status = 'ready'`;
+    const query = `
+WITH total_count AS (
+    SELECT COUNT(*) AS count
+    FROM l_claims_3
+    ${whereClause}
+)
+SELECT l_claims_3.*, total_count.count
+FROM l_claims_3, total_count
+${whereClause}
+ORDER BY (proof->>'amount')::int DESC
+LIMIT 100
+OFFSET ${username ? "$3" : "$2"};
+`;
+    const res = await queryWrapper<Claim & { count: number }>(
+      query,
+      username ? [npub, username, offset] : [npub, offset],
+    );
+    if (res.rowCount === 0) {
+      return { claims: [], count: 0, totalPending: 0 };
+    }
+    return {
+      claims: res.rows.map(
+        (row) =>
+          new Claim(
+            row.id,
+            row.user,
+            row.mint_url,
+            row.proof,
+            row.status,
+            row.transaction_id,
+          ),
+      ),
+      count: res.rowCount,
+      totalPending: res.rows[0].count,
+    };
   }
 
   static async getAllUserReadyClaims(npub: string, username?: string) {
@@ -130,5 +192,25 @@ export class Claim {
     if (res.rowCount === 0) {
       throw new Error("Failed to create new Claims...");
     }
+  }
+
+  static async getClaimsByIds(ids: number[]) {
+    const list = createSanitizedValueString(ids.length);
+    const query = `SELECT * FROM l_claims_3 WHERE id IN ${list};`;
+    const res = await queryWrapper<Claim>(query, ids);
+    if (res.rowCount === 0) {
+      return [];
+    }
+    return res.rows.map(
+      (row) =>
+        new Claim(
+          row.id,
+          row.user,
+          row.mint_url,
+          row.proof,
+          row.status,
+          row.transaction_id,
+        ),
+    );
   }
 }

@@ -1,17 +1,24 @@
 import { NextFunction, Request, Response } from "express";
 import { User } from "../models";
 import { sign, verify } from "jsonwebtoken";
-import { lnProvider } from "..";
+import { lnProvider } from "../config";
 import { PaymentJWTPayload } from "../types";
 import { usernameRegex } from "../constants/regex";
 
 export async function getInfoController(req: Request, res: Response) {
-  const username = await User.getUserByPubkey(req.authData?.data.pubkey!);
-  res.json({
-    username: username ? username.name : null,
-    npub: req.authData?.data.npub!,
-    mintUrl: username ? username.mint_url : process.env.MINTURL!,
-  });
+  try {
+    const username = await User.getUserByPubkey(req.authData?.data.pubkey!);
+    res.json({
+      username: username ? username.name : null,
+      npub: req.authData?.data.npub!,
+      mintUrl: username ? username.mint_url : process.env.MINTURL!,
+    });
+  } catch (e) {
+    console.warn("info controller: Failed to get info ");
+    console.log(e);
+    res.status(500);
+    res.json({ error: true, message: "internal errror" });
+  }
 }
 
 export async function putMintInfoController(

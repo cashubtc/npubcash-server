@@ -1,6 +1,32 @@
 import { Pool, QueryConfig, QueryResultRow } from "pg";
+import migrate from "node-pg-migrate";
+import path from "path";
+import { WithdrawalStore } from "../models/withdrawal";
 
 const pool = new Pool();
+
+export function setupStore() {
+  return WithdrawalStore.getInstance(pool);
+}
+
+export async function setupDatabase() {
+  const dbConfig = {
+    connectionString: `postgres://${process.env.PGUSER}:${process.env.PGPASSWORD}@${process.env.PGHOST}:${process.env.PGPORT}/${process.env.PGDATABASE}`,
+  };
+
+  await migrate({
+    databaseUrl: dbConfig.connectionString,
+    dir: "migrations",
+    direction: "up",
+    migrationsTable: "pgmigrations",
+    count: Infinity,
+    log: console.log,
+  });
+}
+
+export async function getDbClient() {
+  return await pool.connect();
+}
 
 export function queryWrapper<T extends QueryResultRow>(
   query: string | QueryConfig<any[]>,

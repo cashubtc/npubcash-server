@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { lnProvider, nostrPool, wallet } from "..";
+import { lnProvider, nostrPool, wallet } from "../config";
 import { Claim, Transaction } from "../models";
 import { createZapReceipt, extractZapRequestData } from "../utils/nostr";
 

@@ -1,4 +1,4 @@
-import { ZAP_PUBKEY } from "..";
+import { ZAP_PUBKEY } from "../config";
 
 export function createLnurlResponse(username: string) {
   if (process.env.ZAP_SECRET_KEY) {
