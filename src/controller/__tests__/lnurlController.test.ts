@@ -5,6 +5,7 @@ import app from "../../app";
 import { Transaction, User } from "../../models";
 import { createLnurlResponse } from "../../utils/lnurl";
 import { lnProvider, wallet } from "../../config";
+import { MintQuoteState } from "@cashu/cashu-ts";
 
 vi.mock("../../models/user.ts");
 vi.mock("../../models/transaction.ts");
@@ -41,7 +42,7 @@ vi.mock("nostr-tools", () => ({
 
 vi.mock("../../config.ts", () => ({
   wallet: {
-    requestMint: vi.fn(),
+    createMintQuote: vi.fn(),
   },
   lnProvider: {
     createInvoice: vi.fn(),
@@ -124,9 +125,12 @@ describe("lnurlController", () => {
       mint_url: "https://mint.minibits.cash/Bitcoin",
       pubkey: "testPubkey...",
     });
-    vi.mocked(wallet.requestMint).mockResolvedValue({
-      pr: "lnbc15u1p3xnhl2pp5jptserfk3zk4qy42tlucycrfwxhydvlemu9pqr93tuzlv9cc7g3sdqsvfhkcap3xyhx7un8cqzpgxqzjcsp5f8c52y2stc300gl6s4xswtjpc37hrnnr3c9wvtgjfuvqmpm35evq9qyyssqy4lgd8tj637qcjp05rdpxxykjenthxftej7a2zzmwrmrl70fyj9hvj0rewhzj7jfyuwkwcg9g2jpwtk3wkjtwnkdks84hsnu8xps5vsq4gj5hs",
-      hash: "456",
+    vi.mocked(wallet.createMintQuote).mockResolvedValue({
+      request:
+        "lnbc15u1p3xnhl2pp5jptserfk3zk4qy42tlucycrfwxhydvlemu9pqr93tuzlv9cc7g3sdqsvfhkcap3xyhx7un8cqzpgxqzjcsp5f8c52y2stc300gl6s4xswtjpc37hrnnr3c9wvtgjfuvqmpm35evq9qyyssqy4lgd8tj637qcjp05rdpxxykjenthxftej7a2zzmwrmrl70fyj9hvj0rewhzj7jfyuwkwcg9g2jpwtk3wkjtwnkdks84hsnu8xps5vsq4gj5hs",
+      quote: "456",
+      state: MintQuoteState.UNPAID,
+      expiry: 123,
     });
     const lnProviderMock = vi
       .mocked(lnProvider.createInvoice, { partial: true })
