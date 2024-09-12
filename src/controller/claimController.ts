@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { CashuMint, getEncodedToken } from "@cashu/cashu-ts";
 import { Claim, User } from "../models";
 import { WithdrawalStore } from "../models/withdrawal";
+import { wallet } from "../config";
 
 export async function balanceController(req: Request, res: Response) {
   const isAuth = req.authData!;
@@ -29,11 +30,11 @@ export async function claimGetController(req: Request, res: Response) {
     return res.json({ error: true, message: "No proofs to claim" });
   }
   const proofs = allClaims.claims.map((claim) => claim.proof);
-  const payload = { proofs: proofs.map((p) => ({ secret: p.secret })) };
-  const { spendable } = await new CashuMint(process.env.MINTURL!).check(
-    payload,
+  const stateCheck = await wallet.checkProofsSpent(proofs);
+  const spentSecrets = stateCheck.map((r) => r.secret);
+  const spendableProofs = proofs.filter(
+    (p) => !spentSecrets.includes(p.secret),
   );
-  const spendableProofs = proofs.filter((_, i) => spendable[i]);
   try {
     await WithdrawalStore.getInstance()?.saveWithdrawal(
       allClaims.claims,
