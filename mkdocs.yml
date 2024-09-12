@@ -1,0 +1,19 @@
+site_name: npubcash Docs
+nav:
+  - Home: index.md
+  - About: about.md
+  - Reference:
+      - Authentication: /api/authentication
+      - v1:
+          - LNURL: /api/v1/lnurl
+      - v2: /api/v2/
+theme:
+  name: material
+  palette:
+    primary: teal
+  font:
+    text: Inter
+copyright: Built with 💜 by Egge
+
+extra:
+  generator: false
