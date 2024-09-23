@@ -7,6 +7,7 @@ import { Transaction, User } from "../models";
 import { createLnurlResponse } from "../utils/lnurl";
 import { decodeAndValidateZapRequest } from "../utils/nostr";
 import { createHash } from "crypto";
+import { Analyzer } from "../utils/analytics";
 
 export async function lnurlController(
   req: Request<
@@ -72,7 +73,7 @@ export async function lnurlController(
     return res.json({ error: true, message: "Something went wrong..." });
   }
 
-  const { amount: mintAmount } = parseInvoice(mintPr);
+  const { amount: mintAmount, expiresIn } = parseInvoice(mintPr);
 
   //TODO:)Parse invoice for expiry and pass it to blink
   try {
@@ -90,6 +91,7 @@ export async function lnurlController(
     return res.json({ error: true, message: "Something went wrong..." });
   }
 
+  Analyzer.getInstance().logPaymentCreated(invoiceRes.paymentHash, expiresIn);
   try {
     await Transaction.createTransaction(
       mintPr,

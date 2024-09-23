@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { lnProvider, nostrPool, wallet } from "../config";
 import { Claim, Transaction } from "../models";
 import { createZapReceipt, extractZapRequestData } from "../utils/nostr";
+import { Analyzer } from "../utils/analytics";
 
 const relays = [
   "wss://relay.current.fyi",
@@ -33,6 +34,8 @@ export async function paidController(
   if (eventType === "receive.lightning") {
     const reqHash = transaction.initiationVia.paymentHash;
     let internalTx: Transaction | undefined;
+    const logger = Analyzer.getInstance();
+    logger.logPaymentSettled(reqHash);
     try {
       internalTx = await Transaction.getTransactionByHash(reqHash);
       if (internalTx.zap_request && process.env.ZAP_SECRET_KEY) {
