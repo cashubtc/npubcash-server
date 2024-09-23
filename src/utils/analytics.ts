@@ -19,6 +19,7 @@ export class Analyzer {
   }
 
   logPaymentCreated(paymentHash: string, expiresIn: number) {
+    console.log("Analytics - Payment created... Expires in: ", expiresIn);
     this.paymentsInflight++;
     this.timers[paymentHash] = setTimeout(() => {
       this.logPaymentExpired(paymentHash);
@@ -26,12 +27,14 @@ export class Analyzer {
   }
 
   logPaymentExpired(paymentHash: string) {
+    console.log("Analytics - Payment expired...");
     this.paymentsInflight--;
     this.paymentsExpired++;
     delete this.timers[paymentHash];
   }
 
   logPaymentSettled(paymentHash: string) {
+    console.log("Analytics - Payment settled...");
     this.paymentsInflight--;
     this.paymentsSettled++;
     clearTimeout(this.timers[paymentHash]);
