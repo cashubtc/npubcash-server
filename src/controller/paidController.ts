@@ -1,18 +1,12 @@
 import { Request, Response } from "express";
 import { lnProvider, wallet } from "../config";
 import { Claim, Transaction } from "../models";
-import { createZapReceipt, extractZapRequestData } from "../utils/nostr";
+import {
+  createZapReceipt,
+  extractZapRequestData,
+  publishZapReceipt,
+} from "../utils/nostr";
 import { Analyzer } from "../utils/analytics";
-
-const relays = [
-  "wss://relay.current.fyi",
-  "wss://nostr-pub.wellorder.net",
-  "wss://relay.damus.io",
-  "wss://nostr.zebedee.cloud",
-  "wss://nos.lol",
-  "wss://relay.primal.net",
-  "wss://nostr.mom",
-];
 
 export async function paidController(
   req: Request<

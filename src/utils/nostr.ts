@@ -60,8 +60,8 @@ export function extractZapRequestData(e: Event) {
 export function createZapReceipt(
   paidAt: number,
   pTag: string,
-  eTag: string,
-  aTag: string,
+  eTag: string | undefined,
+  aTag: string | undefined,
   invoice: string,
   zapRequest: Event,
 ) {
