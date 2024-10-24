@@ -1,11 +1,22 @@
 import {
   Event,
   EventTemplate,
+  VerifiedEvent,
   finalizeEvent,
   validateEvent,
 } from "nostr-tools";
 import { ZapRequestData } from "../types";
-import { ZAP_PUBKEY } from "..";
+import { nostrPool } from "../config";
+
+const relays = [
+  "wss://relay.current.fyi",
+  "wss://nostr-pub.wellorder.net",
+  "wss://relay.damus.io",
+  "wss://nostr.zebedee.cloud",
+  "wss://nos.lol",
+  "wss://relay.primal.net",
+  "wss://nostr.mom",
+];
 
 export function getTagValues(e: Event, tag: string, position: number) {
   const tags = e.tags;
@@ -105,4 +116,21 @@ export function isValidZapRequestData(z: ZapRequestData, lnurlAmount: number) {
 
 export function decodeZapRequestParameter(r: string) {
   return JSON.parse(decodeURI(r)) as Event;
+}
+
+const createTimeoutPromise = (ms: number) => {
+  return new Promise((_, reject) => {
+    setTimeout(() => reject(new Error("Timeout exceeded")), ms);
+  });
+};
+
+export async function publishZapReceipt(
+  receiptEvent: VerifiedEvent,
+  requestRelays?: string[],
+) {
+  const pubPromises = nostrPool.publish(requestRelays || relays, receiptEvent);
+  const wrappedPromises = pubPromises.map((promise) =>
+    Promise.race([promise, createTimeoutPromise(3000)]),
+  );
+  return Promise.allSettled(wrappedPromises);
 }
