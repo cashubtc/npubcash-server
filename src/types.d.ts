@@ -77,6 +77,7 @@ export interface PaymentJWTPayload extends JwtPayload {
 export type ZapRequestData = {
   pTags: string[];
   eTags: string[];
+  aTags: string[];
   relays: string[];
   amount?: number;
 };

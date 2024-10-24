@@ -21,6 +21,7 @@ export function getTagValues(e: Event, tag: string, position: number) {
 export function extractZapRequestData(e: Event) {
   const zapRequestData: ZapRequestData = {
     pTags: [],
+    aTags: [],
     eTags: [],
     relays: [],
   };
@@ -35,6 +36,9 @@ export function extractZapRequestData(e: Event) {
     if (tags[i][0] === "e") {
       zapRequestData.eTags.push(tags[i][1]);
     }
+    if (tags[i][0] === "a") {
+      zapRequestData.aTags.push(tags[i][1]);
+    }
     if (tags[i][0] === "p") {
       zapRequestData.pTags.push(tags[i][1]);
     }
@@ -46,6 +50,7 @@ export function createZapReceipt(
   paidAt: number,
   pTag: string,
   eTag: string,
+  aTag: string,
   invoice: string,
   zapRequest: Event,
 ) {
@@ -62,6 +67,9 @@ export function createZapReceipt(
   };
   if (eTag) {
     event.tags.push(["e", eTag]);
+  }
+  if (aTag) {
+    event.tags.push(["a", aTag]);
   }
   return finalizeEvent(event, Buffer.from(process.env.ZAP_SECRET_KEY!, "hex"));
 }
