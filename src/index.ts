@@ -2,9 +2,16 @@ import { useWebSocketImplementation } from "nostr-tools";
 import app from "./app";
 import { setupDatabase, setupStore } from "./utils/database";
 import { setupCallbacks } from "./utils/blink";
+import { Analyzer } from "./utils/analytics";
 
 useWebSocketImplementation(require("ws"));
 setupStore();
+setInterval(
+  () => {
+    Analyzer.getInstance().logAnalytics();
+  },
+  60 * 1 * 1000,
+);
 
 async function startServer() {
   try {

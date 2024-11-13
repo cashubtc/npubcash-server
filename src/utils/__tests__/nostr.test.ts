@@ -105,7 +105,14 @@ describe("Zap Receipt", () => {
     const now = Math.floor(Date.now() / 1000);
     process.env.ZAP_SECRET_KEY = skHex;
 
-    const receipt = createZapReceipt(now, pTag, eTag, invoice, zapRequest);
+    const receipt = createZapReceipt(
+      now,
+      pTag,
+      eTag,
+      undefined,
+      invoice,
+      zapRequest,
+    );
     expect(validateEvent(receipt)).toBe(true);
     expect(receipt).toMatchObject({
       pubkey: getPublicKey(Buffer.from(skHex, "hex")),

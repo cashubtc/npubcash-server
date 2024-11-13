@@ -1,11 +1,22 @@
 import {
   Event,
   EventTemplate,
+  VerifiedEvent,
   finalizeEvent,
   validateEvent,
 } from "nostr-tools";
 import { ZapRequestData } from "../types";
-import { ZAP_PUBKEY } from "..";
+import { nostrPool } from "../config";
+
+const relays = [
+  "wss://relay.current.fyi",
+  "wss://nostr-pub.wellorder.net",
+  "wss://relay.damus.io",
+  "wss://nostr.zebedee.cloud",
+  "wss://nos.lol",
+  "wss://relay.primal.net",
+  "wss://nostr.mom",
+];
 
 export function getTagValues(e: Event, tag: string, position: number) {
   const tags = e.tags;
@@ -21,6 +32,7 @@ export function getTagValues(e: Event, tag: string, position: number) {
 export function extractZapRequestData(e: Event) {
   const zapRequestData: ZapRequestData = {
     pTags: [],
+    aTags: [],
     eTags: [],
     relays: [],
   };
@@ -35,6 +47,9 @@ export function extractZapRequestData(e: Event) {
     if (tags[i][0] === "e") {
       zapRequestData.eTags.push(tags[i][1]);
     }
+    if (tags[i][0] === "a") {
+      zapRequestData.aTags.push(tags[i][1]);
+    }
     if (tags[i][0] === "p") {
       zapRequestData.pTags.push(tags[i][1]);
     }
@@ -45,10 +60,12 @@ export function extractZapRequestData(e: Event) {
 export function createZapReceipt(
   paidAt: number,
   pTag: string,
-  eTag: string,
+  eTag: string | undefined,
+  aTag: string | undefined,
   invoice: string,
   zapRequest: Event,
 ) {
+  const serialisedZapRequest = JSON.stringify(zapRequest);
   const event: EventTemplate = {
     content: "",
     kind: 9735,
@@ -57,11 +74,14 @@ export function createZapReceipt(
       ["p", pTag],
       ["P", zapRequest.pubkey],
       ["bolt11", invoice],
-      ["description", JSON.stringify(zapRequest)],
+      ["description", serialisedZapRequest],
     ],
   };
   if (eTag) {
     event.tags.push(["e", eTag]);
+  }
+  if (aTag) {
+    event.tags.push(["a", aTag]);
   }
   return finalizeEvent(event, Buffer.from(process.env.ZAP_SECRET_KEY!, "hex"));
 }
@@ -97,4 +117,21 @@ export function isValidZapRequestData(z: ZapRequestData, lnurlAmount: number) {
 
 export function decodeZapRequestParameter(r: string) {
   return JSON.parse(decodeURI(r)) as Event;
+}
+
+const createTimeoutPromise = (ms: number) => {
+  return new Promise((_, reject) => {
+    setTimeout(() => reject(new Error("Timeout exceeded")), ms);
+  });
+};
+
+export async function publishZapReceipt(
+  receiptEvent: VerifiedEvent,
+  requestRelays?: string[],
+) {
+  const pubPromises = nostrPool.publish(requestRelays || relays, receiptEvent);
+  const wrappedPromises = pubPromises.map((promise) =>
+    Promise.race([promise, createTimeoutPromise(3000)]),
+  );
+  return Promise.allSettled(wrappedPromises);
 }
