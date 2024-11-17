@@ -66,7 +66,7 @@ export async function paidController(
         console.error(e);
         console.error("Could not pay mint invoice!");
       }
-      const { proofs } = await wallet.requestTokens(
+      const proofs = await wallet.mintProofs(
         transaction.settlementAmount,
         internalTx.mint_hash,
       );
