@@ -8,6 +8,7 @@ export function createLnurlResponse(username: string) {
       minSendable: Number(process.env.LNURL_MIN_AMOUNT),
       metadata: JSON.stringify([
         ["text/plain", "A cashu lightning address... Neat!"],
+        ["text/identifier",`${username}@cashu-address.com`]
       ]),
       tag: "payRequest",
       allowsNostr: true,
@@ -20,6 +21,7 @@ export function createLnurlResponse(username: string) {
       minSendable: Number(process.env.LNURL_MIN_AMOUNT),
       metadata: JSON.stringify([
         ["text/plain", "A cashu lightning address... Neat!"],
+        ["text/identifier",`${username}@cashu-address.com`]
       ]),
       tag: "payRequest",
     };
