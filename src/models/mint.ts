@@ -17,13 +17,23 @@ export class MintQuote {
     payment_request: string,
     mint_url: string,
   ) {
-    const res = await queryWrapper(
-      `INSERT INTO mint_quotes (mint_url, payment_request, quote_id, expires_at, state) VALUES ($1, $2, $3, $4, $5)`,
+    const res = await queryWrapper<MintQuote>(
+      `INSERT INTO mint_quotes (mint_url, payment_request, quote_id, expires_at, state) VALUES ($1, $2, $3, $4, $5) RETURNING id, created_at`,
       [mint_url, payment_request, quote_id, expires_at, "UNPAID"],
     );
     if (res.rowCount === 0) {
       throw new Error("Failed to create new mint quote");
     }
+    const row = res.rows[0];
+    return new MintQuote(
+      row.id,
+      row.created_at,
+      row.mint_url,
+      row.payment_request,
+      row.quote_id,
+      row.expires_at,
+      row.state,
+    );
   }
 
   static async getToBeExpiredMintQuotes() {
