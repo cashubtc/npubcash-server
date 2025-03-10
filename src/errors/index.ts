@@ -1,4 +1,4 @@
-class ApiError extends Error {
+export class ApiError extends Error {
   statusCode: number;
   constructor(statusCode: number, message: string) {
     super(message);
@@ -15,5 +15,11 @@ export class NotFoundError extends ApiError {
 export class BadRequestError extends ApiError {
   constructor(message = "Bad Request") {
     super(400, message);
+  }
+}
+
+export class InternalError extends ApiError {
+  constructor(message = "Internal Server Error") {
+    super(500, message);
   }
 }
