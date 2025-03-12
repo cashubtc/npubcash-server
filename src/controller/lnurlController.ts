@@ -1,12 +1,15 @@
-import { lnProvider, wallet } from "@/config";
-import { BadRequestError, NotFoundError } from "@/errors";
-import { Transaction, User } from "@/models";
+import { mintComm } from "@/config";
+import { BadRequestError, InternalError, NotFoundError } from "@/errors";
+import { User } from "@/models";
 import { MintQuote } from "@/models/mint";
-import { parseInvoice } from "@/utils/lightning";
 import { createLnurlResponse } from "@/utils/lnurl";
-import { decodeAndValidateZapRequest } from "@/utils/nostr";
+import {
+  createZapReceipt,
+  decodeAndValidateZapRequest,
+  extractZapRequestData,
+  publishZapReceipt,
+} from "@/utils/nostr";
 import { unixToDate } from "@/utils/time";
-import { createHash } from "crypto";
 import { NextFunction, Request, Response } from "express";
 import { Event, nip19 } from "nostr-tools";
 
@@ -35,6 +38,7 @@ export async function lnurlController(
     if (!isValidAmount(parsedAmount)) {
       throw new BadRequestError("Invalid amount");
     }
+    const roundedMintAmount = Math.floor(parsedAmount / 1000);
 
     if (nostr) {
       try {
@@ -43,42 +47,79 @@ export async function lnurlController(
         throw new BadRequestError("Invalid zap request");
       }
     }
-    const { request, quote, expiry } = await wallet.createMintQuote(
+    const { expiry, quote, request } = await mintComm.getMintQuote(
       Math.floor(parsedAmount / 1000),
     );
-    await MintQuote.createNewMintQuoteInDb(
+    const mintQuote = await MintQuote.createNewMintQuoteInDb(
       quote,
       unixToDate(expiry),
       request,
       userdata.mintUrl,
+      roundedMintAmount,
+      userdata.pubkey,
     );
 
-    const { amount: mintAmount } = parseInvoice(request);
-
-    const invoiceRes = await lnProvider.createInvoice(
-      mintAmount / 1000,
-      "Cashu Address",
-      zapRequest
-        ? createHash("sha256").update(JSON.stringify(zapRequest)).digest("hex")
-        : undefined,
-    );
-
-    await Transaction.createTransaction(
-      request,
-      quote,
-      invoiceRes.paymentRequest,
-      invoiceRes.paymentHash,
-      userdata.username,
-      zapRequest,
-      parsedAmount / 1000,
-    );
+    const start = performance.now();
+    const sub = mintComm.pollForMintQuote(quote);
+    sub.on("polling", () => {
+      console.log("Polling for mint quote update: ", quote);
+      const now = performance.now();
+      console.log(`Polling after ${Math.floor((now - start) / 1000)} seconds`);
+    });
+    sub.on("paid", () => {
+      console.log("Mint quote got paid: ", mintQuote);
+      mintQuote.setStateAndUpdateDb("PAID");
+      if (zapRequest) {
+        handleZapRequest(quote, zapRequest, request);
+      }
+    });
+    sub.on("issued", () => {
+      console.log("Mint quote got issued: ", mintQuote);
+      mintQuote.setStateAndUpdateDb("ISSUED");
+      sub.cancel();
+    });
+    sub.on("expired", () => {
+      mintQuote.setStateAndUpdateDb("EXPIRED");
+      sub.cancel();
+    });
     res.json({
-      pr: invoiceRes.paymentRequest,
+      pr: request,
       routes: [],
     });
   } catch (e) {
     next(e);
   }
+}
+
+async function handleZapRequest(
+  mintQuote: string,
+  zapEvent: Event,
+  invoice: string,
+) {
+  const zapRequestData = extractZapRequestData(zapEvent);
+  const zapReceipt = createZapReceipt(
+    Math.floor(Date.now() / 1000),
+    zapRequestData.pTags[0],
+    zapRequestData.eTags[0],
+    zapRequestData.aTags[0],
+    invoice,
+    zapEvent,
+  );
+  const pubs = await publishZapReceipt(zapReceipt);
+  const pubRes = pubs.reduce(
+    (a, c) => {
+      if (c.status === "fulfilled") {
+        a.success++;
+      } else {
+        a.failed++;
+      }
+      return a;
+    },
+    { failed: 0, success: 0 },
+  );
+  console.log(
+    `Finished Zap Publishing for ${mintQuote}. Successes: ${pubRes.success}, failures: ${pubRes.failed}`,
+  );
 }
 
 async function extractUserdataFromUserParam(userParam: string): Promise<{
@@ -111,8 +152,8 @@ async function extractUserdataFromUserParam(userParam: string): Promise<{
 
 function isValidAmount(amount: number) {
   return (
-    amount < Number(process.env.LNURL_MAX_AMOUNT) &&
-    amount > Number(process.env.LNURL_MIN_AMOUNT) &&
+    amount <= Number(process.env.LNURL_MAX_AMOUNT) &&
+    amount >= Number(process.env.LNURL_MIN_AMOUNT) &&
     Number.isInteger(amount)
   );
 }
