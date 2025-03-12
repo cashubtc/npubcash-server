@@ -8,6 +8,8 @@ export class MintQuote {
     public payment_request: string,
     public quote_id: string,
     public expires_at: Date,
+    public amount: number,
+    public pubkey: string,
     public state: "PAID" | "UNPAID" | "ISSUED" | "EXPIRED",
   ) {}
 
@@ -16,10 +18,20 @@ export class MintQuote {
     expires_at: Date,
     payment_request: string,
     mint_url: string,
+    amount: number,
+    pubkey: string,
   ) {
     const res = await queryWrapper<MintQuote>(
-      `INSERT INTO mint_quotes (mint_url, payment_request, quote_id, expires_at, state) VALUES ($1, $2, $3, $4, $5) RETURNING id, created_at`,
-      [mint_url, payment_request, quote_id, expires_at, "UNPAID"],
+      `INSERT INTO mint_quotes (mint_url, payment_request, quote_id, expires_at, amount, pubkey, state) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, created_at`,
+      [
+        mint_url,
+        payment_request,
+        quote_id,
+        expires_at,
+        amount,
+        pubkey,
+        "UNPAID",
+      ],
     );
     if (res.rowCount === 0) {
       throw new Error("Failed to create new mint quote");
@@ -32,6 +44,8 @@ export class MintQuote {
       row.payment_request,
       row.quote_id,
       row.expires_at,
+      row.amount,
+      row.pubkey,
       row.state,
     );
   }
@@ -50,9 +64,26 @@ export class MintQuote {
           q.payment_request,
           q.quote_id,
           q.expires_at,
+          q.amount,
+          q.pubkey,
           q.state,
         ),
     );
+  }
+
+  static async getUserPaidMintAmount(pubkey: string) {
+    const whereClause = `WHERE "user" = $1 AND state = 'PAID'`;
+    const query = `SELECT
+      SUM((amount)::INT) AS total_amount
+      FROM
+      mint_quotes
+      WHERE pubkey = $1 and state = 'PAID';
+    `;
+    const res = await queryWrapper(query, [pubkey]);
+    if (res.rows.length < 1 || !res.rows[0].total_amount) {
+      return 0;
+    }
+    return res.rows[0].total_amount;
   }
 
   async setStateAndUpdateDb(newState: "PAID" | "ISSUED" | "EXPIRED") {
