@@ -10,7 +10,7 @@ export class MintQuote {
     public expires_at: Date,
     public amount: number,
     public pubkey: string,
-    public state: "PAID" | "UNPAID" | "ISSUED" | "EXPIRED",
+    public state: "PAID" | "UNPAID" | "INFLIGHT" | "ISSUED" | "EXPIRED",
   ) {}
 
   static async createNewMintQuoteInDb(
@@ -71,8 +71,7 @@ export class MintQuote {
     );
   }
 
-  static async getUserPaidMintAmount(pubkey: string) {
-    const whereClause = `WHERE "user" = $1 AND state = 'PAID'`;
+  static async getPaidMintAmount(pubkey: string) {
     const query = `SELECT
       SUM((amount)::INT) AS total_amount
       FROM
@@ -86,7 +85,29 @@ export class MintQuote {
     return res.rows[0].total_amount;
   }
 
-  async setStateAndUpdateDb(newState: "PAID" | "ISSUED" | "EXPIRED") {
+  static async getReadyMintQuotes(pubkey: string) {
+    const query = `
+    SELECT * FROM mint_quotes
+    WHERE pubkey = $1 and (state = 'INFLIGHT' or state = 'PAID');
+    `;
+    const res = await queryWrapper<MintQuote>(query, [pubkey]);
+    return res.rows.map(
+      (r) =>
+        new MintQuote(
+          r.id,
+          r.created_at,
+          r.mint_url,
+          r.payment_request,
+          r.quote_id,
+          r.expires_at,
+          r.amount,
+          r.pubkey,
+          r.state,
+        ),
+    );
+  }
+
+  async setStateAndUpdateDb(newState: MintQuote["state"]) {
     const query = `UPDATE mint_quotes SET state = $1 WHERE id = $2`;
     const res = await queryWrapper(query, [newState, this.id]);
     if (res.rowCount === 0) {

@@ -8,9 +8,22 @@ export async function getBalanceHandler(
 ) {
   try {
     const authData = req.authData!;
-    console.log("Getting balance");
-    const balance = await MintQuote.getUserPaidMintAmount(authData.data.pubkey);
+    const balance = await MintQuote.getPaidMintAmount(authData.data.pubkey);
     res.json({ error: false, data: [{ balance, unit: "sat" }] });
+  } catch (e) {
+    next(e);
+  }
+}
+
+export async function getPaidMintQuotes(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const authData = req.authData!;
+    const quotes = await MintQuote.getReadyMintQuotes(authData.data.pubkey);
+    res.json({ error: false, data: { quotes } });
   } catch (e) {
     next(e);
   }
