@@ -6,6 +6,12 @@ export class ApiError extends Error {
   }
 }
 
+export class UnauthorizedError extends ApiError {
+  constructor(message = "Unauthorized!") {
+    super(401, message);
+  }
+}
+
 export class NotFoundError extends ApiError {
   constructor(message = "Not Found") {
     super(404, message);
