@@ -2,7 +2,7 @@ import { queryWrapper } from "@/utils/database";
 
 interface MintQuoteConfig {
   id: number;
-  created_at: number;
+  created_at: Date;
   mint_url: string;
   payment_request: string;
   quote_id: string;
@@ -10,11 +10,12 @@ interface MintQuoteConfig {
   amount: number;
   pubkey: string;
   state: "PAID" | "UNPAID" | "INFLIGHT" | "ISSUED" | "EXPIRED";
+  paid_at?: Date;
 }
 
 export class MintQuote implements MintQuoteConfig {
   id: number;
-  created_at: number;
+  created_at: Date;
   mint_url: string;
   payment_request: string;
   quote_id: string;
@@ -22,6 +23,7 @@ export class MintQuote implements MintQuoteConfig {
   amount: number;
   pubkey: string;
   state: "PAID" | "UNPAID" | "INFLIGHT" | "ISSUED" | "EXPIRED";
+  paid_at?: Date;
   private constructor(config: MintQuoteConfig) {
     this.id = config.id;
     this.created_at = config.created_at;
@@ -32,13 +34,14 @@ export class MintQuote implements MintQuoteConfig {
     this.amount = config.amount;
     this.pubkey = config.pubkey;
     this.state = config.state;
+    this.paid_at = config.paid_at;
   }
 
   static async createNewMintQuoteInDb(
     config: Omit<MintQuoteConfig, "id" | "created_at" | "state">,
   ) {
-    const res = await queryWrapper<MintQuoteConfig>(
-      `INSERT INTO mint_quotes (mint_url, payment_request, quote_id, expires_at, amount, pubkey, state) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, created_at`,
+    const res = await queryWrapper<MintQuote>(
+      `INSERT INTO mint_quotes (mint_url, payment_request, quote_id, expires_at, amount, pubkey, state) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
       [
         config.mint_url,
         config.payment_request,
@@ -64,6 +67,16 @@ export class MintQuote implements MintQuoteConfig {
     this.state = newState;
   }
 
+  async setPaid(paid_at = new Date()) {
+    const query = `UPDATE mint_quotes SET state = 'PAID', paid_at = $1 WHERE id = $2`;
+    const res = await queryWrapper(query, [paid_at, this.id]);
+    if (res.rowCount === 0) {
+      throw new Error("Failed to update state");
+    }
+    this.state = "PAID";
+    this.paid_at = paid_at;
+  }
+
   static async getToBeExpiredMintQuotes() {
     const res = await queryWrapper<MintQuote>(
       `SELECT * FROM mint_quotes WHERE expires_at <= NOW() AND state = "UNPAID"`,
@@ -72,26 +85,21 @@ export class MintQuote implements MintQuoteConfig {
     return res.rows.map((r) => new MintQuote(r));
   }
 
-  static async getPaidMintAmount(pubkey: string) {
-    const query = `SELECT
-      SUM((amount)::INT) AS total_amount
-      FROM
-      mint_quotes
-      WHERE pubkey = $1 and state = 'PAID';
-    `;
-    const res = await queryWrapper(query, [pubkey]);
-    if (res.rows.length < 1 || !res.rows[0].total_amount) {
-      return 0;
+  static async getUserMintHistory(pubkey: string, page: number, since?: Date) {
+    const offset = 50 * (page - 1);
+    const filter = ["pubkey = $1", "state in ('PAID', 'ISSUED', 'INFLIGHT')"];
+    if (since) {
+      filter.push("paid_at > $3");
     }
-    return res.rows[0].total_amount;
-  }
-
-  static async getReadyMintQuotes(pubkey: string) {
     const query = `
     SELECT * FROM mint_quotes
-    WHERE pubkey = $1 and (state = 'INFLIGHT' or state = 'PAID');
-    `;
-    const res = await queryWrapper<MintQuote>(query, [pubkey]);
+    WHERE ${filter.join(" and ")} 
+    ORDER BY created_at DESC
+    LIMIT 50 OFFSET $2;`;
+    const res = await queryWrapper<MintQuote>(
+      query,
+      since ? [pubkey, offset, since] : [pubkey, offset],
+    );
     return res.rows.map((r) => new MintQuote(r));
   }
 

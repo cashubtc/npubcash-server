@@ -1,5 +1,5 @@
 import { mintComm } from "@/config";
-import { BadRequestError, InternalError, NotFoundError } from "@/errors";
+import { BadRequestError, NotFoundError } from "@/errors";
 import { User } from "@/models";
 import { MintQuote } from "@/models/mint";
 import { createLnurlResponse } from "@/utils/lnurl";
@@ -50,14 +50,14 @@ export async function lnurlController(
     const { expiry, quote, request } = await mintComm.getMintQuote(
       Math.floor(parsedAmount / 1000),
     );
-    const mintQuote = await MintQuote.createNewMintQuoteInDb(
-      quote,
-      unixToDate(expiry),
-      request,
-      userdata.mintUrl,
-      roundedMintAmount,
-      userdata.pubkey,
-    );
+    const mintQuote = await MintQuote.createNewMintQuoteInDb({
+      quote_id: quote,
+      expires_at: unixToDate(expiry),
+      payment_request: request,
+      mint_url: userdata.mintUrl,
+      amount: roundedMintAmount,
+      pubkey: userdata.pubkey,
+    });
 
     const start = performance.now();
     const sub = mintComm.pollForMintQuote(quote);
@@ -68,7 +68,7 @@ export async function lnurlController(
     });
     sub.on("paid", () => {
       console.log("Mint quote got paid: ", mintQuote);
-      mintQuote.setStateAndUpdateDb("PAID");
+      mintQuote.setPaid();
       if (zapRequest) {
         handleZapRequest(quote, zapRequest, request);
       }
