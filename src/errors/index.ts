@@ -18,6 +18,12 @@ export class NotFoundError extends ApiError {
   }
 }
 
+export class UsernameTakenError extends ApiError {
+  constructor(message = "Username already taken") {
+    super(409, message);
+  }
+}
+
 export class BadRequestError extends ApiError {
   constructor(message = "Bad Request") {
     super(400, message);
@@ -27,5 +33,15 @@ export class BadRequestError extends ApiError {
 export class InternalError extends ApiError {
   constructor(message = "Internal Server Error") {
     super(500, message);
+  }
+}
+
+export class PaymentRequiredError extends ApiError {
+  amount: number;
+  mintUrl: string;
+  constructor(amount: number, mintUrl: string, message?: string) {
+    super(402, message || "Payment required");
+    this.amount = amount;
+    this.mintUrl = mintUrl;
   }
 }
