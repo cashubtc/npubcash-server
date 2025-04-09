@@ -1,17 +1,10 @@
 import app from "./app";
 import { setupDatabase, setupStore } from "./utils/database";
-import { Analyzer } from "./utils/analytics";
 import ws from "ws";
 import { useWebSocketImplementation } from "nostr-tools/pool";
 
 useWebSocketImplementation(ws);
 setupStore();
-setInterval(
-  () => {
-    Analyzer.getInstance().logAnalytics();
-  },
-  60 * 1 * 1000,
-);
 
 async function startServer() {
   try {

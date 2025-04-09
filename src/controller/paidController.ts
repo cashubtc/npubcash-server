@@ -6,7 +6,6 @@ import {
   extractZapRequestData,
   publishZapReceipt,
 } from "../utils/nostr";
-import { Analyzer } from "../utils/analytics";
 
 export async function paidController(
   req: Request<
@@ -28,8 +27,6 @@ export async function paidController(
   if (eventType === "receive.lightning") {
     const reqHash = transaction.initiationVia.paymentHash;
     let internalTx: Transaction | undefined;
-    const logger = Analyzer.getInstance();
-    logger.logPaymentSettled(reqHash);
     try {
       internalTx = await Transaction.getTransactionByHash(reqHash);
       if (internalTx.zap_request && process.env.ZAP_SECRET_KEY) {
