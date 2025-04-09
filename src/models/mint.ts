@@ -85,22 +85,49 @@ export class MintQuote implements MintQuoteConfig {
     return res.rows.map((r) => new MintQuote(r));
   }
 
-  static async getUserMintHistory(pubkey: string, page: number, since?: Date) {
-    const offset = 50 * (page - 1);
+  //   WITH total_count AS (
+  //     SELECT COUNT(*) AS count
+  //     FROM l_claims_3
+  //     ${whereClause}
+  // )
+  // SELECT l_claims_3.*, total_count.count
+  // FROM l_claims_3, total_count
+  // ${whereClause}
+  // ORDER BY (proof->>'amount')::int DESC
+  // LIMIT 100
+  // OFFSET ${username ? "$3" : "$2"};
+
+  static async getUserMintHistory(
+    pubkey: string,
+    limit = 50,
+    offset = 0,
+    since?: Date,
+  ) {
+    const cappedLimit = Math.min(limit, 50);
     const filter = ["pubkey = $1", "state in ('PAID', 'ISSUED', 'INFLIGHT')"];
     if (since) {
-      filter.push("paid_at > $3");
+      filter.push("paid_at > $4");
     }
     const query = `
-    SELECT * FROM mint_quotes
+    WITH total_count as (
+    SELECT COUNT(*)::int as count
+    FROM mint_quotes
     WHERE ${filter.join(" and ")} 
-    ORDER BY created_at DESC
-    LIMIT 50 OFFSET $2;`;
-    const res = await queryWrapper<MintQuote>(
+    )
+    SELECT mint_quotes.*, total_count.count FROM mint_quotes, total_count
+    WHERE ${filter.join(" and ")} 
+    ORDER BY paid_at DESC
+    LIMIT $2 OFFSET $3;`;
+    const res = await queryWrapper<MintQuote & { count: number }>(
       query,
-      since ? [pubkey, offset, since] : [pubkey, offset],
+      since
+        ? [pubkey, cappedLimit, offset, since]
+        : [pubkey, cappedLimit, offset],
     );
-    return res.rows.map((r) => new MintQuote(r));
+    return {
+      total: res.rows[0].count,
+      mints: res.rows.map((r) => new MintQuote(r)),
+    };
   }
 
   static async bulkUpdateState(state: MintQuote["state"], quotes: MintQuote[]) {
