@@ -51,6 +51,7 @@ export async function lnurlController(
       Math.floor(parsedAmount / 1000),
     );
     const mintQuote = await MintQuote.createNewMintQuoteInDb({
+      unit: "sat",
       quote_id: quote,
       expires_at: unixToDate(expiry),
       payment_request: request,

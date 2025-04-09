@@ -4,6 +4,7 @@ interface MintQuoteConfig {
   id: number;
   created_at: Date;
   mint_url: string;
+  unit: string;
   payment_request: string;
   quote_id: string;
   expires_at: Date;
@@ -17,6 +18,7 @@ export class MintQuote implements MintQuoteConfig {
   id: number;
   created_at: Date;
   mint_url: string;
+  unit: string;
   payment_request: string;
   quote_id: string;
   expires_at: Date;
@@ -28,6 +30,7 @@ export class MintQuote implements MintQuoteConfig {
     this.id = config.id;
     this.created_at = config.created_at;
     this.mint_url = config.mint_url;
+    this.unit = config.unit;
     this.payment_request = config.payment_request;
     this.quote_id = config.quote_id;
     this.expires_at = config.expires_at;
@@ -41,10 +44,11 @@ export class MintQuote implements MintQuoteConfig {
     config: Omit<MintQuoteConfig, "id" | "created_at" | "state">,
   ) {
     const res = await queryWrapper<MintQuote>(
-      `INSERT INTO mint_quotes (mint_url, payment_request, quote_id, expires_at, amount, pubkey, state) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      `INSERT INTO mint_quotes (mint_url, payment_request, unit, quote_id, expires_at, amount, pubkey, state) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
       [
         config.mint_url,
         config.payment_request,
+        config.unit,
         config.quote_id,
         config.expires_at,
         config.amount,
@@ -85,18 +89,6 @@ export class MintQuote implements MintQuoteConfig {
     return res.rows.map((r) => new MintQuote(r));
   }
 
-  //   WITH total_count AS (
-  //     SELECT COUNT(*) AS count
-  //     FROM l_claims_3
-  //     ${whereClause}
-  // )
-  // SELECT l_claims_3.*, total_count.count
-  // FROM l_claims_3, total_count
-  // ${whereClause}
-  // ORDER BY (proof->>'amount')::int DESC
-  // LIMIT 100
-  // OFFSET ${username ? "$3" : "$2"};
-
   static async getUserMintHistory(
     pubkey: string,
     limit = 50,
@@ -109,21 +101,33 @@ export class MintQuote implements MintQuoteConfig {
       filter.push("paid_at > $4");
     }
     const query = `
-    WITH total_count as (
-    SELECT COUNT(*)::int as count
-    FROM mint_quotes
-    WHERE ${filter.join(" and ")} 
+    WITH total_count AS (
+        SELECT COUNT(*)::int AS count
+        FROM mint_quotes
+        WHERE ${filter.join(" and ")}
     )
-    SELECT mint_quotes.*, total_count.count FROM mint_quotes, total_count
-    WHERE ${filter.join(" and ")} 
-    ORDER BY paid_at DESC
-    LIMIT $2 OFFSET $3;`;
+    SELECT t.*, total_count.count
+    FROM total_count
+    LEFT JOIN (
+        SELECT *
+        FROM mint_quotes
+        WHERE ${filter.join(" and ")}
+        ORDER BY paid_at DESC
+        LIMIT $2 OFFSET $3
+    ) t ON true;`;
     const res = await queryWrapper<MintQuote & { count: number }>(
       query,
       since
         ? [pubkey, cappedLimit, offset, since]
         : [pubkey, cappedLimit, offset],
     );
+    console.log(res.rows);
+    if (res.rows[0].id === null) {
+      return {
+        total: res.rows[0].count,
+        mints: [],
+      };
+    }
     return {
       total: res.rows[0].count,
       mints: res.rows.map((r) => new MintQuote(r)),

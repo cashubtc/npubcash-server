@@ -11,6 +11,7 @@ exports.up = (pgm) => {
       notNull: true,
       default: pgm.func("NOW()"),
     },
+    unit: { type: "text", notNull: true },
     mint_url: { type: "text", notNull: true },
     payment_request: { type: "text", notNull: true },
     quote_id: { type: "text", notNull: true },
