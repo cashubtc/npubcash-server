@@ -6,6 +6,7 @@ import { requireHTTPS } from "./middleware/https";
 import path from "path";
 import baseRouter from "./routes";
 import { errorHandler } from "./errors/middleware";
+import { randomUUID } from "crypto";
 
 const app = express();
 
@@ -14,6 +15,10 @@ app.use(compression());
 app.use(cors());
 app.use(requireHTTPS);
 
+app.use((req, _, next) => {
+  req.reqId = randomUUID();
+  next();
+});
 app.use(baseRouter);
 app.use("/", express.static(path.join(__dirname, "../npubcash-website/dist")));
 app.get("*", (_, res: Response) => {

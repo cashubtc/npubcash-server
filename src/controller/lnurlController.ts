@@ -3,6 +3,7 @@ import { BadRequestError, NotFoundError } from "@/errors";
 import { User } from "@/models";
 import { MintQuote } from "@/models/mint";
 import { createLnurlResponse } from "@/utils/lnurl";
+import { getRequestLogger } from "@/utils/logger";
 import {
   createZapReceipt,
   decodeAndValidateZapRequest,
@@ -12,6 +13,7 @@ import {
 import { unixToDate } from "@/utils/time";
 import { NextFunction, Request, Response } from "express";
 import { Event, nip19 } from "nostr-tools";
+import { Logger } from "winston";
 
 export async function lnurlController(
   req: Request<
@@ -24,6 +26,7 @@ export async function lnurlController(
   next: NextFunction,
 ) {
   try {
+    const logger = getRequestLogger(req);
     const { amount, nostr } = req.query;
     const userParam = req.params.user;
     let zapRequest: Event | undefined;
@@ -31,6 +34,7 @@ export async function lnurlController(
     const userdata = await extractUserdataFromUserParam(userParam);
 
     if (!amount) {
+      logger.debug("Returning LNURL Reponse for " + userdata.username);
       const lnurlResponse = createLnurlResponse(userdata.username);
       return res.json(lnurlResponse);
     }
@@ -60,15 +64,12 @@ export async function lnurlController(
       pubkey: userdata.pubkey,
     });
 
-    const start = performance.now();
     const sub = mintComm.pollForMintQuote(quote);
     sub.on("polling", () => {
-      console.log("Polling for mint quote update: ", quote);
-      const now = performance.now();
-      console.log(`Polling after ${Math.floor((now - start) / 1000)} seconds`);
+      logger.debug("Polling for mint quote update: ", quote);
     });
     sub.on("paid", () => {
-      console.log("Mint quote got paid: ", mintQuote);
+      logger.debug("Mint quote got paid", mintQuote);
       mintQuote.setPaid();
       if (zapRequest) {
         handleZapRequest(quote, zapRequest, request);
@@ -92,7 +93,9 @@ async function handleZapRequest(
   mintQuote: string,
   zapEvent: Event,
   invoice: string,
+  logger?: Logger,
 ) {
+  logger?.debug("Handling Zap Request");
   const zapRequestData = extractZapRequestData(zapEvent);
   const zapReceipt = createZapReceipt(
     Math.floor(Date.now() / 1000),
@@ -114,7 +117,7 @@ async function handleZapRequest(
     },
     { failed: 0, success: 0 },
   );
-  console.log(
+  logger?.debug(
     `Finished Zap Publishing for ${mintQuote}. Successes: ${pubRes.success}, failures: ${pubRes.failed}`,
   );
 }

@@ -2,6 +2,7 @@ import app from "./app";
 import { setupDatabase, setupStore } from "./utils/database";
 import ws from "ws";
 import { useWebSocketImplementation } from "nostr-tools/pool";
+import { logger } from "./utils/logger";
 
 useWebSocketImplementation(ws);
 setupStore();
@@ -10,8 +11,8 @@ async function startServer() {
   try {
     await setupDatabase();
   } catch (e) {
-    console.warn("Database Migrations failed!!");
-    console.log(e);
+    logger.error("Database migrations failed! Exiting...");
+    console.error(e);
     process.exit(1);
   }
   // try {
@@ -21,8 +22,13 @@ async function startServer() {
   //   console.log(e);
   //   process.exit(1);
   // }
-  console.log("starting server...");
-  app.listen(process.env.PORT || 8000);
+  logger.debug("Starting npubcash-server...");
+  app.listen(process.env.PORT || 8000, () => {
+    logger.info(
+      "npubcash-server has started and is listening on port " +
+        process.env.PORT || 8000,
+    );
+  });
 }
 
 startServer();

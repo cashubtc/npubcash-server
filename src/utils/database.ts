@@ -1,6 +1,7 @@
 import pg, { QueryConfig, QueryResultRow } from "pg";
 import migrate from "node-pg-migrate";
 import { WithdrawalStore } from "../models/withdrawal";
+import { logger } from "@/utils/logger";
 
 const pool = new pg.Pool({
   connectionString: process.env.PG_CONNECTIONSTRING!,
@@ -17,7 +18,7 @@ export async function setupDatabase() {
     direction: "up",
     migrationsTable: "pgmigrations",
     count: Infinity,
-    log: console.log,
+    logger: logger,
   });
 }
 
