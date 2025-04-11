@@ -73,10 +73,6 @@ export async function lnurlController(
       if (zapRequest) {
         handleZapRequest(quote, zapRequest, request);
       }
-    });
-    sub.on("issued", () => {
-      console.log("Mint quote got issued: ", mintQuote);
-      mintQuote.setStateAndUpdateDb("ISSUED");
       sub.cancel();
     });
     sub.on("expired", () => {
