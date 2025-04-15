@@ -20,9 +20,9 @@ app.use((req, _, next) => {
   next();
 });
 app.use(baseRouter);
-app.use("/", express.static(path.join(__dirname, "../npubcash-website/dist")));
+app.use("/", express.static(path.join(__dirname, "../website")));
 app.get("*", (_, res: Response) => {
-  res.sendFile(path.join(__dirname, "../npubcash-website/dist/index.html"));
+  res.sendFile(path.join(__dirname, "../website/index.html"));
 });
 app.use(errorHandler);
 
