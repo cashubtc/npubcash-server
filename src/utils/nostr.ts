@@ -8,17 +8,9 @@ import {
 import { wrapEvent } from "nostr-tools/nip17";
 import { ZapRequestData } from "../types";
 import { nostrPool } from "../config";
-import { hexToBytes } from "@noble/hashes/utils";
+import { AppConfig } from "../config/index";
 
-const relays = [
-  "wss://relay.current.fyi",
-  "wss://nostr-pub.wellorder.net",
-  "wss://relay.damus.io",
-  "wss://nostr.zebedee.cloud",
-  "wss://nos.lol",
-  "wss://relay.primal.net",
-  "wss://nostr.mom",
-];
+const config = AppConfig.getInstance();
 
 export function getTagValues(e: Event, tag: string, position: number) {
   const tags = e.tags;
@@ -67,6 +59,7 @@ export function createZapReceipt(
   invoice: string,
   zapRequest: Event,
 ) {
+  const sk = config.nostr.zapKeys.secretKey;
   const serialisedZapRequest = JSON.stringify(zapRequest);
   const event: EventTemplate = {
     content: "",
@@ -85,7 +78,7 @@ export function createZapReceipt(
   if (aTag) {
     event.tags.push(["a", aTag]);
   }
-  return finalizeEvent(event, Buffer.from(process.env.ZAP_SECRET_KEY!, "hex"));
+  return finalizeEvent(event, sk);
 }
 
 export function decodeAndValidateZapRequest(
@@ -131,7 +124,11 @@ export async function publishZapReceipt(
   receiptEvent: VerifiedEvent,
   requestRelays?: string[],
 ) {
-  const pubPromises = nostrPool.publish(requestRelays || relays, receiptEvent);
+  const defaultRelays = config.nostr.defaultRelays;
+  const pubPromises = nostrPool.publish(
+    requestRelays || defaultRelays,
+    receiptEvent,
+  );
   const wrappedPromises = pubPromises.map((promise) =>
     Promise.race([promise, createTimeoutPromise(3000)]),
   );
@@ -146,14 +143,13 @@ export async function publishOtp(
   if (!process.env.ZAP_SECRET_KEY) {
     throw new Error("No nostr key set");
   }
-  const bytes = hexToBytes(process.env.ZAP_SECRET_KEY);
   const wrap = wrapEvent(
-    bytes,
+    config.nostr.zapKeys.secretKey,
     { publicKey: recipientPubkey },
     `Your npub.cash OTP: ${otp}`,
   );
   const pubPromises = nostrPool.publish(
-    preferredRelay ? [preferredRelay] : relays,
+    preferredRelay ? [preferredRelay] : config.nostr.defaultRelays,
     wrap,
   );
   return Promise.allSettled(

@@ -2,9 +2,12 @@ import pg, { QueryConfig, QueryResultRow } from "pg";
 import migrate from "node-pg-migrate";
 import { WithdrawalStore } from "../models/withdrawal";
 import { logger } from "@/utils/logger";
+import { AppConfig } from "../config/index";
+
+const config = AppConfig.getInstance();
 
 const pool = new pg.Pool({
-  connectionString: process.env.PG_CONNECTIONSTRING!,
+  connectionString: config.dbConnectionString,
 });
 
 export function setupStore() {
@@ -13,7 +16,7 @@ export function setupStore() {
 
 export async function setupDatabase() {
   await migrate({
-    databaseUrl: process.env.PG_CONNECTIONSTRING!,
+    databaseUrl: config.dbConnectionString,
     dir: "migrations",
     direction: "up",
     migrationsTable: "pgmigrations",
@@ -68,6 +71,6 @@ export function createBulkInsertQuery<T extends QueryResultRow>(
   return pool.query<T>(query, payload.flatValues);
 }
 
-export function createSanitizedValueString(n) {
+export function createSanitizedValueString(n: number) {
   return `(${Array.from({ length: n }, (_, i) => `$${i + 1}`).join(", ")})`;
 }

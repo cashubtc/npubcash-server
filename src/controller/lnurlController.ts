@@ -14,6 +14,9 @@ import { unixToDate } from "@/utils/time";
 import { NextFunction, Request, Response } from "express";
 import { Event, nip19 } from "nostr-tools";
 import { Logger } from "winston";
+import { AppConfig } from "@/config/index";
+
+const config = AppConfig.getInstance();
 
 export async function lnurlController(
   req: Request<
@@ -44,7 +47,7 @@ export async function lnurlController(
     }
     const roundedMintAmount = Math.floor(parsedAmount / 1000);
 
-    if (nostr) {
+    if (nostr && config.nostr.nostrEnabled) {
       try {
         zapRequest = decodeAndValidateZapRequest(nostr, amount);
       } catch (e) {
@@ -71,7 +74,7 @@ export async function lnurlController(
     sub.on("paid", () => {
       logger.debug("Mint quote got paid", mintQuote);
       mintQuote.setPaid();
-      if (zapRequest) {
+      if (zapRequest && config.nostr.nostrEnabled) {
         handleZapRequest(quote, zapRequest, request);
       }
       sub.cancel();
@@ -129,6 +132,7 @@ async function extractUserdataFromUserParam(userParam: string): Promise<{
   mintUrl: string;
 }> {
   if (userParam.startsWith("npub")) {
+    //TODO: Check whether user has a profile first
     const decoded = nip19.decode(userParam as `npub1${string}`);
     return {
       username: userParam,
@@ -152,8 +156,8 @@ async function extractUserdataFromUserParam(userParam: string): Promise<{
 
 function isValidAmount(amount: number) {
   return (
-    amount <= Number(process.env.LNURL_MAX_AMOUNT) &&
-    amount >= Number(process.env.LNURL_MIN_AMOUNT) &&
+    amount <= config.lnurlLimits.max &&
+    amount >= config.lnurlLimits.min &&
     Number.isInteger(amount)
   );
 }

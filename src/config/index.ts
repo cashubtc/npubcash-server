@@ -50,6 +50,9 @@ class NostrConfig {
     return this._nostrEnabled;
   }
   get zapKeys() {
+    if (!this._zapKeys) {
+      throw new Error("No Zap keys are set");
+    }
     return this._zapKeys;
   }
   get pool() {
@@ -57,27 +60,72 @@ class NostrConfig {
   }
 
   get defaultRelays() {
+    if (!this._defaultRelays || !this._defaultRelays.length) {
+      throw new Error("No default relays are set");
+    }
     return this._defaultRelays;
   }
 }
 
 export class AppConfig {
   private jwtSecret: string;
-  private nostr: NostrConfig;
+  private _nostr: NostrConfig;
+  private _lnurlLimits: { min: number; max: number } = {
+    min: 1000,
+    max: 100000000,
+  };
+  private _dbConnectionString: string;
 
-  constructor() {
+  private static instance: AppConfig;
+
+  private constructor() {
+    this._dbConnectionString = getDbConnectionStringFromEnv();
     if (getEnvVar("NOSTR_ENABLED")) {
       const secretKey = getSecretKeyFromEnv();
       const defaultRelays = getRelaysFromEnv();
-      this.nostr = new NostrConfig({
+      this._nostr = new NostrConfig({
         nostrEnabled: true,
         zapKeys: new ZapKeys(secretKey),
         defaultRelays,
       });
     } else {
-      this.nostr = new NostrConfig({ nostrEnabled: false });
+      this._nostr = new NostrConfig({ nostrEnabled: false });
     }
     this.jwtSecret = getJwtSecretFromEnv();
+    if (process.env.LNURL_MIN_AMOUNT) {
+      this._lnurlLimits.min = parseInt(process.env.LNURL_MIN_AMOUNT);
+    }
+    if (process.env.LNURL_MAX_AMOUNT) {
+      this._lnurlLimits.max = parseInt(process.env.LNURL_MAX_AMOUNT);
+    }
+  }
+
+  get lnurlLimits() {
+    return this._lnurlLimits;
+  }
+
+  get dbConnectionString() {
+    return this._dbConnectionString;
+  }
+
+  get nostr() {
+    return this._nostr;
+  }
+
+  static init() {
+    if (AppConfig.instance) {
+      throw new Error("AppConfig already initialised");
+    }
+    AppConfig.instance = new AppConfig();
+  }
+
+  static getInstance(): AppConfig {
+    if (!AppConfig.instance) {
+      throw new Error(
+        "AppConfig is not yet initialised. Please call AppConfig.init() first",
+      );
+    }
+    return AppConfig.instance;
   }
 }
 
@@ -118,4 +166,12 @@ function getJwtSecretFromEnv() {
     throw new Error("Failed to derive JWT entropy from MNEMONIC");
   }
   return Buffer.from(entropy).toString("hex");
+}
+
+function getDbConnectionStringFromEnv(): string {
+  const envVar = getEnvVar("PG_CONNECTIONSTRING");
+  if (!envVar) {
+    throw new Error("Could not find PG_CONNECTIONSTRING in env");
+  }
+  return envVar;
 }

@@ -3,9 +3,11 @@ import { setupDatabase, setupStore } from "./utils/database";
 import ws from "ws";
 import { useWebSocketImplementation } from "nostr-tools/pool";
 import { logger } from "./utils/logger";
+import { AppConfig } from "./config/index";
 
 useWebSocketImplementation(ws);
 setupStore();
+AppConfig.init();
 
 async function startServer() {
   try {
