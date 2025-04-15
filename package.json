@@ -5,7 +5,8 @@
   ],
   "scripts": {
     "build": "ROOT_DIR=$(pwd) yarn workspaces foreach --all run build",
-    "setup": "ROOT_DIR=$(pwd) node dist/env/index.js"
+    "setup": "ROOT_DIR=$(pwd) node dist/env/index.js",
+    "start": "ROOT_DIR=$(pwd) node dist/server/index.cjs"
   },
   "packageManager": "yarn@4.6.0"
 }
