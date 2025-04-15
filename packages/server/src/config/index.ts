@@ -121,9 +121,7 @@ export class AppConfig {
 
   static getInstance(): AppConfig {
     if (!AppConfig.instance) {
-      throw new Error(
-        "AppConfig is not yet initialised. Please call AppConfig.init() first",
-      );
+      AppConfig.init();
     }
     return AppConfig.instance;
   }

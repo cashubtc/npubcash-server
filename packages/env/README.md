@@ -1,0 +1,1 @@
+# npubcash-env

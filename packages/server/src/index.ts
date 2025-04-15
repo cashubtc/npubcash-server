@@ -5,9 +5,9 @@ import { useWebSocketImplementation } from "nostr-tools/pool";
 import { logger } from "./utils/logger";
 import { AppConfig } from "./config/index";
 
+AppConfig.init();
 useWebSocketImplementation(ws);
 setupStore();
-AppConfig.init();
 
 async function startServer() {
   try {
