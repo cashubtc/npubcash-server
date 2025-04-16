@@ -1,5 +1,5 @@
 const envVarKeys = {
-  PG_CONNECTIONSTRING: "",
+  DATABASE_URL: "",
   MNEMONIC: "",
   HOSTNAME: "",
   MINTURL: "",

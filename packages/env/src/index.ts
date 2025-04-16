@@ -1,7 +1,7 @@
 import { existsSync } from "fs";
 import { resolve } from "path";
 import {
-  getConnectionString,
+  getDatabaseUrl,
   getDefaultMint,
   getHostname,
   getLnurlLimits,
@@ -27,9 +27,9 @@ async function init() {
   envVars.set("MNEMONIC", mnemonic);
   console.log("");
 
-  const pgConnectionString = await getConnectionString();
-  if (pgConnectionString) {
-    envVars.set("PG_CONNECTIONSTRING", pgConnectionString);
+  const databaseUrl = await getDatabaseUrl();
+  if (databaseUrl) {
+    envVars.set("DATABASE_URL", databaseUrl);
   }
   console.log("");
 
@@ -39,6 +39,7 @@ async function init() {
 
   const defaultMint = await getDefaultMint();
   envVars.set("DEFAULT_MINT", defaultMint);
+  console.log("");
 
   const lnurlLimits = await getLnurlLimits();
   envVars.set("LNURL_MAX_AMOUNT", lnurlLimits.max);

@@ -109,11 +109,11 @@ export function writeEnvFile(envVars: EnvVars) {
   writeFileSync(envPath, lines.join("\n"));
 }
 
-export async function getConnectionString(): Promise<string | undefined> {
+export async function getDatabaseUrl(): Promise<string | undefined> {
   const { shouldBeSet } = await prompts({
     type: "confirm",
     name: "shouldBeSet",
-    message: "Do you want to set a postgres connection string?",
+    message: "Do you want to set a PostgreSQL connection string / url?",
   });
   if (!shouldBeSet) {
     return;
@@ -121,7 +121,7 @@ export async function getConnectionString(): Promise<string | undefined> {
   const { connectionString } = await prompts({
     type: "text",
     name: "connectionString",
-    message: "Please enter the postgres connection string: ",
+    message: "Please enter the PostgreSQL connection string / url: ",
   });
   return connectionString;
 }
