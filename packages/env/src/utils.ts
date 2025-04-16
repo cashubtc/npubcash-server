@@ -90,6 +90,16 @@ export async function getLnurlLimits(): Promise<{ min: string; max: string }> {
   return { min: String(minAmount), max: String(maxAmount) };
 }
 
+export async function getDefaultMint() {
+  const { defaultMint } = await prompts({
+    type: "text",
+    name: "defaultMint",
+    message:
+      "Please enter the full url of the custom mint that should be used by npubcash-server:",
+  });
+  return defaultMint;
+}
+
 export function writeEnvFile(envVars: EnvVars) {
   const envPath = resolve(process.env.ROOT_DIR!, "./.env");
   const lines: string[] = [];

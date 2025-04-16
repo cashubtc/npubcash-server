@@ -2,6 +2,7 @@ import { existsSync } from "fs";
 import { resolve } from "path";
 import {
   getConnectionString,
+  getDefaultMint,
   getHostname,
   getLnurlLimits,
   getMnemonic,
@@ -35,6 +36,9 @@ async function init() {
   const hostname = await getHostname();
   envVars.set("HOSTNAME", hostname);
   console.log("");
+
+  const defaultMint = await getDefaultMint();
+  envVars.set("DEFAULT_MINT", defaultMint);
 
   const lnurlLimits = await getLnurlLimits();
   envVars.set("LNURL_MAX_AMOUNT", lnurlLimits.max);
