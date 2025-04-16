@@ -1,22 +1,20 @@
 FROM node:22-alpine AS base
 
-FROM base AS deps
+FROM base AS builder
+RUN corepack enable yarn
+
+ARG HOSTNAME
+ENV NPC_SERVER_URL=${HOSTNAME}
 
 RUN apk add --no-cache libc6-compat
 
 WORKDIR /app
 
-COPY package.json package-lock.json* ./
-COPY npubcash-website/package.json npubcash-website/package-lock.json* ./npubcash-website/
+COPY package.json yarn.lock .yarnrc.yml ./
+COPY packages ./packages
 
-RUN npm ci
-
-FROM base AS builder
-WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
-
-RUN npm run build
+RUN yarn install --frozen-lockfile
+RUN yarn build
 
 FROM base AS runner
 WORKDIR /app
@@ -27,8 +25,7 @@ RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 npc
 
 COPY --from=builder --chown=npc:nodejs /app/dist ./dist
-COPY --from=builder --chown=npc:nodejs /app/npubcash-website/dist ./npubcash-website/dist
-COPY --from=builder --chown=npc:nodejs /app/migrations ./migrations
+COPY --from=builder --chown=npc:nodejs /app/packages/server/migrations ./packages/server/migrations/
 
 USER npc
 
@@ -36,5 +33,6 @@ EXPOSE 8000
 
 ENV PORT 8000 
 
+ENV ROOT_DIR /app
 
-CMD node dist/index.cjs
+CMD ["node", "dist/server/index.cjs"]
