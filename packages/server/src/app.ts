@@ -11,7 +11,8 @@ import { randomUUID } from "crypto";
 const app = express();
 
 app.use(bodyparser.json());
-app.use(compression());
+(app as any).use(compression());
+
 app.use(cors());
 app.use(requireHTTPS);
 
