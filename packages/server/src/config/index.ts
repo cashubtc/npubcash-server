@@ -114,7 +114,7 @@ export class AppConfig {
 
   static init() {
     if (AppConfig.instance) {
-      throw new Error("AppConfig already initialised");
+      return;
     }
     AppConfig.instance = new AppConfig();
   }
@@ -140,7 +140,7 @@ function getSecretKeyFromEnv() {
   if (envSecretKey) {
     return Buffer.from(envSecretKey, "hex");
   }
-  const envMnemonic = getEnvVar("MNEMONIC");
+  const envMnemonic = getParsedMnemonicFromEnv();
   if (!envMnemonic) {
     throw new Error("Could not find ZAP_SECRET_KEY or MNEMONIC in env");
   }
@@ -152,7 +152,7 @@ function getJwtSecretFromEnv() {
   if (envJwtSecret) {
     return envJwtSecret;
   }
-  const envMnemonic = getEnvVar("MNEMONIC");
+  const envMnemonic = getParsedMnemonicFromEnv();
   if (!envMnemonic) {
     throw new Error("Could not find JWT_SECRET or MNEMONIC in env");
   }
@@ -172,4 +172,12 @@ function getDbConnectionStringFromEnv(): string {
     throw new Error("Could not find PG_CONNECTIONSTRING in env");
   }
   return envVar;
+}
+
+function getParsedMnemonicFromEnv(): string {
+  const mnemonic = getEnvVar("MNEMONIC");
+  if (!mnemonic) {
+    throw new Error("Could not find MNEMONIC in env.");
+  }
+  return mnemonic.split(",").join(" ");
 }
