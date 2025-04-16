@@ -3,8 +3,13 @@ import migrate from "node-pg-migrate";
 import { WithdrawalStore } from "../models/withdrawal";
 import { logger } from "@/utils/logger";
 import { AppConfig } from "../config/index";
+import { resolve } from "path";
 
 const config = AppConfig.getInstance();
+
+const rootDir = process.env.ROOT_DIR
+  ? resolve(process.env.ROOT_DIR, "./packages/server/migrations")
+  : resolve(process.cwd(), "./migrations");
 
 const pool = new pg.Pool({
   connectionString: config.dbConnectionString,
@@ -17,7 +22,7 @@ export function setupStore() {
 export async function setupDatabase() {
   await migrate({
     databaseUrl: config.dbConnectionString,
-    dir: "migrations",
+    dir: rootDir,
     direction: "up",
     migrationsTable: "pgmigrations",
     count: Infinity,
