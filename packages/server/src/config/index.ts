@@ -167,9 +167,9 @@ function getJwtSecretFromEnv() {
 }
 
 function getDbConnectionStringFromEnv(): string {
-  const envVar = getEnvVar("PG_CONNECTIONSTRING");
+  const envVar = getEnvVar("DATABASE_URL");
   if (!envVar) {
-    throw new Error("Could not find PG_CONNECTIONSTRING in env");
+    throw new Error("Could not find DATABASE_URL in env");
   }
   return envVar;
 }
