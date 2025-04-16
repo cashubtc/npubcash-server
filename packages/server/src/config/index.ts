@@ -8,7 +8,7 @@ import {
 import { NostrConfig, ZapKeys } from "./nostr";
 
 export class AppConfig {
-  private jwtSecret: string;
+  private _jwtSecret: string;
   private _nostr: NostrConfig;
   private _lnurlLimits: { min: number; max: number } = {
     min: 1000,
@@ -50,6 +50,10 @@ export class AppConfig {
 
   get nostr() {
     return this._nostr;
+  }
+
+  get jwtSecret() {
+    return this._jwtSecret;
   }
 
   static init() {

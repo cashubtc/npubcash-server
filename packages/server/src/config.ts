@@ -21,8 +21,3 @@ export const mintComm = new MintCommunicator(process.env.MINTURL!, {
   throttleTimeout: 3500,
   logger: new Logger(),
 });
-
-export let ZAP_PUBKEY: string;
-if (process.env.ZAP_SECRET_KEY) {
-  ZAP_PUBKEY = getPublicKey(Buffer.from(process.env.ZAP_SECRET_KEY, "hex"));
-}

@@ -1,7 +1,9 @@
-import { ZAP_PUBKEY } from "../config";
+import { AppConfig } from "../config/index";
+
+const config = AppConfig.getInstance();
 
 export function createLnurlResponse(username: string) {
-  if (process.env.ZAP_SECRET_KEY) {
+  if (config.nostr.nostrEnabled) {
     return {
       callback: `${process.env.HOSTNAME}/.well-known/lnurlp/${username}`,
       maxSendable: Number(process.env.LNURL_MAX_AMOUNT),
@@ -11,7 +13,7 @@ export function createLnurlResponse(username: string) {
       ]),
       tag: "payRequest",
       allowsNostr: true,
-      nostrPubkey: ZAP_PUBKEY,
+      nostrPubkey: config.nostr.zapKeys.publicKey,
     };
   } else {
     return {

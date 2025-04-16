@@ -2,6 +2,9 @@ import { Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { createHash } from "crypto";
 import { RawAuthToken } from "../types";
+import { AppConfig } from "../config/index";
+
+const config = AppConfig.getInstance();
 
 function generateAuthJwt(
   pubkey: string,
@@ -14,7 +17,7 @@ function generateAuthJwt(
   if (canWithdraw) {
     payload.w = canWithdraw;
   }
-  const token = jwt.sign(payload, process.env.JWT_SECRET!, {
+  const token = jwt.sign(payload, config.jwtSecret, {
     expiresIn: 60 * 30,
   });
   return token;

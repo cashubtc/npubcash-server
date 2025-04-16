@@ -2,6 +2,9 @@ import { nip19, nip98 } from "nostr-tools";
 import jwt from "jsonwebtoken";
 import { AuthData, RawAuthToken, SuccessfullAuthData } from "../types";
 import { createHash } from "crypto";
+import { AppConfig } from "../config/index";
+
+const config = AppConfig.getInstance();
 
 export async function verifyAuth(
   authHeader: string,
@@ -37,10 +40,7 @@ export async function verifyAuth(
     } else if (authHeader.startsWith("Bearer")) {
       const hashedAgent = createHash("sha256").update(userAgent).digest("hex");
       const [_, token] = authHeader.split(" ");
-      const parsedHeader = jwt.verify(
-        token,
-        process.env.JWT_SECRET!,
-      ) as RawAuthToken;
+      const parsedHeader = jwt.verify(token, config.jwtSecret) as RawAuthToken;
       if (
         !parsedHeader.p ||
         !parsedHeader.u ||
