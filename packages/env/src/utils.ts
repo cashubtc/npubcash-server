@@ -87,7 +87,7 @@ export async function getLnurlLimits(): Promise<{ min: string; max: string }> {
       "What should the minimum invoice amount allowed by your npubcash-server be? (in sats)",
     initial: 100000,
   });
-  return { min: String(minAmount), max: String(maxAmount) };
+  return { min: String(minAmount * 1000), max: String(maxAmount * 1000) };
 }
 
 export async function getDefaultMint() {
