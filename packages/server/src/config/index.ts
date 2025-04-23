@@ -1,3 +1,4 @@
+import { config } from "dotenv";
 import {
   getDbConnectionStringFromEnv,
   getEnvVar,
@@ -6,6 +7,8 @@ import {
   getSecretKeyFromEnv,
 } from "./env";
 import { NostrConfig, ZapKeys } from "./nostr";
+import { resolve } from "path";
+import { logger } from "@/utils/logger";
 
 export class AppConfig {
   private _jwtSecret: string;
@@ -31,7 +34,7 @@ export class AppConfig {
     } else {
       this._nostr = new NostrConfig({ nostrEnabled: false });
     }
-    this.jwtSecret = getJwtSecretFromEnv();
+    this._jwtSecret = getJwtSecretFromEnv();
     if (process.env.LNURL_MIN_AMOUNT) {
       this._lnurlLimits.min = parseInt(process.env.LNURL_MIN_AMOUNT);
     }
@@ -57,6 +60,13 @@ export class AppConfig {
   }
 
   static init() {
+    logger.info(
+      `Initialising AppConfig: ${process.env.NODE_ENV === "production" ? "production" : "development"}`,
+    );
+    if (process.env.NODE_ENV !== "production") {
+      loadEnvFile();
+    } else {
+    }
     if (AppConfig.instance) {
       return;
     }
@@ -69,4 +79,11 @@ export class AppConfig {
     }
     return AppConfig.instance;
   }
+}
+
+function loadEnvFile() {
+  const rootDir = process.env.ROOT_DIR ?? process.cwd();
+  const envPath = resolve(rootDir, ".env");
+  logger.debug(`Loading .env file with dotenv. Path: ${envPath}`);
+  config({ path: envPath });
 }
