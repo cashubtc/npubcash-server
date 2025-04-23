@@ -5,6 +5,7 @@
   ],
   "scripts": {
     "build": "ROOT_DIR=$(pwd) yarn workspaces foreach --all run build",
+    "dev": "ROOT_DIR=$(pwd) yarn workspaces foreach --all --exclude @npubcash-env run dev",
     "setup": "ROOT_DIR=$(pwd) node dist/env/index.js",
     "start": "ROOT_DIR=$(pwd) node dist/server/index.cjs"
   },
