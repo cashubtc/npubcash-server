@@ -7,7 +7,7 @@
     "npubcash-website"
   ],
   "scripts": {
-    "dev": "NODE_ENV=development nodemon",
+    "dev": "ROOT_DIR=$(git rev-parse --show-toplevel) NODE_ENV=development nodemon",
     "test": "npx vitest run",
     "build": "node build.js",
     "start": "node dist/index.js",
