@@ -3,20 +3,15 @@
   "type": "module",
   "version": "1.0.0",
   "description": "",
-  "workspaces": [
-    "npubcash-website"
-  ],
   "scripts": {
     "dev": "ROOT_DIR=$(git rev-parse --show-toplevel) NODE_ENV=development nodemon",
     "test": "npx vitest run",
     "build": "node build.js",
-    "start": "node dist/index.js",
-    "build:frontend": "npm run build --workspace=npubcash-website"
+    "start": "node $(git rev-parse --show-toplevel)/dist/server/index.cjs"
   },
-  "main": "index.js",
   "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "author": "Egge",
+  "license": "MIT",
   "dependencies": {
     "@cashu/cashu-ts": "^2.4.1",
     "@scure/bip32": "^1.6.2",
