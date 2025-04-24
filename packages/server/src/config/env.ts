@@ -60,3 +60,11 @@ export function getParsedMnemonicFromEnv(): string {
 export function getEnvVar(key: string) {
   return process.env[key];
 }
+
+export function getApiModeFromEnv(): "BOTH" | "API_ONLY" {
+  const apiOnlyString = getEnvVar("API_MODE");
+  if (apiOnlyString === "BOTH" || apiOnlyString === "API_ONLY") {
+    return apiOnlyString
+  }
+  return "BOTH"
+}

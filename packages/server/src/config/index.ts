@@ -1,5 +1,6 @@
 import { config } from "dotenv";
 import {
+  getApiModeFromEnv,
   getDbConnectionStringFromEnv,
   getEnvVar,
   getJwtSecretFromEnv,
@@ -18,10 +19,12 @@ export class AppConfig {
     max: 100000000,
   };
   private _dbConnectionString: string;
+  private _apiMode: "BOTH" | "API_ONLY";
 
   private static instance: AppConfig;
 
   private constructor() {
+    this._apiMode = getApiModeFromEnv()
     this._dbConnectionString = getDbConnectionStringFromEnv();
     if (getEnvVar("NOSTR_ENABLED")) {
       const secretKey = getSecretKeyFromEnv();
@@ -57,6 +60,10 @@ export class AppConfig {
 
   get jwtSecret() {
     return this._jwtSecret;
+  }
+
+  get apiMode() {
+    return this._apiMode
   }
 
   static init() {
