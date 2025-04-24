@@ -7,8 +7,10 @@ import path from "path";
 import baseRouter from "./routes";
 import { errorHandler } from "./errors/middleware";
 import { randomUUID } from "crypto";
+import { AppConfig } from "./config/index";
 
 const app = express();
+const config = AppConfig.getInstance();
 
 app.use(bodyparser.json());
 (app as any).use(compression());
@@ -21,10 +23,12 @@ app.use((req, _, next) => {
   next();
 });
 app.use(baseRouter);
-app.use("/", express.static(path.join(__dirname, "../website")));
-app.get("*", (_, res: Response) => {
-  res.sendFile(path.join(__dirname, "../website/index.html"));
-});
+if (config.apiMode === "BOTH") {
+  app.use("/", express.static(path.join(__dirname, "../website")));
+  app.get("*", (_, res: Response) => {
+    res.sendFile(path.join(__dirname, "../website/index.html"));
+  });
+}
 app.use(errorHandler);
 
 export default app;
