@@ -12,6 +12,7 @@ interface MintQuoteConfig {
   pubkey: string;
   state: "PAID" | "UNPAID" | "INFLIGHT" | "ISSUED" | "EXPIRED";
   paid_at?: Date;
+  serialized_zap_request?: string;
 }
 
 export class MintQuote implements MintQuoteConfig {
@@ -26,6 +27,7 @@ export class MintQuote implements MintQuoteConfig {
   pubkey: string;
   state: "PAID" | "UNPAID" | "INFLIGHT" | "ISSUED" | "EXPIRED";
   paid_at?: Date;
+  serialized_zap_request?: string;
   private constructor(config: MintQuoteConfig) {
     this.id = config.id;
     this.created_at = config.created_at;
@@ -38,6 +40,7 @@ export class MintQuote implements MintQuoteConfig {
     this.pubkey = config.pubkey;
     this.state = config.state;
     this.paid_at = config.paid_at;
+    this.serialized_zap_request = config.serialized_zap_request;
   }
 
   static async createNewMintQuoteInDb(
@@ -84,6 +87,14 @@ export class MintQuote implements MintQuoteConfig {
   static async getToBeExpiredMintQuotes() {
     const res = await queryWrapper<MintQuote>(
       `SELECT * FROM mint_quotes WHERE expires_at <= NOW() AND state = "UNPAID"`,
+      [],
+    );
+    return res.rows.map((r) => new MintQuote(r));
+  }
+
+  static async getPendingMintQuotes() {
+    const res = await queryWrapper<MintQuote>(
+      `SELECT * FROM mint_quotes WHERE state = 'UNPAID';`,
       [],
     );
     return res.rows.map((r) => new MintQuote(r));

@@ -9,6 +9,7 @@ import { wrapEvent } from "nostr-tools/nip17";
 import { ZapRequestData } from "../types";
 import { nostrPool } from "../config";
 import { AppConfig } from "../config/index";
+import { Logger } from "winston";
 
 const config = AppConfig.getInstance();
 
@@ -154,5 +155,38 @@ export async function publishOtp(
   );
   return Promise.allSettled(
     pubPromises.map((p) => Promise.race([p, createTimeoutPromise(3000)])),
+  );
+}
+
+export async function handleZapRequest(
+  mintQuote: string,
+  zapEvent: Event,
+  invoice: string,
+  logger?: Logger,
+) {
+  logger?.debug("Handling Zap Request");
+  const zapRequestData = extractZapRequestData(zapEvent);
+  const zapReceipt = createZapReceipt(
+    Math.floor(Date.now() / 1000),
+    zapRequestData.pTags[0],
+    zapRequestData.eTags[0],
+    zapRequestData.aTags[0],
+    invoice,
+    zapEvent,
+  );
+  const pubs = await publishZapReceipt(zapReceipt);
+  const pubRes = pubs.reduce(
+    (a, c) => {
+      if (c.status === "fulfilled") {
+        a.success++;
+      } else {
+        a.failed++;
+      }
+      return a;
+    },
+    { failed: 0, success: 0 },
+  );
+  logger?.debug(
+    `Finished Zap Publishing for ${mintQuote}. Successes: ${pubRes.success}, failures: ${pubRes.failed}`,
   );
 }

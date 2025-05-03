@@ -20,6 +20,7 @@ exports.up = (pgm) => {
     pubkey: { type: "text", notNull: true },
     state: { type: "text", notNull: true },
     paid_at: { type: "timestamptz", notNull: false },
+    serialzed_zap_request: { type: "text" },
   });
   pgm.createIndex("mint_quotes", "quote_id");
 };

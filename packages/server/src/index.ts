@@ -4,6 +4,7 @@ import ws from "ws";
 import { useWebSocketImplementation } from "nostr-tools/pool";
 import { logger } from "./utils/logger";
 import { AppConfig } from "./config/index";
+import { setupPoller } from "./poller";
 
 AppConfig.init();
 useWebSocketImplementation(ws);
@@ -17,6 +18,7 @@ async function startServer() {
     console.error(e);
     process.exit(1);
   }
+  await setupPoller();
   // try {
   //   await setupCallbacks();
   // } catch (e) {
