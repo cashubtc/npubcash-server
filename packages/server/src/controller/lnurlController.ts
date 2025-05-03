@@ -4,16 +4,10 @@ import { User } from "@/models";
 import { MintQuote } from "@/models/mint";
 import { createLnurlResponse } from "@/utils/lnurl";
 import { getRequestLogger } from "@/utils/logger";
-import {
-  createZapReceipt,
-  decodeAndValidateZapRequest,
-  extractZapRequestData,
-  publishZapReceipt,
-} from "@/utils/nostr";
+import { decodeAndValidateZapRequest } from "@/utils/nostr";
 import { unixToDate } from "@/utils/time";
 import { NextFunction, Request, Response } from "express";
 import { Event, nip19 } from "nostr-tools";
-import { Logger } from "winston";
 import { AppConfig } from "@/config/index";
 import { handleSubscription } from "@/poller";
 
@@ -79,39 +73,6 @@ export async function lnurlController(
   }
 }
 
-async function handleZapRequest(
-  mintQuote: string,
-  zapEvent: Event,
-  invoice: string,
-  logger?: Logger,
-) {
-  logger?.debug("Handling Zap Request");
-  const zapRequestData = extractZapRequestData(zapEvent);
-  const zapReceipt = createZapReceipt(
-    Math.floor(Date.now() / 1000),
-    zapRequestData.pTags[0],
-    zapRequestData.eTags[0],
-    zapRequestData.aTags[0],
-    invoice,
-    zapEvent,
-  );
-  const pubs = await publishZapReceipt(zapReceipt);
-  const pubRes = pubs.reduce(
-    (a, c) => {
-      if (c.status === "fulfilled") {
-        a.success++;
-      } else {
-        a.failed++;
-      }
-      return a;
-    },
-    { failed: 0, success: 0 },
-  );
-  logger?.debug(
-    `Finished Zap Publishing for ${mintQuote}. Successes: ${pubRes.success}, failures: ${pubRes.failed}`,
-  );
-}
-
 async function extractUserdataFromUserParam(userParam: string): Promise<{
   username: string;
   pubkey: string;
@@ -119,13 +80,13 @@ async function extractUserdataFromUserParam(userParam: string): Promise<{
   mintUrl: string;
 }> {
   if (userParam.startsWith("npub")) {
-    //TODO: Check whether user has a profile first
     const decoded = nip19.decode(userParam as `npub1${string}`);
+    const userObj = await User.getUserByPubkey(decoded.data);
     return {
       username: userParam,
       pubkey: decoded.data,
       isNpub: true,
-      mintUrl: process.env.MINTURL!,
+      mintUrl: userObj?.mint_url || process.env.MINTURL!,
     };
   } else {
     const userObj = await User.getUserByName(userParam.toLowerCase());
