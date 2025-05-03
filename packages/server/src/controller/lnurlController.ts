@@ -15,6 +15,7 @@ import { NextFunction, Request, Response } from "express";
 import { Event, nip19 } from "nostr-tools";
 import { Logger } from "winston";
 import { AppConfig } from "@/config/index";
+import { handleSubscription } from "@/poller";
 
 const config = AppConfig.getInstance();
 
@@ -68,21 +69,7 @@ export async function lnurlController(
     });
 
     const sub = mintComm.pollForMintQuote(quote);
-    sub.on("polling", () => {
-      logger.debug("Polling for mint quote update: ", quote);
-    });
-    sub.on("paid", () => {
-      logger.debug("Mint quote got paid", mintQuote);
-      mintQuote.setPaid();
-      if (zapRequest && config.nostr.nostrEnabled) {
-        handleZapRequest(quote, zapRequest, request);
-      }
-      sub.cancel();
-    });
-    sub.on("expired", () => {
-      mintQuote.setStateAndUpdateDb("EXPIRED");
-      sub.cancel();
-    });
+    handleSubscription(sub, mintQuote, logger);
     res.json({
       pr: request,
       routes: [],

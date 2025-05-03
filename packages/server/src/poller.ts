@@ -28,7 +28,7 @@ export async function setupPoller() {
 export function handleSubscription(
   sub: ReturnType<MintCommunicator["pollForMintQuote"]>,
   quote: MintQuote,
-  logger?: Logger,
+  logger: Logger,
 ) {
   sub.on("polling", () => {
     logger?.debug("Polling for mint quote update: ", quote.quote_id);
