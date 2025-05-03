@@ -1,13 +1,16 @@
 import { mintComm } from "@/config";
-import { BadRequestError, NotFoundError } from "@/errors";
-import { User } from "@/models";
+import { BadRequestError } from "@/errors";
 import { MintQuote } from "@/models/mint";
-import { createLnurlResponse } from "@/utils/lnurl";
+import {
+  createLnurlResponse,
+  extractUserdataFromUserParam,
+  isValidAmount,
+} from "@/utils/lnurl";
 import { getRequestLogger } from "@/utils/logger";
 import { decodeAndValidateZapRequest } from "@/utils/nostr";
 import { unixToDate } from "@/utils/time";
 import { NextFunction, Request, Response } from "express";
-import { Event, nip19 } from "nostr-tools";
+import { Event } from "nostr-tools";
 import { AppConfig } from "@/config/index";
 import { handleSubscription } from "@/poller";
 
@@ -71,41 +74,4 @@ export async function lnurlController(
   } catch (e) {
     next(e);
   }
-}
-
-async function extractUserdataFromUserParam(userParam: string): Promise<{
-  username: string;
-  pubkey: string;
-  isNpub: boolean;
-  mintUrl: string;
-}> {
-  if (userParam.startsWith("npub")) {
-    const decoded = nip19.decode(userParam as `npub1${string}`);
-    const userObj = await User.getUserByPubkey(decoded.data);
-    return {
-      username: userParam,
-      pubkey: decoded.data,
-      isNpub: true,
-      mintUrl: userObj?.mint_url || process.env.MINTURL!,
-    };
-  } else {
-    const userObj = await User.getUserByName(userParam.toLowerCase());
-    if (!userObj) {
-      throw new NotFoundError("User not found.");
-    }
-    return {
-      username: userObj.name,
-      pubkey: userObj.pubkey,
-      isNpub: false,
-      mintUrl: userObj.mint_url,
-    };
-  }
-}
-
-function isValidAmount(amount: number) {
-  return (
-    amount <= config.lnurlLimits.max &&
-    amount >= config.lnurlLimits.min &&
-    Number.isInteger(amount)
-  );
 }
