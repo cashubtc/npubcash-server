@@ -5,6 +5,7 @@ import { BlinkProvider } from "./utils/blink";
 import { MintCommunicator } from "almnd";
 import { PostgresUserRepository } from "./infrastructure/db/postgresUserRepository";
 import { UserService } from "./domain/user/UserService";
+import { CommunicatorService } from "./domain/communicator/CommunicatorService";
 
 class Logger {
   log(m: string) {
@@ -26,3 +27,4 @@ export const mintComm = new MintCommunicator(process.env.MINTURL!, {
 
 export const userRepository = new PostgresUserRepository();
 export const userService = new UserService(userRepository);
+export const communicatorService = new CommunicatorService();
