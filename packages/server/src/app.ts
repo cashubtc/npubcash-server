@@ -8,6 +8,7 @@ import baseRouter from "./routes";
 import { errorHandler } from "./errors/middleware";
 import { randomUUID } from "crypto";
 import { AppConfig } from "./config/index";
+import { logger } from "./utils/logger";
 
 const app = express();
 const config = AppConfig.getInstance();
@@ -20,6 +21,7 @@ app.use(requireHTTPS);
 
 app.use((req, _, next) => {
   req.reqId = randomUUID();
+  logger.info({ message: "Incoming request", reqId: req.reqId, path: req.url });
   next();
 });
 app.use(baseRouter);
