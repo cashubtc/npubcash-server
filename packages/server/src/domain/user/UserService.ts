@@ -1,7 +1,8 @@
 import { nip19 } from "nostr-tools";
 import { UserRepository } from "./userRepository";
-import { NotFoundError } from "@/errors";
+import { BadRequestError, NotFoundError } from "@/errors";
 import { UserWithName } from "./user";
+import { usernameRegex } from "@/constants/regex";
 
 export class UserService {
   constructor(private readonly userRepo: UserRepository) {}
@@ -39,5 +40,21 @@ export class UserService {
 
   async getUserByName(name: string): Promise<UserWithName | null> {
     return this.userRepo.getUserByName(name);
+  }
+
+  validateAndParseUsername(username: string) {
+    const parsedUsername = username.toLowerCase().trim();
+    if (!parsedUsername.match(usernameRegex) || parsedUsername.length < 3) {
+      throw new BadRequestError("Invalid username!");
+    }
+    return parsedUsername;
+  }
+
+  async usernameExists(name: string) {
+    const user = await this.userRepo.getUserByName(name);
+    if (user) {
+      return true;
+    }
+    return false;
   }
 }

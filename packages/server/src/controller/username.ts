@@ -11,8 +11,7 @@ import {
   Token,
   getDecodedToken,
 } from "@cashu/cashu-ts";
-import { usernameRegex } from "@/constants/regex";
-import { User } from "@/models";
+import { userService } from "@/config";
 
 //TODO: Replace with env vars
 const mintUrl = "https://nofees.testnut.cashu.space";
@@ -29,8 +28,8 @@ export async function usernameController(
     if (!username) {
       throw new BadRequestError("Missing parameters: username");
     }
-    const parsedUsername = validateAndParseUsername(username);
-    const isUsernameTaken = await User.checkIfUsernameExists(parsedUsername);
+    const parsedUsername = userService.validateAndParseUsername(username);
+    const isUsernameTaken = await userService.usernameExists(username);
     if (isUsernameTaken) {
       throw new UsernameTakenError();
     }
@@ -50,14 +49,6 @@ export async function usernameController(
   } catch (e) {
     next(e);
   }
-}
-
-function validateAndParseUsername(username: string) {
-  const parsedUsername = username.toLowerCase().trim();
-  if (!parsedUsername.match(usernameRegex) || parsedUsername.length < 3) {
-    throw new BadRequestError("Invalid username!");
-  }
-  return parsedUsername;
 }
 
 async function validateAndReceivePayment(
