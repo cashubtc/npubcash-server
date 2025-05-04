@@ -1,11 +1,7 @@
-import { mintComm } from "@/config";
+import { mintComm, userService } from "@/config";
 import { BadRequestError } from "@/errors";
 import { MintQuote } from "@/models/mint";
-import {
-  createLnurlResponse,
-  extractUserdataFromUserParam,
-  isValidAmount,
-} from "@/utils/lnurl";
+import { createLnurlResponse, isValidAmount } from "@/utils/lnurl";
 import { getRequestLogger } from "@/utils/logger";
 import { decodeAndValidateZapRequest } from "@/utils/nostr";
 import { unixToDate } from "@/utils/time";
@@ -32,7 +28,7 @@ export async function lnurlController(
     const userParam = req.params.user;
     let zapRequest: Event | undefined;
 
-    const userdata = await extractUserdataFromUserParam(userParam);
+    const userdata = await userService.extractUserdataFromUserParam(userParam);
 
     if (!amount) {
       logger.debug("Returning LNURL Reponse for " + userdata.username);

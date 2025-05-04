@@ -3,6 +3,8 @@ import { CashuMint, CashuWallet } from "@cashu/cashu-ts";
 import { LightningHandler } from "./utils/lightning";
 import { BlinkProvider } from "./utils/blink";
 import { MintCommunicator } from "almnd";
+import { PostgresUserRepository } from "./infrastructure/db/postgresUserRepository";
+import { UserService } from "./domain/user/UserService";
 
 class Logger {
   log(m: string) {
@@ -21,3 +23,6 @@ export const mintComm = new MintCommunicator(process.env.MINTURL!, {
   throttleTimeout: 3500,
   logger: new Logger(),
 });
+
+export const userRepository = new PostgresUserRepository();
+export const userService = new UserService(userRepository);

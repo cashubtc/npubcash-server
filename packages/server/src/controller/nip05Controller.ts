@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { User } from "../models";
+import { userRepository } from "@/config";
 
 export async function nip05Controller(
   req: Request<unknown, unknown, unknown, { name: string }>,
@@ -10,8 +10,8 @@ export async function nip05Controller(
     return res.json({ names: {}, relays: {} });
   }
   try {
-    const user = await User.getUserByName(name);
-    if (!user) {
+    const user = await userRepository.getUserByName(name);
+    if (!user || !user.name) {
       return res.json({ names: {}, relays: {} });
     }
     return res.json({ names: { [user.name]: user.pubkey }, relays: {} });
