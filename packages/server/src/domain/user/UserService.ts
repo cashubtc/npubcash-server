@@ -1,6 +1,7 @@
 import { nip19 } from "nostr-tools";
 import { UserRepository } from "./userRepository";
 import { NotFoundError } from "@/errors";
+import { UserWithName } from "./user";
 
 export class UserService {
   constructor(private readonly userRepo: UserRepository) {}
@@ -34,5 +35,9 @@ export class UserService {
         mintUrl: userObj.mintUrl,
       };
     }
+  }
+
+  async getUserByName(name: string): Promise<UserWithName | null> {
+    return this.userRepo.getUserByName(name);
   }
 }

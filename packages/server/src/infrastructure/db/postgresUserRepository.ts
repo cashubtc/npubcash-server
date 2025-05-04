@@ -1,4 +1,4 @@
-import { User } from "@/domain/user/user";
+import { User, UserWithName } from "@/domain/user/user";
 import { UserRepository } from "@/domain/user/userRepository";
 import { queryWrapper } from "@/utils/database";
 
@@ -13,15 +13,15 @@ export class PostgresUserRepository implements UserRepository {
     }
     return res.rows[0];
   }
-  async getUserByName(name: string): Promise<User | null> {
-    const res = await queryWrapper<User>(
+  async getUserByName(name: string): Promise<UserWithName | null> {
+    const res = await queryWrapper<User & { name: string }>(
       `SELECT * from l_users WHERE name = $1;`,
       [name],
     );
     if (res.rowCount === 0) {
       return null;
     }
-    return res.rows[0];
+    return new UserWithName(res.rows[0]);
   }
   async createUser(pubkey: string, name: string): Promise<void> {
     const res = await queryWrapper<User>(

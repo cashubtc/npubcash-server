@@ -15,3 +15,12 @@ export class User {
     this.name = config.name;
   }
 }
+
+export class UserWithName extends User {
+  name: string;
+
+  constructor(config: UserCofig & { name: string }) {
+    super(config);
+    this.name = config.name;
+  }
+}
