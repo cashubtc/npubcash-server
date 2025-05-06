@@ -12,6 +12,7 @@ export const comm = new MintCommunicator(process.env.MINTURL!, {
   backoffFunction: (r) => Math.min(5000 * Math.pow(2, r), 600000),
   throttleCapacity: 10,
   throttleTimeout: 3500,
+  logger: { log: logger.debug },
 });
 
 export async function setupPoller() {
@@ -31,10 +32,10 @@ export function handleSubscription(
   logger: Logger,
 ) {
   sub.on("polling", () => {
-    logger?.debug("Polling for mint quote update: ", quote.quote_id);
+    logger?.debug(`Polling for mint quote update: ${quote.quote_id}`);
   });
   sub.on("paid", () => {
-    logger?.debug("Mint quote got paid", quote.quote_id);
+    logger?.debug(`Mint quote got paid: ${quote.quote_id}`);
     quote.setPaid();
     if (quote.serialized_zap_request && config.nostr.nostrEnabled) {
       try {
