@@ -4,14 +4,15 @@ import {
   getDbConnectionStringFromEnv,
   getEnvVar,
   getJwtSecretFromEnv,
+  getLogLevelFromEnv,
   getRelaysFromEnv,
   getSecretKeyFromEnv,
 } from "./env";
 import { NostrConfig, ZapKeys } from "./nostr";
 import { resolve } from "path";
-import { logger } from "@/utils/logger";
 
 export class AppConfig {
+  private _logLevel: "info" | "debug";
   private _jwtSecret: string;
   private _nostr: NostrConfig;
   private _lnurlLimits: { min: number; max: number } = {
@@ -24,7 +25,8 @@ export class AppConfig {
   private static instance: AppConfig;
 
   private constructor() {
-    this._apiMode = getApiModeFromEnv()
+    this._logLevel = getLogLevelFromEnv();
+    this._apiMode = getApiModeFromEnv();
     this._dbConnectionString = getDbConnectionStringFromEnv();
     if (getEnvVar("NOSTR_ENABLED")) {
       const secretKey = getSecretKeyFromEnv();
@@ -46,6 +48,10 @@ export class AppConfig {
     }
   }
 
+  get logLevel() {
+    return this._logLevel;
+  }
+
   get lnurlLimits() {
     return this._lnurlLimits;
   }
@@ -63,13 +69,10 @@ export class AppConfig {
   }
 
   get apiMode() {
-    return this._apiMode
+    return this._apiMode;
   }
 
   static init() {
-    logger.info(
-      `Initialising AppConfig: ${process.env.NODE_ENV === "production" ? "production" : "development"}`,
-    );
     if (process.env.NODE_ENV !== "production") {
       loadEnvFile();
     } else {
@@ -88,9 +91,8 @@ export class AppConfig {
   }
 }
 
-function loadEnvFile() {
+export function loadEnvFile() {
   const rootDir = process.env.ROOT_DIR ?? process.cwd();
   const envPath = resolve(rootDir, ".env");
-  logger.debug(`Loading .env file with dotenv. Path: ${envPath}`);
   config({ path: envPath });
 }

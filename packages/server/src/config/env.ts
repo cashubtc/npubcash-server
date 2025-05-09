@@ -64,7 +64,15 @@ export function getEnvVar(key: string) {
 export function getApiModeFromEnv(): "BOTH" | "API_ONLY" {
   const apiOnlyString = getEnvVar("API_MODE");
   if (apiOnlyString === "BOTH" || apiOnlyString === "API_ONLY") {
-    return apiOnlyString
+    return apiOnlyString;
   }
-  return "BOTH"
+  return "BOTH";
+}
+
+export function getLogLevelFromEnv(): "debug" | "info" {
+  const logLevel = getEnvVar("LOG_LEVEL");
+  if (logLevel === "debug") {
+    return logLevel;
+  }
+  return "info";
 }
