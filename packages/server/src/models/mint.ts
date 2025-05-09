@@ -47,7 +47,7 @@ export class MintQuote implements MintQuoteConfig {
     config: Omit<MintQuoteConfig, "id" | "created_at" | "state">,
   ) {
     const res = await queryWrapper<MintQuote>(
-      `INSERT INTO mint_quotes (mint_url, payment_request, unit, quote_id, expires_at, amount, pubkey, state) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+      `INSERT INTO mint_quotes (mint_url, payment_request, unit, quote_id, expires_at, amount, pubkey, state, serialized_zap_request) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
       [
         config.mint_url,
         config.payment_request,
@@ -57,6 +57,7 @@ export class MintQuote implements MintQuoteConfig {
         config.amount,
         config.pubkey,
         "UNPAID",
+        config.serialized_zap_request,
       ],
     );
     if (res.rowCount === 0) {
