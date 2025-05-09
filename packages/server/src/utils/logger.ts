@@ -11,5 +11,3 @@ export const logger = winston.createLogger({
 export function getRequestLogger(req: Request) {
   return logger.child({ reqId: req.reqId });
 }
-
-logger.info(`Log Level: ${process.env.LOG_LEVEL || "info"}`);

@@ -6,10 +6,17 @@ import ws from "ws";
 import { useWebSocketImplementation } from "nostr-tools/pool";
 import { logger } from "./utils/logger";
 import { communicatorService } from "./config";
-import { loadEnvFile } from "./config/index";
+import { AppConfig, loadEnvFile } from "./config/index";
 
+const config = AppConfig.getInstance();
 useWebSocketImplementation(ws);
 setupStore();
+logger.info("+++ Loaded App Config +++");
+logger.info(`Log Level: ${config.logLevel}`);
+logger.info(`Nostr enabled: ${config.nostr.nostrEnabled}`);
+logger.info(
+  `LNURL Limits: Min: ${config.lnurlLimits.min} - Max: ${config.lnurlLimits.max}`,
+);
 
 async function startServer() {
   logger.debug("Starting npubcash-server...");
