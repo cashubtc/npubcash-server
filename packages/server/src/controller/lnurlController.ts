@@ -59,6 +59,7 @@ export async function lnurlController(
       mint_url: userdata.mintUrl,
       amount: roundedMintAmount,
       pubkey: userdata.pubkey,
+      serialized_zap_request: nostr,
     });
 
     communicatorService.createQuoteSubscription(mintQuote, logger);
