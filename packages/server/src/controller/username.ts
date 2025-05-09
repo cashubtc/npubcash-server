@@ -44,7 +44,7 @@ export async function usernameController(
       mintUrl,
     );
     console.log(receivedProofs);
-    User.upsertUsernameByPubkey(authData.data.pubkey, parsedUsername);
+    await userService.setUsername(authData.data.pubkey, parsedUsername);
     res.status(201).json({ error: false });
   } catch (e) {
     next(e);

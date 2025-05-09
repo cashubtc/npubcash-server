@@ -57,4 +57,8 @@ export class UserService {
     }
     return false;
   }
+
+  async setUsername(pubkey: string, name: string) {
+    return this.userRepo.upsertUsername(pubkey, name);
+  }
 }
