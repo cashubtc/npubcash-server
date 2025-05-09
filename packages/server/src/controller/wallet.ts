@@ -1,4 +1,5 @@
 import { MintQuote } from "@/models/mint";
+import { dateToUnix } from "@/utils/time";
 import { NextFunction, Request, Response } from "express";
 
 export async function getMintQuotes(
@@ -24,10 +25,12 @@ export async function getMintQuotes(
       selectedSince,
     );
     const payload = lastQuotes.mints.map((q) => ({
-      created_at: Math.floor(q.created_at.getTime() / 1000),
-      paid_at: Math.floor(q.paid_at!.getTime() / 1000),
+      created_at: dateToUnix(q.created_at),
+      paid_at: dateToUnix(q.paid_at!),
+      expires_at: dateToUnix(q.expires_at),
       mint_url: q.mint_url,
       quote_id: q.quote_id,
+      request: q.payment_request,
       amount: q.amount,
       state: q.state,
     }));
