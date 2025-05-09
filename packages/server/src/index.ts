@@ -1,9 +1,12 @@
+loadEnvFile();
+
 import app from "./app";
 import { setupDatabase, setupStore } from "./utils/database";
 import ws from "ws";
 import { useWebSocketImplementation } from "nostr-tools/pool";
 import { logger } from "./utils/logger";
 import { communicatorService } from "./config";
+import { loadEnvFile } from "./config/index";
 
 useWebSocketImplementation(ws);
 setupStore();

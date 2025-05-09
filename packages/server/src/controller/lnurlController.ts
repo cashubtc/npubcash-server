@@ -1,4 +1,4 @@
-import { mintComm, userService } from "@/config";
+import { communicatorService, userService } from "@/config";
 import { BadRequestError } from "@/errors";
 import { MintQuote } from "@/models/mint";
 import { createLnurlResponse, isValidAmount } from "@/utils/lnurl";
@@ -8,7 +8,6 @@ import { unixToDate } from "@/utils/time";
 import { NextFunction, Request, Response } from "express";
 import { Event } from "nostr-tools";
 import { AppConfig } from "@/config/index";
-import { handleSubscription } from "@/poller";
 
 const config = AppConfig.getInstance();
 
@@ -48,9 +47,10 @@ export async function lnurlController(
         throw new BadRequestError("Invalid zap request");
       }
     }
-    const { expiry, quote, request } = await mintComm.getMintQuote(
-      Math.floor(parsedAmount / 1000),
-    );
+    const { expiry, quote, request } =
+      await communicatorService.createMintQuote(
+        Math.floor(parsedAmount / 1000),
+      );
     const mintQuote = await MintQuote.createNewMintQuoteInDb({
       unit: "sat",
       quote_id: quote,
@@ -61,8 +61,8 @@ export async function lnurlController(
       pubkey: userdata.pubkey,
     });
 
-    const sub = mintComm.pollForMintQuote(quote);
-    handleSubscription(sub, mintQuote, logger);
+    communicatorService.createQuoteSubscription(mintQuote, logger);
+
     res.json({
       pr: request,
       routes: [],

@@ -1,8 +1,9 @@
 import { Request } from "express";
 import winston from "winston";
+import { AppConfig } from "../config/index";
 
 export const logger = winston.createLogger({
-  level: process.env.LOG_LEVEL === "DEBUG" ? "debug" : "info",
+  level: AppConfig.getInstance().logLevel,
   format: winston.format.json(),
   transports: [new winston.transports.Console()],
 });
@@ -10,3 +11,5 @@ export const logger = winston.createLogger({
 export function getRequestLogger(req: Request) {
   return logger.child({ reqId: req.reqId });
 }
+
+logger.info(`Log Level: ${process.env.LOG_LEVEL || "info"}`);

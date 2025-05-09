@@ -2,6 +2,7 @@ import { AppConfig } from "@/config/index";
 import { MintQuote } from "@/models/mint";
 import { logger } from "@/utils/logger";
 import { handleZapRequest } from "@/utils/nostr";
+import { MintQuoteResponse } from "@cashu/cashu-ts";
 import { MintCommunicator } from "almnd";
 import { Logger } from "winston";
 
@@ -17,8 +18,13 @@ export class CommunicatorService {
     }),
   ) {}
 
+  async createMintQuote(amount: number) {
+    return this.communicator.getMintQuote(amount);
+  }
+
   createQuoteSubscription(quote: MintQuote, logger: Logger) {
-    const sub = this.communicator.pollForMintQuote(quote.quote_id);
+    const expiry = Math.floor(quote.expires_at.getTime() / 1000);
+    const sub = this.communicator.pollForMintQuote(quote.quote_id, expiry);
     sub.on("polling", () => {
       logger?.debug(
         `Polling for mint quote update: ${quote.quote_id}`,
@@ -26,7 +32,7 @@ export class CommunicatorService {
       );
     });
     sub.on("paid", () => {
-      logger?.debug("Mint quote got paid", quote.quote_id);
+      logger?.debug(`Mint quote got paid: ${quote.quote_id}`, quote);
       quote.setPaid();
       if (quote.serialized_zap_request && config.nostr.nostrEnabled) {
         try {
@@ -41,6 +47,7 @@ export class CommunicatorService {
       sub.cancel();
     });
     sub.on("expired", () => {
+      logger?.debug(`Mint quote expired: ${quote.quote_id}`);
       quote.setStateAndUpdateDb("EXPIRED");
       sub.cancel();
     });
