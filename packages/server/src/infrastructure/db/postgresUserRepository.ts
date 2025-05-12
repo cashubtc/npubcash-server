@@ -64,10 +64,10 @@ DO UPDATE SET name = $2;`;
     pubkey: string,
   ): Promise<void> {
     const query = `
-INSERT INTRO l_users (pubkey, lock_quote)
+INSERT INTO l_users (lock_quote, pubkey) 
 VALUES ($1, $2)
 ON CONFLICT (pubkey)
-DO UPDATE SET lock_quote = $2;`;
+DO UPDATE SET lock_quote = $1;`;
     const queryRes = await queryWrapper(query, [shouldLockQuote, pubkey]);
     if (queryRes.rowCount === 0) {
       throw new Error("Did not update lock_quote");
