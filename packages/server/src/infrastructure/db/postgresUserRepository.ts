@@ -59,6 +59,21 @@ DO UPDATE SET name = $2;`;
     }
   }
 
+  async upsertLockQuote(
+    shouldLockQuote: boolean,
+    pubkey: string,
+  ): Promise<void> {
+    const query = `
+INSERT INTRO l_users (pubkey, lock_quote)
+VALUES ($1, $2)
+ON CONFLICT (pubkey)
+DO UPDATE SET lock_quote = $2;`;
+    const queryRes = await queryWrapper(query, [shouldLockQuote, pubkey]);
+    if (queryRes.rowCount === 0) {
+      throw new Error("Did not update lock_quote");
+    }
+  }
+
   private castRowToUser(row: UserTableRow): User | UserWithName {
     if (row.name) {
       return new UserWithName({

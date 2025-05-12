@@ -47,9 +47,10 @@ export async function lnurlController(
         throw new BadRequestError("Invalid zap request");
       }
     }
-    const { expiry, quote, request } =
+    const { expiry, quote, request, locked } =
       await communicatorService.createMintQuote(
         Math.floor(parsedAmount / 1000),
+        userdata,
       );
     const mintQuote = await MintQuote.createNewMintQuoteInDb({
       unit: "sat",
@@ -60,6 +61,7 @@ export async function lnurlController(
       amount: roundedMintAmount,
       pubkey: userdata.pubkey,
       serialized_zap_request: nostr,
+      locked,
     });
 
     communicatorService.createQuoteSubscription(mintQuote, logger);

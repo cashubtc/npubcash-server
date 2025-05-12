@@ -16,7 +16,7 @@
     "@cashu/cashu-ts": "^2.4.1",
     "@scure/bip32": "^1.6.2",
     "@scure/bip39": "^1.5.4",
-    "almnd": "0.2.1",
+    "almnd": "0.3.1",
     "compression": "^1.8.0",
     "cors": "^2.8.5",
     "express": "^4.21.2",

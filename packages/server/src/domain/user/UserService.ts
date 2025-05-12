@@ -12,6 +12,7 @@ export class UserService {
     pubkey: string;
     isNpub: boolean;
     mintUrl: string;
+    lock_quote: boolean;
   }> {
     if (userParam.startsWith("npub")) {
       const decoded = nip19.decode(userParam as `npub1${string}`);
@@ -21,6 +22,7 @@ export class UserService {
         pubkey: decoded.data,
         isNpub: true,
         mintUrl: userObj?.mintUrl || process.env.MINTURL!,
+        lock_quote: userObj?.lock_quote || false,
       };
     } else {
       const userObj = await this.userRepo.getUserByName(
@@ -34,6 +36,7 @@ export class UserService {
         pubkey: userObj.pubkey,
         isNpub: false,
         mintUrl: userObj.mintUrl,
+        lock_quote: userObj.lock_quote,
       };
     }
   }
@@ -60,5 +63,9 @@ export class UserService {
 
   async setUsername(pubkey: string, name: string) {
     return this.userRepo.upsertUsername(pubkey, name);
+  }
+
+  async setShouldLockQuote(pubkey: string, shouldLockQuote: boolean) {
+    return this.userRepo.upsertLockQuote(shouldLockQuote, pubkey);
   }
 }

@@ -2,17 +2,20 @@ export interface UserCofig {
   pubkey: string;
   name?: string;
   mintUrl: string;
+  lock_quote: boolean;
 }
 
 export class User {
   pubkey: string;
   name?: string;
   mintUrl: string;
+  lock_quote: boolean;
 
   constructor(config: UserCofig) {
     this.pubkey = config.pubkey;
     this.mintUrl = config.mintUrl;
     this.name = config.name;
+    this.lock_quote = config.lock_quote;
   }
 }
 

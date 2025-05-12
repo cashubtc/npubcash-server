@@ -33,6 +33,7 @@ export async function getMintQuotes(
       request: q.payment_request,
       amount: q.amount,
       state: q.state,
+      locked: q.locked,
     }));
     res.json({
       error: false,

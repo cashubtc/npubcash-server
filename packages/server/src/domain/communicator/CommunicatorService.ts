@@ -2,7 +2,6 @@ import { AppConfig } from "@/config/index";
 import { MintQuote } from "@/models/mint";
 import { logger } from "@/utils/logger";
 import { handleZapRequest } from "@/utils/nostr";
-import { MintQuoteResponse } from "@cashu/cashu-ts";
 import { MintCommunicator } from "almnd";
 import { Logger } from "winston";
 
@@ -18,8 +17,20 @@ export class CommunicatorService {
     }),
   ) {}
 
-  async createMintQuote(amount: number) {
-    return this.communicator.getMintQuote(amount);
+  async createMintQuote(
+    amount: number,
+    userData: { pubkey: string; lock_quote: boolean },
+  ) {
+    if (userData.lock_quote) {
+      const res = await this.communicator.getLockedMintQuote(
+        amount,
+        userData.pubkey,
+      );
+      return { locked: true, ...res };
+    } else {
+      const res = await this.communicator.getMintQuote(amount);
+      return { locked: false, ...res };
+    }
   }
 
   createQuoteSubscription(quote: MintQuote, logger: Logger) {

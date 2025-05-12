@@ -13,6 +13,7 @@ interface MintQuoteConfig {
   state: "PAID" | "UNPAID" | "INFLIGHT" | "ISSUED" | "EXPIRED";
   paid_at?: Date;
   serialized_zap_request?: string;
+  locked: boolean;
 }
 
 export class MintQuote implements MintQuoteConfig {
@@ -28,6 +29,7 @@ export class MintQuote implements MintQuoteConfig {
   state: "PAID" | "UNPAID" | "INFLIGHT" | "ISSUED" | "EXPIRED";
   paid_at?: Date;
   serialized_zap_request?: string;
+  locked: boolean;
   private constructor(config: MintQuoteConfig) {
     this.id = config.id;
     this.created_at = config.created_at;
@@ -41,13 +43,14 @@ export class MintQuote implements MintQuoteConfig {
     this.state = config.state;
     this.paid_at = config.paid_at;
     this.serialized_zap_request = config.serialized_zap_request;
+    this.locked = config.locked;
   }
 
   static async createNewMintQuoteInDb(
     config: Omit<MintQuoteConfig, "id" | "created_at" | "state">,
   ) {
     const res = await queryWrapper<MintQuote>(
-      `INSERT INTO mint_quotes (mint_url, payment_request, unit, quote_id, expires_at, amount, pubkey, state, serialized_zap_request) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+      `INSERT INTO mint_quotes (mint_url, payment_request, unit, quote_id, expires_at, amount, pubkey, state, serialized_zap_request, locked) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
       [
         config.mint_url,
         config.payment_request,
@@ -58,6 +61,7 @@ export class MintQuote implements MintQuoteConfig {
         config.pubkey,
         "UNPAID",
         config.serialized_zap_request,
+        config.locked,
       ],
     );
     if (res.rowCount === 0) {
