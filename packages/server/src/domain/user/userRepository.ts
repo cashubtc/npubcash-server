@@ -6,4 +6,5 @@ export interface UserRepository {
   createUser(pubkey: string, name: string, mintUrl?: string): Promise<void>;
   upsertUsername(pubkey: string, name: string): Promise<void>;
   upsertLockQuote(shouldLockQuote: boolean, pubkey: string): Promise<void>;
+  saveUser(user: User): Promise<void>;
 }

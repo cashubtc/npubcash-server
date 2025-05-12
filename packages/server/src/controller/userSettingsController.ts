@@ -8,12 +8,19 @@ export async function updateUserSettingLock(
   next: NextFunction,
 ) {
   try {
-    const isAuth = req.authData!;
+    const {
+      data: { pubkey },
+    } = req.authData!;
     const { lock_quotes } = req.body;
-    if (!lock_quotes) {
+    let user = await userService.getUserByPubkey(pubkey);
+    if (!user) {
+      user = userService.createNewUser(pubkey);
+    }
+    if (typeof lock_quotes !== "boolean") {
       throw new BadRequestError("Missing parameters");
     }
-    await userService.setShouldLockQuote(isAuth.data.pubkey, lock_quotes);
+    user.setQuoteLocking(lock_quotes);
+    await userService.saveUser(user);
     res.json({ error: false });
   } catch (e) {
     next(e);

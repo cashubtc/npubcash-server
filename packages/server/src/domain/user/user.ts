@@ -17,6 +17,10 @@ export class User {
     this.name = config.name;
     this.lock_quote = config.lock_quote;
   }
+
+  setQuoteLocking(shouldLock: boolean) {
+    this.lock_quote = shouldLock;
+  }
 }
 
 export class UserWithName extends User {

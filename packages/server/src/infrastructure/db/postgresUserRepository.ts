@@ -74,6 +74,27 @@ DO UPDATE SET lock_quote = $1;`;
     }
   }
 
+  async saveUser(user: User): Promise<void> {
+    const query = `
+INSERT INTO l_users (pubkey, name, mint_url, lock_quote
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (pubkey)
+DO UPDATE SET
+name = $2,
+mint_url = $3,
+lock_quote = $4;
+`;
+    const queryRes = await queryWrapper(query, [
+      user.pubkey,
+      user.name,
+      user.mintUrl,
+      user.lock_quote,
+    ]);
+    if (queryRes.rowCount === 0) {
+      throw new Error("Did not update user");
+    }
+  }
+
   private castRowToUser(row: UserTableRow): User | UserWithName {
     if (row.name) {
       return new UserWithName({
