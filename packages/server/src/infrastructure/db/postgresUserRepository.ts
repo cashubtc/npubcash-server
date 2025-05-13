@@ -8,6 +8,7 @@ type UserTableRow = {
   pubkey: string;
   name: string | null;
   mint_url: string;
+  lock_quote: boolean;
 };
 
 export class PostgresUserRepository implements UserRepository {
@@ -76,7 +77,7 @@ DO UPDATE SET lock_quote = $1;`;
 
   async saveUser(user: User): Promise<void> {
     const query = `
-INSERT INTO l_users (pubkey, name, mint_url, lock_quote
+INSERT INTO l_users (pubkey, name, mint_url, lock_quote)
 VALUES ($1, $2, $3, $4)
 ON CONFLICT (pubkey)
 DO UPDATE SET
@@ -101,11 +102,13 @@ lock_quote = $4;
         pubkey: row.pubkey,
         name: row.name,
         mintUrl: row.mint_url,
+        lock_quote: row.lock_quote,
       });
     }
     return new User({
       pubkey: row.pubkey,
       mintUrl: row.mint_url,
+      lock_quote: row.lock_quote,
     });
   }
 }
