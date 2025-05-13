@@ -1,5 +1,8 @@
 import { usernameController } from "@/controller/username";
-import { updateUserSettingLock } from "@/controller/userSettingsController";
+import {
+  updateUserMintSetting,
+  updateUserSettingLock,
+} from "@/controller/userSettingsController";
 import { isAuthMiddleware } from "@/middleware/auth";
 import { Router } from "express";
 
@@ -15,6 +18,12 @@ userRouter.patch(
   "/lock",
   isAuthMiddleware("/api/v2/user/lock", "PATCH"),
   updateUserSettingLock,
+);
+
+userRouter.patch(
+  "/mint",
+  isAuthMiddleware("/api/v2/user/mint", "PATCH"),
+  updateUserMintSetting,
 );
 
 export default userRouter;

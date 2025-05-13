@@ -21,6 +21,10 @@ export class User {
   setQuoteLocking(shouldLock: boolean) {
     this.lock_quote = shouldLock;
   }
+
+  setPreferredMint(mintUrl: string) {
+    this.mintUrl = mintUrl;
+  }
 }
 
 export class UserWithName extends User {

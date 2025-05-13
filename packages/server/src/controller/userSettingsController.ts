@@ -26,3 +26,24 @@ export async function updateUserSettingLock(
     next(e);
   }
 }
+
+export async function updateUserMintSetting(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const authData = req.authData!;
+    //TODO: Validate mint url
+    const { mint_url } = req.body;
+    let user = await userService.getUserByPubkey(authData.data.pubkey);
+    if (!user) {
+      user = userService.createNewUser(authData.data.pubkey);
+    }
+    user.setPreferredMint(mint_url);
+    await userService.saveUser(user);
+    res.json({ error: false });
+  } catch (e) {
+    next(e);
+  }
+}
