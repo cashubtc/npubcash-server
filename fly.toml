@@ -1,0 +1,20 @@
+app = "npubx-cash"
+primary_region = "ams"
+
+[env]
+HOSTNAME = "https://npubx.cash"
+LNURL_MAX_AMOUNT = "100000000"
+LNURL_MIN_AMOUNT = "1000"
+MINTURL = "https://mint.minibits.cash/Bitcoin"
+LOG_LEVEL = "debug"
+
+[http_service]
+auto_start_machines = true
+auto_stop_machines = "off"
+force_https = true
+internal_port = 8_000
+min_machines_running = 0
+processes = ["app"]
+
+[[vm]]
+size = "shared-cpu-1x"
