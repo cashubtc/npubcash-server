@@ -19,7 +19,7 @@ export async function updateUserSettingLock(
     if (typeof lock_quotes !== "boolean") {
       throw new BadRequestError("Missing parameters");
     }
-    await mintService.checkMintUrl(user.mintUrl, user.lock_quote);
+    await mintService.checkMintUrl(user.mintUrl, lock_quotes);
     user.setQuoteLocking(lock_quotes);
     await userService.saveUser(user);
     res.json({ error: false });
