@@ -2,6 +2,7 @@ import { AppConfig } from "@/config/index";
 import { MintQuote } from "@/models/mint";
 import { logger } from "@/utils/logger";
 import { handleZapRequest } from "@/utils/nostr";
+import { Token } from "@cashu/cashu-ts";
 import { MintCommunicator } from "almnd";
 import { Logger } from "winston";
 
@@ -16,6 +17,11 @@ export class CommunicatorService {
       throttleTimeout: 3500,
     }),
   ) {}
+
+  async redeemToken(token: Token, logger?: Logger) {
+    logger?.info(`Receiving proofs on mint ${token.mint}`);
+    return this.communicator.receive(token);
+  }
 
   async createMintQuote(
     amount: number,

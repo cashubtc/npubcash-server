@@ -1524,7 +1524,7 @@ __metadata:
     "@types/ws": "npm:^8.5.13"
     "@vitest/coverage-v8": "npm:^1.6.0"
     "@vitest/ui": "npm:^1.6.0"
-    almnd: "npm:0.3.1"
+    almnd: "npm:0.4.0"
     compression: "npm:^1.8.0"
     cors: "npm:^2.8.5"
     dotenv: "npm:^16.3.1"
@@ -2606,12 +2606,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"almnd@npm:0.3.1":
-  version: 0.3.1
-  resolution: "almnd@npm:0.3.1"
+"almnd@npm:0.4.0":
+  version: 0.4.0
+  resolution: "almnd@npm:0.4.0"
   dependencies:
     "@cashu/cashu-ts": "npm:^2.5.2"
-  checksum: 10c0/210b7e79a82379fd78d52caca9a6d9922c36d349f6e64ac16857b8a9a57024afec3ee274a4e8b75b8b5ebc88de1fc7cbb5776dd6fc85d1770730392fefdff2aa
+  checksum: 10c0/25e9327e845beeaa87f99f3ba4ec3cc6872a5b706420d98ab4fe8c292f11edc03ae5ef250478742ffe40f9b57f42309e7b700494f1c9780809f050dde6b47ede
   languageName: node
   linkType: hard
 
