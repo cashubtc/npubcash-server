@@ -1,5 +1,6 @@
 import { usernameController } from "@/controller/username";
 import {
+  getUserSettings,
   updateUserMintSetting,
   updateUserSettingLock,
 } from "@/controller/userSettingsController";
@@ -7,6 +8,12 @@ import { isAuthMiddleware } from "@/middleware/auth";
 import { Router } from "express";
 
 const userRouter = Router();
+
+userRouter.get(
+  "/info",
+  isAuthMiddleware("/api/v2/user/info", "GET"),
+  getUserSettings,
+);
 
 userRouter.post(
   "/username",

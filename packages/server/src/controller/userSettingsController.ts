@@ -2,6 +2,25 @@ import { mintService, userService } from "@/config";
 import { BadRequestError } from "@/errors";
 import { NextFunction, Request, Response } from "express";
 
+export async function getUserSettings(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const {
+      data: { pubkey },
+    } = req.authData!;
+    let user = await userService.getUserByPubkey(pubkey);
+    if (!user) {
+      user = userService.createNewUser(pubkey);
+    }
+    res.json({ error: false, data: { user } });
+  } catch (e) {
+    next(e);
+  }
+}
+
 export async function updateUserSettingLock(
   req: Request<unknown, unknown, { lock_quotes: boolean }>,
   res: Response,
