@@ -49,10 +49,10 @@ export class PostgresUserRepository implements UserRepository {
 
   async upsertUsername(pubkey: string, name: string): Promise<void> {
     const query = `
-INSERT INTO l_users (pubkey, name)
-VALUES ($1, $2)
+INSERT INTO l_users (pubkey, mint_url, name)
+VALUES ($1, $2, $3)
 ON CONFLICT (pubkey)
-DO UPDATE SET name = $2;`;
+DO UPDATE SET name = $3;`;
     const params = [pubkey, process.env.MINTURL, name];
     const queryRes = await queryWrapper(query, params);
     if (queryRes.rowCount === 0) {
