@@ -7,6 +7,8 @@ import { UserService } from "./domain/user/UserService";
 import { CommunicatorService } from "./domain/communicator/CommunicatorService";
 import { ProofService } from "./domain/proof/proofService";
 import { PostgresProofRepository } from "./infrastructure/db/postgresProofRepository";
+import { PostgresMintRepository } from "./infrastructure/db/postgresMintRepository";
+import { MintService } from "./domain/mint/MintService";
 
 export const wallet = new CashuWallet(new CashuMint(process.env.MINTURL!));
 export const lnProvider = new LightningHandler(new BlinkProvider());
@@ -16,3 +18,4 @@ export const userRepository = new PostgresUserRepository();
 export const userService = new UserService(userRepository);
 export const communicatorService = new CommunicatorService();
 export const proofService = new ProofService(new PostgresProofRepository());
+export const mintService = new MintService(new PostgresMintRepository());

@@ -1,4 +1,4 @@
-import { userService } from "@/config";
+import { mintService, userService } from "@/config";
 import { BadRequestError } from "@/errors";
 import { NextFunction, Request, Response } from "express";
 
@@ -19,6 +19,7 @@ export async function updateUserSettingLock(
     if (typeof lock_quotes !== "boolean") {
       throw new BadRequestError("Missing parameters");
     }
+    await mintService.checkMintUrl(user.mintUrl, user.lock_quote);
     user.setQuoteLocking(lock_quotes);
     await userService.saveUser(user);
     res.json({ error: false });
@@ -37,6 +38,7 @@ export async function updateUserMintSetting(
     //TODO: Validate mint url
     const { mint_url } = req.body;
     let user = await userService.getUserByPubkey(authData.data.pubkey);
+    await mintService.checkMintUrl(mint_url, user ? user.lock_quote : false);
     if (!user) {
       user = userService.createNewUser(authData.data.pubkey);
     }
