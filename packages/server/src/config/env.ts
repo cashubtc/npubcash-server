@@ -76,3 +76,18 @@ export function getLogLevelFromEnv(): "debug" | "info" {
   }
   return "info";
 }
+
+export function getUsernameConfigFromEnv():
+  | { enabled: false }
+  | { enabled: true; mintUrl: string; amount: number } {
+  const usernameMint = getEnvVar("USERNAME_MINT");
+  const usernameCost = getEnvVar("USERNAME_COST");
+  if (!usernameMint || !usernameCost) {
+    return { enabled: false };
+  }
+  return {
+    enabled: true,
+    mintUrl: usernameMint,
+    amount: parseInt(usernameCost),
+  };
+}

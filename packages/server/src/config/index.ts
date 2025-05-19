@@ -7,6 +7,7 @@ import {
   getLogLevelFromEnv,
   getRelaysFromEnv,
   getSecretKeyFromEnv,
+  getUsernameConfigFromEnv,
 } from "./env";
 import { NostrConfig, ZapKeys } from "./nostr";
 import { resolve } from "path";
@@ -21,6 +22,9 @@ export class AppConfig {
   };
   private _dbConnectionString: string;
   private _apiMode: "BOTH" | "API_ONLY";
+  private _usernameConfig:
+    | { enabled: false }
+    | { enabled: true; mintUrl: string; amount: number };
 
   private static instance: AppConfig;
 
@@ -28,6 +32,7 @@ export class AppConfig {
     this._logLevel = getLogLevelFromEnv();
     this._apiMode = getApiModeFromEnv();
     this._dbConnectionString = getDbConnectionStringFromEnv();
+    this._usernameConfig = getUsernameConfigFromEnv();
     if (getEnvVar("NOSTR_ENABLED")) {
       const secretKey = getSecretKeyFromEnv();
       const defaultRelays = getRelaysFromEnv();
@@ -70,6 +75,10 @@ export class AppConfig {
 
   get apiMode() {
     return this._apiMode;
+  }
+
+  get usernameConfig() {
+    return this._usernameConfig;
   }
 
   static init() {
