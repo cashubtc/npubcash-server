@@ -4,18 +4,11 @@ import {
   UsernameTakenError,
 } from "@/errors";
 import { NextFunction, Request, Response } from "express";
-import {
-  CashuMint,
-  CashuWallet,
-  Proof,
-  Token,
-  getDecodedToken,
-} from "@cashu/cashu-ts";
-import { userService } from "@/config";
+import { Token, getDecodedToken } from "@cashu/cashu-ts";
+import { communicatorService, proofService, userService } from "@/config";
+import { AppConfig } from "../config/index";
 
-//TODO: Replace with env vars
-const mintUrl = "https://nofees.testnut.cashu.space";
-const amount = 21;
+const config = AppConfig.getInstance();
 
 export async function usernameController(
   req: Request<unknown, unknown, { username: string }>,
@@ -23,6 +16,13 @@ export async function usernameController(
   next: NextFunction,
 ) {
   try {
+    if (!config.usernameConfig.enabled) {
+      throw new BadRequestError(
+        "Usernames can not be purchased on this instance",
+      );
+    }
+    const { amount, mintUrl } = config.usernameConfig;
+
     const authData = req.authData!;
     const { username } = req.body;
     if (!username) {
@@ -38,12 +38,9 @@ export async function usernameController(
     if (!xCashu) {
       throw new PaymentRequiredError(amount, mintUrl);
     }
-    const receivedProofs = await validateAndReceivePayment(
-      xCashu,
-      amount,
-      mintUrl,
-    );
-    console.log(receivedProofs);
+    const decodedToken = await validatePayment(xCashu, amount, mintUrl);
+    const newProofs = await communicatorService.redeemToken(decodedToken);
+    await proofService.saveProofs(newProofs);
     await userService.setUsername(authData.data.pubkey, parsedUsername);
     res.status(201).json({ error: false });
   } catch (e) {
@@ -51,16 +48,16 @@ export async function usernameController(
   }
 }
 
-async function validateAndReceivePayment(
+async function validatePayment(
   tokenString: string,
   requiredAmount: number,
   requiredMint: string,
   tipsAllowed = true,
-): Promise<Proof[]> {
+): Promise<Token> {
   function throwPaymentError(reason: string): never {
     throw new PaymentRequiredError(
-      amount,
-      mintUrl,
+      requiredAmount,
+      requiredMint,
       "Invalid payment: " + reason,
     );
   }
@@ -83,12 +80,5 @@ async function validateAndReceivePayment(
       return throwPaymentError("wrong amount");
     }
   }
-  try {
-    const testWallet = new CashuWallet(new CashuMint(mintUrl));
-    const proofs = await testWallet.receive(decodedToken);
-    //TODO: Do something with new proofs
-    return proofs;
-  } catch (e) {
-    throwPaymentError("invalid token / already spent");
-  }
+  return decodedToken;
 }

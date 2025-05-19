@@ -1,17 +1,19 @@
 import { Request, Response, NextFunction } from "express";
 import { ApiError, PaymentRequiredError } from ".";
 import { encodeCBOR } from "@/utils/cbor";
+import { getRequestLogger } from "@/utils/logger";
 
 export function errorHandler(
   err: any,
-  _: Request,
+  req: Request,
   res: Response,
   next: NextFunction,
 ) {
   if (res.headersSent) {
     return next(err);
   }
-  console.error("Error:", err);
+  const logger = getRequestLogger(req);
+  logger.error(err);
 
   if (err instanceof PaymentRequiredError) {
     const paymentRequest = generatePaymentRequiredPayload(
