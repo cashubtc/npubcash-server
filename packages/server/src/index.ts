@@ -17,6 +17,11 @@ logger.info(`Nostr enabled: ${config.nostr.nostrEnabled}`);
 logger.info(
   `LNURL Limits: Min: ${config.lnurlLimits.min} - Max: ${config.lnurlLimits.max}`,
 );
+logger.info(`Username enabled: ${config.usernameConfig.enabled}`);
+config.usernameConfig.enabled &&
+  logger.info(
+    `Username config - mint: ${config.usernameConfig.mintUrl}, amount: ${config.usernameConfig.amount}`,
+  );
 
 async function startServer() {
   logger.debug("Starting npubcash-server...");
