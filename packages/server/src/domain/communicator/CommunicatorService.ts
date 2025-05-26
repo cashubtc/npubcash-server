@@ -2,6 +2,7 @@ import { AppConfig } from "@/config/index";
 import { MintQuote } from "@/models/mint";
 import { logger } from "@/utils/logger";
 import { handleZapRequest } from "@/utils/nostr";
+import { normalizeUrl } from "@/utils/utils";
 import { Token } from "@cashu/cashu-ts";
 import { MintCommunicator } from "almnd";
 import { Logger } from "winston";
@@ -9,39 +10,36 @@ import { Logger } from "winston";
 const config = AppConfig.getInstance();
 
 export class CommunicatorService {
-  constructor(
-    private readonly communicator = new MintCommunicator(process.env.MINTURL!, {
-      initialPollingTimeout: { mint: 10000, melt: 10000, proof: 10000 },
-      backoffFunction: (r) => Math.min(5000 * Math.pow(2, r), 600000),
-      throttleCapacity: 10,
-      throttleTimeout: 3500,
-    }),
-  ) {}
+  private communicators: { [mintUrl: string]: MintCommunicator } = {};
 
   async redeemToken(token: Token, logger?: Logger) {
     logger?.info(`Receiving proofs on mint ${token.mint}`);
-    return this.communicator.receive(token);
+    return this.getCommunicator(token.mint).receive(token);
   }
 
   async createMintQuote(
     amount: number,
     userData: { pubkey: string; lock_quote: boolean },
+    mintUrl: string,
   ) {
     if (userData.lock_quote) {
-      const res = await this.communicator.getLockedMintQuote(
+      const res = await this.getCommunicator(mintUrl).getLockedMintQuote(
         amount,
         userData.pubkey,
       );
       return { locked: true, ...res };
     } else {
-      const res = await this.communicator.getMintQuote(amount);
+      const res = await this.getCommunicator(mintUrl).getMintQuote(amount);
       return { locked: false, ...res };
     }
   }
 
   createQuoteSubscription(quote: MintQuote, logger: Logger) {
     const expiry = Math.floor(quote.expires_at.getTime() / 1000);
-    const sub = this.communicator.pollForMintQuote(quote.quote_id, expiry);
+    const sub = this.getCommunicator(quote.mint_url).pollForMintQuote(
+      quote.quote_id,
+      expiry,
+    );
     sub.on("polling", () => {
       logger?.debug(
         `Polling for mint quote update: ${quote.quote_id}`,
@@ -78,5 +76,20 @@ export class CommunicatorService {
     pendingSubs.forEach((quote) => {
       this.createQuoteSubscription(quote, logger);
     });
+  }
+
+  getCommunicator(mintUrl: string) {
+    const parsedUrl = normalizeUrl(mintUrl);
+    if (this.communicators[parsedUrl]) {
+      return this.communicators[parsedUrl];
+    }
+    const comm = new MintCommunicator(parsedUrl, {
+      initialPollingTimeout: { mint: 10000, melt: 10000, proof: 10000 },
+      backoffFunction: (r) => Math.min(5000 * Math.pow(2, r), 600000),
+      throttleCapacity: 10,
+      throttleTimeout: 3500,
+    });
+    this.communicators[parsedUrl] = comm;
+    return comm;
   }
 }

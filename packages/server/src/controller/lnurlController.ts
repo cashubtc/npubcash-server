@@ -51,6 +51,7 @@ export async function lnurlController(
       await communicatorService.createMintQuote(
         Math.floor(parsedAmount / 1000),
         userdata,
+        userdata.mintUrl,
       );
     const mintQuote = await MintQuote.createNewMintQuoteInDb({
       unit: "sat",
