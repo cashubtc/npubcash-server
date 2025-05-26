@@ -1,5 +1,6 @@
 import { mintService, userService } from "@/config";
 import { BadRequestError } from "@/errors";
+import { normalizeUrl } from "@/utils/utils";
 import { NextFunction, Request, Response } from "express";
 
 export async function getUserSettings(
@@ -54,10 +55,10 @@ export async function updateUserMintSetting(
 ) {
   try {
     const authData = req.authData!;
-    //TODO: Validate mint url
     const { mint_url } = req.body;
+    const parsedUrl = normalizeUrl(mint_url);
     let user = await userService.getUserByPubkey(authData.data.pubkey);
-    await mintService.checkMintUrl(mint_url, user ? user.lock_quote : false);
+    await mintService.checkMintUrl(parsedUrl, user ? user.lock_quote : false);
     if (!user) {
       user = userService.createNewUser(authData.data.pubkey);
     }
