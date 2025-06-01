@@ -42,7 +42,7 @@ export async function updateUserSettingLock(
     await mintService.checkMintUrl(user.mintUrl, lock_quotes);
     user.setQuoteLocking(lock_quotes);
     await userService.saveUser(user);
-    res.json({ error: false });
+    res.json({ error: false, data: { user } });
   } catch (e) {
     next(e);
   }
@@ -64,7 +64,7 @@ export async function updateUserMintSetting(
     }
     user.setPreferredMint(mint_url);
     await userService.saveUser(user);
-    res.json({ error: false });
+    res.json({ error: false, data: { user } });
   } catch (e) {
     next(e);
   }
