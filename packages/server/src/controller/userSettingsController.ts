@@ -56,6 +56,9 @@ export async function updateUserMintSetting(
   try {
     const authData = req.authData!;
     const { mint_url } = req.body;
+    if (!mint_url) {
+      throw new BadRequestError("Missing parameters!");
+    }
     const parsedUrl = normalizeUrl(mint_url);
     let user = await userService.getUserByPubkey(authData.data.pubkey);
     await mintService.checkMintUrl(parsedUrl, user ? user.lock_quote : false);
