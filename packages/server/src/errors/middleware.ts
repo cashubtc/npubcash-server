@@ -21,6 +21,7 @@ export function errorHandler(
       err.mintUrl,
     );
     res.setHeader("X-Cashu", paymentRequest);
+    res.setHeader("Access-Control-Expose-Headers", "X-Cashu");
     return res
       .status(err.statusCode)
       .json({ error: true, message: err.message });

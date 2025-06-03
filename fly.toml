@@ -7,6 +7,8 @@ LNURL_MAX_AMOUNT = "100000000"
 LNURL_MIN_AMOUNT = "1000"
 MINTURL = "https://mint.minibits.cash/Bitcoin"
 LOG_LEVEL = "debug"
+USERNAME_MINT = "https://mint.minibits.cash/Bitcoin"
+USERNAME_COST = "5000"
 
 [http_service]
 auto_start_machines = true
