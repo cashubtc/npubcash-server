@@ -41,8 +41,12 @@ export async function usernameController(
     const decodedToken = await validatePayment(xCashu, amount, mintUrl);
     const newProofs = await communicatorService.redeemToken(decodedToken);
     await proofService.saveProofs(newProofs);
-    await userService.setUsername(authData.data.pubkey, parsedUsername);
-    res.status(201).json({ error: false });
+    const user = await userService.setUsername(
+      authData.data.pubkey,
+      parsedUsername,
+    );
+
+    res.status(201).json({ error: false, data: { user } });
   } catch (e) {
     next(e);
   }

@@ -47,17 +47,19 @@ export class PostgresUserRepository implements UserRepository {
     }
   }
 
-  async upsertUsername(pubkey: string, name: string): Promise<void> {
+  async upsertUsername(pubkey: string, name: string): Promise<User> {
     const query = `
 INSERT INTO l_users (pubkey, mint_url, name)
 VALUES ($1, $2, $3)
 ON CONFLICT (pubkey)
-DO UPDATE SET name = $3;`;
+DO UPDATE SET name = $3
+RETURNING *;`;
     const params = [pubkey, process.env.MINTURL, name];
-    const queryRes = await queryWrapper(query, params);
+    const queryRes = await queryWrapper<UserTableRow>(query, params);
     if (queryRes.rowCount === 0) {
       throw new Error("Did not update username");
     }
+    return this.castRowToUser(queryRes.rows[0]);
   }
 
   async upsertLockQuote(
