@@ -55,13 +55,13 @@ export async function lnurlController(
       );
     const mintQuote = await MintQuote.createNewMintQuoteInDb({
       unit: "sat",
-      quote_id: quote,
-      expires_at: unixToDate(expiry),
-      payment_request: request,
-      mint_url: userdata.mintUrl,
+      quoteId: quote,
+      expiresAt: unixToDate(expiry),
+      paymentRequest: request,
+      mintUrl: userdata.mintUrl,
       amount: roundedMintAmount,
       pubkey: userdata.pubkey,
-      serialized_zap_request: nostr,
+      serializedZapRequest: nostr,
       locked,
     });
 

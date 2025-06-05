@@ -35,34 +35,34 @@ export class CommunicatorService {
   }
 
   createQuoteSubscription(quote: MintQuote, logger: Logger) {
-    const expiry = Math.floor(quote.expires_at.getTime() / 1000);
-    const sub = this.getCommunicator(quote.mint_url).pollForMintQuote(
-      quote.quote_id,
+    const expiry = Math.floor(quote.expiresAt.getTime() / 1000);
+    const sub = this.getCommunicator(quote.mintUrl).pollForMintQuote(
+      quote.quoteId,
       expiry,
     );
     sub.on("polling", () => {
       logger?.debug(
-        `Polling for mint quote update: ${quote.quote_id}`,
-        quote.quote_id,
+        `Polling for mint quote update: ${quote.quoteId}`,
+        quote.quoteId,
       );
     });
     sub.on("paid", () => {
-      logger?.debug(`Mint quote got paid: ${quote.quote_id}`, quote);
+      logger?.debug(`Mint quote got paid: ${quote.quoteId}`, quote);
       quote.setPaid();
-      if (quote.serialized_zap_request && config.nostr.nostrEnabled) {
+      if (quote.serializedZapRequest && config.nostr.nostrEnabled) {
         try {
-          const zapRequest = JSON.parse(quote.serialized_zap_request);
-          handleZapRequest(quote.quote_id, zapRequest, quote.payment_request);
+          const zapRequest = JSON.parse(quote.serializedZapRequest);
+          handleZapRequest(quote.quoteId, zapRequest, quote.paymentRequest);
         } catch (e) {
           logger?.error(
-            `Failed to handle zap request for quote: ${quote.quote_id}`,
+            `Failed to handle zap request for quote: ${quote.quoteId}`,
           );
         }
       }
       sub.cancel();
     });
     sub.on("expired", () => {
-      logger?.debug(`Mint quote expired: ${quote.quote_id}`);
+      logger?.debug(`Mint quote expired: ${quote.quoteId}`);
       quote.setStateAndUpdateDb("EXPIRED");
       sub.cancel();
     });

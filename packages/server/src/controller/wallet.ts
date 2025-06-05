@@ -25,12 +25,12 @@ export async function getMintQuotes(
       selectedSince,
     );
     const payload = lastQuotes.mints.map((q) => ({
-      created_at: dateToUnix(q.created_at),
-      paid_at: dateToUnix(q.paid_at!),
-      expires_at: dateToUnix(q.expires_at),
-      mint_url: q.mint_url,
-      quote_id: q.quote_id,
-      request: q.payment_request,
+      createdAt: dateToUnix(q.createdAt),
+      paidAt: dateToUnix(q.paidAt!),
+      expiresAt: dateToUnix(q.expiresAt),
+      mintUrl: q.mintUrl,
+      quoteId: q.quoteId,
+      request: q.paymentRequest,
       amount: q.amount,
       state: q.state,
       locked: q.locked,
