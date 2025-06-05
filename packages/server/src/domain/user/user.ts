@@ -2,24 +2,25 @@ export interface UserCofig {
   pubkey: string;
   name?: string;
   mintUrl: string;
-  lock_quote: boolean;
+  lockQuote: boolean;
 }
 
 export class User {
   pubkey: string;
   name?: string;
   mintUrl: string;
-  lock_quote: boolean;
+  //TODO: Make sure casing is consistent
+  lockQuote: boolean;
 
   constructor(config: UserCofig) {
     this.pubkey = config.pubkey;
     this.mintUrl = config.mintUrl;
     this.name = config.name;
-    this.lock_quote = config.lock_quote;
+    this.lockQuote = config.lockQuote;
   }
 
   setQuoteLocking(shouldLock: boolean) {
-    this.lock_quote = shouldLock;
+    this.lockQuote = shouldLock;
   }
 
   setPreferredMint(mintUrl: string) {

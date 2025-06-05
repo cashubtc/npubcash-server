@@ -23,7 +23,7 @@ export async function getUserSettings(
 }
 
 export async function updateUserSettingLock(
-  req: Request<unknown, unknown, { lock_quotes: boolean }>,
+  req: Request<unknown, unknown, { lockQuotes: boolean }>,
   res: Response,
   next: NextFunction,
 ) {
@@ -31,16 +31,17 @@ export async function updateUserSettingLock(
     const {
       data: { pubkey },
     } = req.authData!;
-    const { lock_quotes } = req.body;
+    const { lockQuotes } = req.body;
     let user = await userService.getUserByPubkey(pubkey);
     if (!user) {
       user = userService.createNewUser(pubkey);
     }
-    if (typeof lock_quotes !== "boolean") {
+    if (typeof lockQuotes !== "boolean") {
       throw new BadRequestError("Missing parameters");
     }
-    await mintService.checkMintUrl(user.mintUrl, lock_quotes);
-    user.setQuoteLocking(lock_quotes);
+    //TODO: Reword function
+    await mintService.checkMintUrl(user.mintUrl, lockQuotes);
+    user.setQuoteLocking(lockQuotes);
     await userService.saveUser(user);
     res.json({ error: false, data: { user } });
   } catch (e) {
@@ -61,7 +62,7 @@ export async function updateUserMintSetting(
     }
     const parsedUrl = normalizeUrl(mint_url);
     let user = await userService.getUserByPubkey(authData.data.pubkey);
-    await mintService.checkMintUrl(parsedUrl, user ? user.lock_quote : false);
+    await mintService.checkMintUrl(parsedUrl, user ? user.lockQuote : false);
     if (!user) {
       user = userService.createNewUser(authData.data.pubkey);
     }

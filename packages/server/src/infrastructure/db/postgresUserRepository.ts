@@ -89,7 +89,7 @@ lock_quote = $4;
       user.pubkey,
       user.name,
       user.mintUrl,
-      user.lock_quote,
+      user.lockQuote,
     ]);
     if (queryRes.rowCount === 0) {
       throw new Error("Did not update user");
@@ -102,13 +102,13 @@ lock_quote = $4;
         pubkey: row.pubkey,
         name: row.name,
         mintUrl: row.mint_url,
-        lock_quote: row.lock_quote,
+        lockQuote: row.lock_quote,
       });
     }
     return new User({
       pubkey: row.pubkey,
       mintUrl: row.mint_url,
-      lock_quote: row.lock_quote,
+      lockQuote: row.lock_quote,
     });
   }
 }

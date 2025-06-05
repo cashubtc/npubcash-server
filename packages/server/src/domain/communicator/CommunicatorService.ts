@@ -19,10 +19,10 @@ export class CommunicatorService {
 
   async createMintQuote(
     amount: number,
-    userData: { pubkey: string; lock_quote: boolean },
+    userData: { pubkey: string; lockQuote: boolean },
     mintUrl: string,
   ) {
-    if (userData.lock_quote) {
+    if (userData.lockQuote) {
       const res = await this.getCommunicator(mintUrl).getLockedMintQuote(
         amount,
         userData.pubkey,
