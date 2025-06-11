@@ -1,4 +1,5 @@
 import { AppConfig } from "@/config/index";
+import { eventBus } from "@/events";
 import { MintQuote } from "@/models/mint";
 import { logger } from "@/utils/logger";
 import { handleZapRequest } from "@/utils/nostr";
@@ -48,6 +49,7 @@ export class CommunicatorService {
     });
     sub.on("paid", () => {
       logger?.debug(`Mint quote got paid: ${quote.quoteId}`, quote);
+      eventBus.emit("quotePaid", quote);
       quote.setPaid();
       if (quote.serializedZapRequest && config.nostr.nostrEnabled) {
         try {
