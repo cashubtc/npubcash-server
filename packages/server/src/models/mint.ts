@@ -28,7 +28,7 @@ type MintQuoteRow = {
   pubkey: string;
   state: "PAID" | "UNPAID" | "INFLIGHT" | "ISSUED" | "EXPIRED";
   paid_at: Date;
-  serialzed_zap_request: string;
+  serialized_zap_request: string;
   locked: boolean;
 };
 
@@ -75,7 +75,7 @@ export class MintQuote implements MintQuoteConfig {
       pubkey: row.pubkey,
       state: row.state,
       paidAt: row.paid_at,
-      serializedZapRequest: row.serialzed_zap_request,
+      serializedZapRequest: row.serialized_zap_request,
       locked: row.locked,
     });
   }
