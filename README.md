@@ -9,7 +9,7 @@
   <p align="center">
     The webserver powering npub.cash
     <br />
-    <a href="https://docs.cashu-address.com"><strong>Explore the docs »</strong></a>
+    <a href="https://docs.cashu.space/"><strong>Explore the docs »</strong></a>
     <br />
     <br />
     <a href="https://npub.cash">View Demo</a>
@@ -53,7 +53,7 @@ npm run dev
 ## Usage
 
 By default the dev server will include the projects landing page on the root domain.
-For more details check out the [documentation](https://docs.cashu-address.com)
+For more details check out the [documentation](https://docs.cashu.space/)
 
 ## Roadmap
 
