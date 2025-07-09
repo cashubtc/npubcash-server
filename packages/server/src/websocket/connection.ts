@@ -1,6 +1,6 @@
 import { verifyAuth } from "@/utils/auth";
 import { RawData, WebSocket } from "ws";
-import { subManager } from "./subs";
+import { subManager } from "@/config";
 
 type ParsedWebSocketMessage = {
   type: "challenge-response";
@@ -32,12 +32,6 @@ export class WebSocketConnection {
     this.socket.send(JSON.stringify({ type: "challenge-success" }));
     subManager.addListener(pubkey, (quote) => {
       this.send("update", { quoteId: quote.quoteId });
-      this.socket.send(
-        JSON.stringify({
-          type: "update",
-          payload: { quoteId: quote.quoteId },
-        }),
-      );
     });
   }
 
@@ -61,12 +55,14 @@ export class WebSocketConnection {
           return;
         }
         this.authorise(isAuth.data.pubkey);
+      } else if (parsed.type === "ping") {
+        this.send("pong");
       }
     } catch {}
   }
-  private send(type: string, payload: any) {
+  private send(type: string, payload?: any) {
     if (this.socket.readyState === 1) {
-      this.socket.send(JSON.stringify({ type, payload }));
+      this.socket.send(JSON.stringify({ type, ...(payload && { payload }) }));
     }
   }
 }

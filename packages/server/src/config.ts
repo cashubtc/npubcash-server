@@ -9,6 +9,8 @@ import { ProofService } from "./domain/proof/proofService";
 import { PostgresProofRepository } from "./infrastructure/db/postgresProofRepository";
 import { PostgresMintRepository } from "./infrastructure/db/postgresMintRepository";
 import { MintService } from "./domain/mint/MintService";
+import { QuoteSubscriptionManager } from "./websocket/subs";
+import { eventBus } from "./events";
 
 export const wallet = new CashuWallet(new CashuMint(process.env.MINTURL!));
 export const lnProvider = new LightningHandler(new BlinkProvider());
@@ -19,3 +21,8 @@ export const userService = new UserService(userRepository);
 export const communicatorService = new CommunicatorService();
 export const proofService = new ProofService(new PostgresProofRepository());
 export const mintService = new MintService(new PostgresMintRepository());
+
+export const subManager = new QuoteSubscriptionManager();
+eventBus.on("quotePaid", (quote) => {
+  subManager.update(quote.pubkey, quote);
+});
