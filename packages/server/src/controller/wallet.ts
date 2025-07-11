@@ -1,6 +1,7 @@
 import { MintQuote } from "@/models/mint";
 import { dateToUnix } from "@/utils/time";
 import { NextFunction, Request, Response } from "express";
+import { Quote, QuotesResponse, ReponseMetadata } from "@npubcash/types";
 
 interface MintQuoteQuery {
   limit?: string;
@@ -12,30 +13,6 @@ interface ParsedQuery {
   offset?: number;
   limit: number;
   since?: Date;
-}
-
-interface MintQuoteResponse {
-  createdAt: number;
-  paidAt: number;
-  expiresAt: number;
-  mintUrl: string;
-  quoteId: string;
-  request: string;
-  amount: number;
-  state: string;
-  locked: boolean;
-  zapRequest?: string;
-}
-
-interface ApiResponse {
-  error: boolean;
-  data: { quotes: MintQuoteResponse[] };
-  metadata: {
-    since?: number;
-    offset?: number;
-    total: number;
-    limit: number;
-  };
 }
 
 export async function getMintQuotes(
@@ -58,7 +35,7 @@ export async function getMintQuotes(
     const quotes = lastQuotes.mints.map(mapMintQuoteToResponse);
     const metadata = createMetadata(parsedQuery, lastQuotes.total);
 
-    const response: ApiResponse = {
+    const response: QuotesResponse = {
       error: false,
       data: { quotes },
       metadata,
@@ -96,7 +73,7 @@ function parseQueryParameters(query: MintQuoteQuery): ParsedQuery {
   };
 }
 
-function mapMintQuoteToResponse(mintQuote: any): MintQuoteResponse {
+function mapMintQuoteToResponse(mintQuote: any): Quote {
   return {
     createdAt: dateToUnix(mintQuote.createdAt),
     paidAt: dateToUnix(mintQuote.paidAt!),
@@ -116,7 +93,7 @@ function mapMintQuoteToResponse(mintQuote: any): MintQuoteResponse {
 function createMetadata(
   parsedQuery: ParsedQuery,
   total: number,
-): ApiResponse["metadata"] {
+): ReponseMetadata {
   return {
     ...(parsedQuery.since && {
       since: dateToUnix(parsedQuery.since),
