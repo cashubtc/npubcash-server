@@ -1,0 +1,24 @@
+{
+  "name": "@npubcash/types",
+  "version": "0.1.0",
+  "description": "Type definitions for the npub.cash API",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build:types": "tsc",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "cashu",
+    "nostr"
+  ],
+  "author": "https://github.com/cashubtc",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.4.5"
+  }
+}
