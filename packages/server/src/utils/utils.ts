@@ -10,3 +10,7 @@ export function normalizeUrl(input: string): string {
 
   return `${protocol}//${hostname}${port ? ":" + port : ""}${pathname}`;
 }
+
+export function dateToUnixTimestamp(d: Date): number {
+  return Math.floor(d.getTime() / 1000);
+}
