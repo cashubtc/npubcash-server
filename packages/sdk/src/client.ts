@@ -9,7 +9,23 @@ interface AuthProvider {
   getAuthToken(url: string): Promise<string>;
 }
 
-type ApiReponses = QuotesResponse | UserResponse;
+// Define specific API response types for better type safety
+type ApiResponse = QuotesResponse | UserResponse;
+
+// Custom error for API responses
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public readonly status?: number,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
+interface RequestOptions extends RequestInit {
+  params?: Record<string, string | number | boolean>;
+}
 
 export class NPCClient {
   private readonly _baseUrl: string;
@@ -47,41 +63,36 @@ export class NPCClient {
     return allQuotes;
   }
 
-  private _buildUrlWithQueryParams(
-    baseUrl: string,
-    params?: Record<string, string | number | boolean>,
-  ): string {
-    let url = baseUrl;
-    if (params) {
-      const query = new URLSearchParams();
-      for (const key in params) {
-        if (params.hasOwnProperty(key)) {
-          query.append(key, String(params[key]));
+  private async _authenticatedRequest<T extends ApiResponse>(
+    path: string,
+    options: RequestOptions = {},
+  ): Promise<T> {
+    const url = new URL(`${this._baseUrl}${path}`);
+
+    if (options.params) {
+      for (const key in options.params) {
+        if (Object.prototype.hasOwnProperty.call(options.params, key)) {
+          url.searchParams.append(key, String(options.params[key]));
         }
       }
-      url = `${url}?${query.toString()}`;
     }
-    return url;
-  }
 
-  private async _authenticatedRequest<T extends ApiReponses>(
-    path: string,
-    opts: RequestInit & { params?: Record<string, string | number | boolean> },
-  ) {
-    const url = this._buildUrlWithQueryParams(
-      `${this._baseUrl}${path}`,
-      opts.params,
-    );
+    const authToken = await this.authProvider.getAuthToken(url.toString());
 
-    const authToken = await this.authProvider.getAuthToken(url);
-    const res = await fetch(url, {
-      ...opts,
-      headers: { ...opts.headers, Authorization: authToken },
+    const res = await fetch(url.toString(), {
+      ...options,
+      headers: {
+        ...options.headers,
+        Authorization: authToken,
+      },
     });
-    const data = (await res.json()) as T | ErrorResponse;
-    if (data.error) {
-      throw new Error(data.message);
+
+    if (!res.ok) {
+      const errorData: ErrorResponse = await res.json();
+      throw new ApiError(errorData.message || res.statusText, res.status);
     }
-    return data;
+
+    // Ensure the response is of the expected type T
+    return (await res.json()) as T;
   }
 }
