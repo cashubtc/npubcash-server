@@ -1,5 +1,5 @@
 {
-  "name": "@npubcash/types",
+  "name": "npubcash-types",
   "version": "0.1.0",
   "description": "Type definitions for the npub.cash API",
   "types": "./dist/index.d.ts",
@@ -15,6 +15,11 @@
   "keywords": [
     "cashu",
     "nostr"
+  ],
+  "files": [
+    "/dist",
+    "package.json",
+    "README.md"
   ],
   "author": "https://github.com/cashubtc",
   "license": "MIT",
