@@ -16,10 +16,10 @@ export type Quote = {
 export type QuotesResponse = {
   error: false;
   data: { quotes: Quote[] };
-  metadata: ReponseMetadata;
+  metadata: QuotesReponseMetadata;
 };
 
-export type ReponseMetadata = {
+export type QuotesReponseMetadata = {
   since?: number;
   offset?: number;
   total: number;
