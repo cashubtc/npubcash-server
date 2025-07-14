@@ -12,10 +12,8 @@ export interface AuthProvider {
   getAuthToken(url: string, method: string): Promise<string>;
 }
 
-// Define specific API response types for better type safety
 type ApiResponse = QuotesResponse | UserResponse;
 
-// Custom error for API responses
 export class ApiError extends Error {
   statusCode: number;
   constructor(message: string, status?: number) {
@@ -28,6 +26,9 @@ export class ApiError extends Error {
 interface RequestOptions extends RequestInit {
   params?: Record<string, string | number | boolean>;
 }
+
+// Default throttle delay between paginated API calls in milliseconds
+const THROTTLE_DELAY_MS = 200;
 
 export class NPCClient {
   private readonly _baseUrl: string;
@@ -73,6 +74,51 @@ export class NPCClient {
         break;
       }
       offset += limit;
+
+      if (offset < data.metadata.total) {
+        this.logger.debug(
+          `Throttling for ${THROTTLE_DELAY_MS}ms before next quotes fetch.`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, THROTTLE_DELAY_MS));
+      }
+    }
+    this.logger.info(`Successfully fetched ${allQuotes.length} quotes.`);
+    return allQuotes;
+  }
+
+  async getAllQuotes(): Promise<Quote[]> {
+    this.logger.debug(`Fetching all quotes.`);
+    let allQuotes: Quote[] = [];
+    let offset = 0;
+    const limit = 50;
+
+    while (true) {
+      const data = await this._authenticatedRequest<QuotesResponse>(
+        "/api/v2/wallet/quotes",
+        {
+          params: {
+            offset: offset,
+            limit: limit,
+          },
+        },
+      );
+
+      allQuotes = allQuotes.concat(data.data.quotes);
+      this.logger.debug(
+        `Fetched ${data.data.quotes.length} quotes. Total fetched: ${allQuotes.length}`,
+      );
+
+      if (offset + limit >= data.metadata.total) {
+        break;
+      }
+      offset += limit;
+
+      if (offset < data.metadata.total) {
+        this.logger.debug(
+          `Throttling for ${THROTTLE_DELAY_MS}ms before next all quotes fetch.`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, THROTTLE_DELAY_MS));
+      }
     }
     this.logger.info(`Successfully fetched ${allQuotes.length} quotes.`);
     return allQuotes;
