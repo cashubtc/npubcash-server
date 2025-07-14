@@ -6,6 +6,9 @@ import {
   nip98,
 } from "nostr-tools";
 import { npubEncode } from "nostr-tools/nip19";
+import { ConsoleLogger } from "../logger";
+
+const now = new Date();
 
 class TestingAuthProvider implements AuthProvider {
   private sk: Uint8Array = generateSecretKey();
@@ -25,5 +28,15 @@ class TestingAuthProvider implements AuthProvider {
 }
 
 const client = new NPCClient("https://npubx.cash", new TestingAuthProvider());
+client.setLogger(new ConsoleLogger());
 
-const user = await client.settings.setLock(true);
+await client.settings.setMintUrl("https://nofees.testnut.cashu.space");
+
+const testButton = document.createElement("button");
+testButton.innerText = "Testing";
+testButton.addEventListener("click", async () => {
+  const test = await client.getQuotesSince(Math.floor(now.getTime() / 1000));
+  console.log(test);
+});
+
+document.body.appendChild(testButton);
