@@ -4,22 +4,20 @@ import type {
   UserResponse,
   Quote,
 } from "npubcash-types";
+import { SettingsManager } from "./settings";
 
 interface AuthProvider {
   getAuthToken(url: string): Promise<string>;
 }
 
-// Define specific API response types for better type safety
 type ApiResponse = QuotesResponse | UserResponse;
 
-// Custom error for API responses
 export class ApiError extends Error {
-  constructor(
-    message: string,
-    public readonly status?: number,
-  ) {
+  statusCode: number;
+  constructor(message: string, status?: number) {
     super(message);
     this.name = "ApiError";
+    this.statusCode = status || 500;
   }
 }
 
@@ -30,10 +28,12 @@ interface RequestOptions extends RequestInit {
 export class NPCClient {
   private readonly _baseUrl: string;
   private readonly authProvider: AuthProvider;
+  public readonly settings: SettingsManager; // Add SettingsManager instance
 
   constructor(baseUrl: string, authProvider: AuthProvider) {
     this._baseUrl = baseUrl;
     this.authProvider = authProvider;
+    this.settings = new SettingsManager(this._authenticatedRequest.bind(this));
   }
 
   async getQuotesSince(since: number): Promise<Quote[]> {
