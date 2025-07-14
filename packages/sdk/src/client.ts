@@ -6,8 +6,8 @@ import type {
 } from "npubcash-types";
 import { SettingsManager } from "./settings";
 
-interface AuthProvider {
-  getAuthToken(url: string): Promise<string>;
+export interface AuthProvider {
+  getAuthToken(url: string, method: string): Promise<string>;
 }
 
 type ApiResponse = QuotesResponse | UserResponse;
@@ -77,7 +77,10 @@ export class NPCClient {
       }
     }
 
-    const authToken = await this.authProvider.getAuthToken(url.toString());
+    const authToken = await this.authProvider.getAuthToken(
+      url.toString(),
+      options.method || "GET",
+    );
 
     const res = await fetch(url.toString(), {
       ...options,

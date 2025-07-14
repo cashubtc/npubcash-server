@@ -40,7 +40,7 @@ export class SettingsManager {
   async setLock(lockQuotes: boolean) {
     try {
       const response = await this._authenticatedRequest<UserResponse>(
-        "/api/v2/user/mint",
+        "/api/v2/user/lock",
         {
           method: "PATCH",
           headers: {
