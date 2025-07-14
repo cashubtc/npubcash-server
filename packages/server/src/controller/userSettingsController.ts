@@ -1,6 +1,11 @@
 import { mintService, userService } from "@/config";
 import { BadRequestError } from "@/errors";
 import { normalizeUrl } from "@/utils/utils";
+import {
+  SetLockQuotesPayload,
+  SetMintPayload,
+  UserResponse,
+} from "npubcash-types";
 import { NextFunction, Request, Response } from "express";
 
 export async function getUserSettings(
@@ -16,14 +21,18 @@ export async function getUserSettings(
     if (!user) {
       user = userService.createNewUser(pubkey);
     }
-    res.json({ error: false, data: { user } });
+    const payload: UserResponse = {
+      error: false,
+      data: { user },
+    };
+    res.json(payload);
   } catch (e) {
     next(e);
   }
 }
 
 export async function updateUserSettingLock(
-  req: Request<unknown, unknown, { lockQuotes: boolean }>,
+  req: Request<unknown, unknown, SetLockQuotesPayload>,
   res: Response,
   next: NextFunction,
 ) {
@@ -43,19 +52,24 @@ export async function updateUserSettingLock(
     await mintService.checkMintUrl(user.mintUrl, lockQuotes);
     user.setQuoteLocking(lockQuotes);
     await userService.saveUser(user);
-    res.json({ error: false, data: { user } });
+    const payload: UserResponse = {
+      error: false,
+      data: { user },
+    };
+    res.json(payload);
   } catch (e) {
     next(e);
   }
 }
 
 export async function updateUserMintSetting(
-  req: Request,
+  req: Request<unknown, unknown, SetMintPayload>,
   res: Response,
   next: NextFunction,
 ) {
   try {
     const authData = req.authData!;
+    //WARNING: Inconsistent casing!!
     const { mint_url } = req.body;
     if (!mint_url) {
       throw new BadRequestError("Missing parameters!");
@@ -68,7 +82,12 @@ export async function updateUserMintSetting(
     }
     user.setPreferredMint(mint_url);
     await userService.saveUser(user);
-    res.json({ error: false, data: { user } });
+
+    const payload: UserResponse = {
+      error: false,
+      data: { user },
+    };
+    res.json(payload);
   } catch (e) {
     next(e);
   }
