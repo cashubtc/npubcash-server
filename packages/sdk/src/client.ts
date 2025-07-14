@@ -4,14 +4,18 @@ import type {
   UserResponse,
   Quote,
 } from "npubcash-types";
+
 import { SettingsManager } from "./settings";
+import { type Logger, NullLogger } from "./logger"; // Import Logger and NullLogger
 
 export interface AuthProvider {
   getAuthToken(url: string, method: string): Promise<string>;
 }
 
+// Define specific API response types for better type safety
 type ApiResponse = QuotesResponse | UserResponse;
 
+// Custom error for API responses
 export class ApiError extends Error {
   statusCode: number;
   constructor(message: string, status?: number) {
@@ -28,15 +32,22 @@ interface RequestOptions extends RequestInit {
 export class NPCClient {
   private readonly _baseUrl: string;
   private readonly authProvider: AuthProvider;
-  public readonly settings: SettingsManager; // Add SettingsManager instance
+  public readonly settings: SettingsManager;
+  private logger: Logger; // Add logger property
 
   constructor(baseUrl: string, authProvider: AuthProvider) {
     this._baseUrl = baseUrl;
     this.authProvider = authProvider;
     this.settings = new SettingsManager(this._authenticatedRequest.bind(this));
+    this.logger = new NullLogger(); // Initialize with NullLogger by default
+  }
+
+  public setLogger(logger: Logger): void {
+    this.logger = logger;
   }
 
   async getQuotesSince(since: number): Promise<Quote[]> {
+    this.logger.debug(`Fetching quotes since: ${since}`);
     let allQuotes: Quote[] = [];
     let offset = 0;
     const limit = 50;
@@ -54,12 +65,16 @@ export class NPCClient {
       );
 
       allQuotes = allQuotes.concat(data.data.quotes);
+      this.logger.debug(
+        `Fetched ${data.data.quotes.length} quotes. Total fetched: ${allQuotes.length}`,
+      );
 
       if (offset + limit >= data.metadata.total) {
         break;
       }
       offset += limit;
     }
+    this.logger.info(`Successfully fetched ${allQuotes.length} quotes.`);
     return allQuotes;
   }
 
@@ -77,25 +92,37 @@ export class NPCClient {
       }
     }
 
-    const authToken = await this.authProvider.getAuthToken(
-      url.toString(),
-      options.method || "GET",
-    );
+    try {
+      const urlForAuth = `${url.protocol}//${url.host}${url.pathname}`;
+      const authToken = await this.authProvider.getAuthToken(
+        urlForAuth,
+        options.method || "GET",
+      );
+      this.logger.debug(`Auth token obtained for URL: ${urlForAuth}`);
 
-    const res = await fetch(url.toString(), {
-      ...options,
-      headers: {
-        ...options.headers,
-        Authorization: authToken,
-      },
-    });
+      const res = await fetch(url.toString(), {
+        ...options,
+        headers: {
+          ...options.headers,
+          Authorization: authToken,
+        },
+      });
 
-    if (!res.ok) {
-      const errorData: ErrorResponse = await res.json();
-      throw new ApiError(errorData.message || res.statusText, res.status);
+      if (!res.ok) {
+        const errorData: ErrorResponse = await res.json();
+        this.logger.error(`API Error: ${errorData.message || res.statusText}`, {
+          status: res.status,
+          url: url.toString(),
+        });
+        throw new ApiError(errorData.message || res.statusText, res.status);
+      }
+
+      const responseData = (await res.json()) as T;
+      this.logger.debug("Request successful", { url: url.toString() });
+      return responseData;
+    } catch (error) {
+      this.logger.error("Authenticated request failed:", error);
+      throw error;
     }
-
-    // Ensure the response is of the expected type T
-    return (await res.json()) as T;
   }
 }
