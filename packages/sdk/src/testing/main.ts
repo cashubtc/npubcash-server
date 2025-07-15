@@ -24,4 +24,13 @@ testButton.addEventListener("click", async () => {
   const test = await client.getAllQuotes();
 });
 
+const testButton2 = document.createElement("button");
+testButton2.innerText = "Testing";
+testButton2.addEventListener("click", async () => {
+  const test = await client.getQuotesSince(
+    Math.floor((Date.now() - 60 * 60 * 24 * 14 * 1000) / 1000),
+  );
+});
+
 document.body.appendChild(testButton);
+document.body.appendChild(testButton2);
