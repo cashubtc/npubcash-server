@@ -4,9 +4,12 @@ export default defineConfig({
   build: {
     outDir: "./dist",
     lib: {
-      entry: "./src/client.ts",
+      entry: "./src/index.ts",
       name: "npubcash-sdk",
       fileName: "npc-sdk",
+    },
+    rollupOptions: {
+      external: ["nostr-tools/nip98"],
     },
   },
 });

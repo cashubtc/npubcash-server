@@ -9,11 +9,11 @@
     "preview": "vite preview"
   },
   "devDependencies": {
-    "nostr-tools": "^2.15.0",
     "typescript": "~5.8.3",
     "vite": "^7.0.4"
   },
   "dependencies": {
-    "npubcash-types": "workspace:^"
+    "npubcash-types": "workspace:^",
+    "nostr-tools": "^2.15.0"
   }
 }
