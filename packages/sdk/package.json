@@ -3,17 +3,28 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "main": "./dist/npc-sdk.cjs",
+  "module": "./dist/npc-sdk.mjs",
+  "exports": {
+    ".": {
+      "import": "./dist/npc-sdk.mjs",
+      "require": "./dist/npc-sdk.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
+    "build": "vite build",
     "dev": "vite",
-    "build": "tsc && vite build",
     "preview": "vite preview"
+  },
+  "dependencies": {
+    "nostr-tools": "^2.15.0",
+    "npubcash-types": "workspace:^"
   },
   "devDependencies": {
     "typescript": "~5.8.3",
     "vite": "^7.0.4"
-  },
-  "dependencies": {
-    "npubcash-types": "workspace:^",
-    "nostr-tools": "^2.15.0"
   }
 }
