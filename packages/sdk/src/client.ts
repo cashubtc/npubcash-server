@@ -7,21 +7,13 @@ import type {
 
 import { SettingsManager } from "./settings";
 import { type Logger, NullLogger } from "./logger"; // Import Logger and NullLogger
+import { ApiError } from "./types";
 
 export interface AuthProvider {
   getAuthToken(url: string, method: string): Promise<string>;
 }
 
 type ApiResponse = QuotesResponse | UserResponse;
-
-export class ApiError extends Error {
-  statusCode: number;
-  constructor(message: string, status?: number) {
-    super(message);
-    this.name = "ApiError";
-    this.statusCode = status || 500;
-  }
-}
 
 interface RequestOptions extends RequestInit {
   params?: Record<string, string | number | boolean>;

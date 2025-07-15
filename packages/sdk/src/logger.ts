@@ -25,8 +25,8 @@ export class ConsoleLogger implements Logger {
 }
 
 export class NullLogger implements Logger {
-  info(message: string, ...meta: any[]): void {}
-  warn(message: string, ...meta: any[]): void {}
-  error(message: string, ...meta: any[]): void {}
-  debug(message: string, ...meta: any[]): void {}
+  info(_message: string, ..._meta: any[]): void {}
+  warn(_message: string, ..._meta: any[]): void {}
+  error(_message: string, ..._meta: any[]): void {}
+  debug(_message: string, ..._meta: any[]): void {}
 }
