@@ -33,13 +33,6 @@ export class JWTAuthProvider {
 
     this.logger?.debug("No valid cached token found, fetching a new one.");
 
-    if (!window.nostr) {
-      this.logger?.error("NIP-07 provider (window.nostr) not found.");
-      throw new Error(
-        "NIP-07 provider not found. Please install a NIP-07 browser extension.",
-      );
-    }
-
     const authUrl = `${this._baseUrl}/api/v2/auth/nip98`;
     const nostrToken = await getToken(authUrl, "GET", async (t) => {
       const signed = await this.signer(t);

@@ -1,12 +1,13 @@
 {
   "name": "npubcash-sdk",
-  "private": true,
-  "version": "0.0.0",
+  "version": "0.1.4",
   "type": "module",
   "main": "./dist/npc-sdk.cjs",
   "module": "./dist/npc-sdk.mjs",
+  "types": "./dist/types/index.d.ts",
   "exports": {
     ".": {
+      "types": "./dist/types/index.d.ts",
       "import": "./dist/npc-sdk.mjs",
       "require": "./dist/npc-sdk.cjs"
     }
@@ -15,7 +16,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "vite build",
+    "build": "vite build && tsc -p tsconfig.build.json",
     "dev": "vite",
     "preview": "vite preview"
   },
