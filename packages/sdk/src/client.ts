@@ -8,6 +8,7 @@ import type {
 import { SettingsManager } from "./settings";
 import { type Logger, NullLogger } from "./logger";
 import { ApiError } from "./types";
+import { SubscriptionManager } from "./subscriber";
 
 const API_PATHS = {
   QUOTES: "/api/v2/wallet/quotes",
@@ -17,6 +18,7 @@ const THROTTLE_DELAY_MS = 200;
 
 export interface AuthProvider {
   getAuthToken(url: string, method: string): Promise<string>;
+  getNostrToken(url: string, method: string): Promise<string>;
 }
 
 type ApiResponse = QuotesResponse | UserResponse;
@@ -54,6 +56,24 @@ export class NPCClient {
     return this._fetchPaginatedQuotes();
   }
 
+  public subscribe(
+    onUpdate: (quoteId: string) => void,
+    onError?: (msg: string) => void
+  ) {
+    const url = new URL(`${this._baseUrl}/api/v2/ws/quote`);
+    const wsUrl = `${url.protocol === "https:" ? "wss:" : "ws:"}//${url.host}${
+      url.pathname
+    }`;
+    const manager = new SubscriptionManager(
+      wsUrl,
+      this.authProvider,
+      onUpdate,
+      this.logger,
+      onError
+    );
+    return () => manager.dispose();
+  }
+
   private async _fetchPaginatedQuotes(since?: number): Promise<Quote[]> {
     let allQuotes: Quote[] = [];
     let offset = 0;
@@ -69,13 +89,13 @@ export class NPCClient {
 
       const data = await this._authenticatedRequest<QuotesResponse>(
         API_PATHS.QUOTES,
-        { params: requestParams },
+        { params: requestParams }
       );
 
       const fetchedQuotes = data.data.quotes;
       allQuotes = allQuotes.concat(fetchedQuotes);
       this.logger.debug(
-        `Fetched ${fetchedQuotes.length} quotes. Total fetched: ${allQuotes.length}`,
+        `Fetched ${fetchedQuotes.length} quotes. Total fetched: ${allQuotes.length}`
       );
 
       const totalAvailable = data.metadata.total;
@@ -90,14 +110,14 @@ export class NPCClient {
     }
 
     this.logger.info(
-      `Successfully fetched a total of ${allQuotes.length} quotes.`,
+      `Successfully fetched a total of ${allQuotes.length} quotes.`
     );
     return allQuotes;
   }
 
   private async _authenticatedRequest<T extends ApiResponse>(
     path: string,
-    options: RequestOptions = {},
+    options: RequestOptions = {}
   ): Promise<T> {
     const url = new URL(`${this._baseUrl}${path}`);
 
@@ -113,7 +133,7 @@ export class NPCClient {
       const urlForAuth = `${url.protocol}//${url.host}${url.pathname}`;
       const authToken = await this.authProvider.getAuthToken(
         urlForAuth,
-        options.method || "GET",
+        options.method || "GET"
       );
       this.logger.debug(`Auth token obtained for URL: ${urlForAuth}`);
 

@@ -25,6 +25,10 @@ export class JWTAuthProvider {
     return `Bearer ${token}`;
   }
 
+  async getNostrToken(url: string, method: string) {
+    return getToken(url, method, this.signer);
+  }
+
   private async _ensureCachedToken(): Promise<string> {
     if (this.storedToken && this.storedToken.expiresAt > new Date()) {
       this.logger?.debug("Returning cached token.");
