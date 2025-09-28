@@ -16,6 +16,13 @@ const API_PATHS = {
 const PAGINATION_LIMIT = 50;
 const THROTTLE_DELAY_MS = 200;
 
+/**
+ * Abstraction for authentication used by {@link NPCClient}.
+ *
+ * Implementations should provide:
+ * - an HTTP auth token (e.g., a short‑lived JWT in `Bearer <token>` or Nostr token form)
+ * - a NIP‑98 token for WebSocket challenge/response
+ */
 export interface AuthProvider {
   getAuthToken(url: string, method: string): Promise<string>;
   getNostrToken(url: string, method: string): Promise<string>;
@@ -29,12 +36,33 @@ interface RequestOptions extends RequestInit {
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/**
+ * High‑level client for the NpubCash HTTP and realtime APIs.
+ *
+ * - HTTP requests are authenticated via {@link AuthProvider.getAuthToken}
+ * - WebSocket auth uses NIP‑98 via {@link AuthProvider.getNostrToken}
+ *
+ * @example
+ * const baseUrl = "https://npubx.cash";
+ * const signer = (tpl) => window.nostr!.signEvent(tpl);
+ * const client = new NPCClient(baseUrl, new JWTAuthProvider(baseUrl, signer));
+ * const quotes = await client.getAllQuotes();
+ */
 export class NPCClient {
   private readonly _baseUrl: string;
   private readonly authProvider: AuthProvider;
+  /**
+   * Settings API for the authenticated user account.
+   * Use {@link SettingsManager.setMintUrl} and {@link SettingsManager.setLock}.
+   */
   public readonly settings: SettingsManager;
   private logger: Logger;
 
+  /**
+   * Create a client.
+   * @param baseUrl Base URL of the NpubCash server, e.g. `https://npubx.cash`.
+   * @param authProvider Provider that supplies HTTP and NIP‑98 auth tokens.
+   */
   constructor(baseUrl: string, authProvider: AuthProvider) {
     this._baseUrl = baseUrl;
     this.authProvider = authProvider;
@@ -42,20 +70,45 @@ export class NPCClient {
     this.logger = new NullLogger();
   }
 
+  /**
+   * Set a logger implementation for SDK diagnostics.
+   * @param logger Logger implementation to use (e.g., {@link ConsoleLogger}).
+   */
   public setLogger(logger: Logger): void {
     this.logger = logger;
   }
 
+  /**
+   * Fetch quotes created since a UNIX timestamp (in seconds).
+   * Handles pagination internally.
+   * @param since UNIX timestamp in seconds.
+   * @returns All quotes since the given time.
+   */
   public async getQuotesSince(since: number): Promise<Quote[]> {
     this.logger.debug(`Fetching quotes since timestamp: ${since}`);
     return this._fetchPaginatedQuotes(since);
   }
 
+  /**
+   * Fetch all quotes for the authenticated user.
+   * Handles pagination internally.
+   * @returns All available quotes.
+   */
   public async getAllQuotes(): Promise<Quote[]> {
     this.logger.debug("Fetching all quotes.");
     return this._fetchPaginatedQuotes();
   }
 
+  /**
+   * Subscribe to realtime quote update notifications.
+   *
+   * Opens a WebSocket to `${baseUrl}/api/v2/ws/quote` and authenticates via NIP‑98
+   * challenge/response. The callback receives the updated `quoteId`.
+   *
+   * @param onUpdate Called whenever a quote is updated.
+   * @param onError Optional callback for WebSocket/auth errors. Receives a message.
+   * @returns Disposer function to close the subscription.
+   */
   public subscribe(
     onUpdate: (quoteId: string) => void,
     onError?: (msg: string) => void
