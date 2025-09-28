@@ -11,7 +11,7 @@ interface AuthenticatedRequest {
 }
 
 /**
- * Settings API used via {@link NPCClient.settings}.
+ * Settings API
  *
  * Not exported directly; consumers use the instance available on the client.
  */
