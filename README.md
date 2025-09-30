@@ -53,7 +53,7 @@ npm run dev
 ## Usage
 
 By default the dev server will include the projects landing page on the root domain.
-For more details check out the [documentation](https://docs.cashu.space)
+For more details check out the [documentation](https://docs.npub.cash)
 
 ## Roadmap
 
