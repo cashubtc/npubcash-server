@@ -9,7 +9,7 @@
   <p align="center">
     The webserver powering npub.cash
     <br />
-    <a href="https://docs.cashu.space"><strong>Explore the docs »</strong></a>
+    <a href="https://docs.npub.cash"><strong>Explore the docs »</strong></a>
     <br />
     <br />
     <a href="https://npub.cash">View Demo</a>
