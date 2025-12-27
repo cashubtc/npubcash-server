@@ -1,5 +1,4 @@
 import express, { Response } from "express";
-import bodyparser from "body-parser";
 import cors from "cors";
 import compression from "compression";
 import { requireHTTPS } from "./middleware/https";
@@ -13,7 +12,7 @@ import { logger } from "./utils/logger";
 const app = express();
 const config = AppConfig.getInstance();
 
-app.use(bodyparser.json());
+app.use(express.json());
 (app as any).use(compression());
 
 app.use(cors());

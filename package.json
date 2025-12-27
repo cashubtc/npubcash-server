@@ -4,10 +4,9 @@
     "./packages/*"
   ],
   "scripts": {
-    "build": "ROOT_DIR=$(pwd) yarn workspaces foreach --all run build",
-    "dev": "ROOT_DIR=$(pwd) yarn workspaces foreach --all --exclude @npubcash-env run dev",
+    "build": "ROOT_DIR=$(pwd) bun run --filter '*' build",
+    "dev": "ROOT_DIR=$(pwd) bun run --filter '!@npubcash-env' dev",
     "setup": "ROOT_DIR=$(pwd) node dist/env/index.js",
     "start": "ROOT_DIR=$(pwd) node dist/server/index.cjs"
-  },
-  "packageManager": "yarn@4.6.0"
+  }
 }

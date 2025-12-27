@@ -1,6 +1,5 @@
 {
   "name": "@npubcash/env",
-  "packageManager": "yarn@4.6.0",
   "dependencies": {
     "@scure/bip39": "^1.5.4",
     "prompts": "^2.4.2"

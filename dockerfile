@@ -1,7 +1,6 @@
-FROM node:22-alpine AS base
+FROM oven/bun:1-alpine AS base
 
 FROM base AS builder
-RUN corepack enable yarn
 
 ARG HOSTNAME
 ENV NPC_SERVER_URL=${HOSTNAME}
@@ -10,11 +9,11 @@ RUN apk add --no-cache libc6-compat
 
 WORKDIR /app
 
-COPY package.json yarn.lock .yarnrc.yml ./
+COPY package.json bun.lock ./
 COPY packages ./packages
 
-RUN yarn install --frozen-lockfile
-RUN yarn build
+RUN bun install --frozen-lockfile
+RUN bun run build
 
 FROM base AS runner
 WORKDIR /app

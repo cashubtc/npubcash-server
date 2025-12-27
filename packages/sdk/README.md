@@ -14,7 +14,7 @@ TypeScript client SDK for the NpubCash v2 API. Provides a high-level HTTP client
 ```bash
 npm install npubcash-sdk
 # or
-yarn add npubcash-sdk
+bun add npubcash-sdk
 ```
 
 ### Quick start
