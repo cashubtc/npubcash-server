@@ -25,9 +25,9 @@ app.use((req, _, next) => {
 });
 app.use(baseRouter);
 if (config.apiMode === "BOTH") {
-  app.use("/", express.static(path.join(__dirname, "../website")));
+  app.use("/", express.static(path.join(__dirname, "../frontend")));
   app.get("*", (_, res: Response) => {
-    res.sendFile(path.join(__dirname, "../website/index.html"));
+    res.sendFile(path.join(__dirname, "../frontend/index.html"));
   });
 }
 app.use(errorHandler);
