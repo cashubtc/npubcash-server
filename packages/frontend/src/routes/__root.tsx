@@ -1,7 +1,12 @@
-import { createRootRoute, Outlet } from "@tanstack/react-router"
+import { createRootRouteWithContext, Outlet } from "@tanstack/react-router"
 import { NavBar } from "@/components/NavBar"
+import type { AuthContextType } from "@/contexts/AuthContext"
 
-export const Route = createRootRoute({
+interface RouterContext {
+  auth: AuthContextType
+}
+
+export const Route = createRootRouteWithContext<RouterContext>()({
   component: RootLayout,
 })
 

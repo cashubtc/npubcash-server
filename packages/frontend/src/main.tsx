@@ -1,12 +1,16 @@
 import { createRoot } from "react-dom/client";
 import { RouterProvider, createRouter } from "@tanstack/react-router";
-import { CocoCashuProvider } from "coco-cashu-react";
 import { routeTree } from "./routeTree.gen";
-import { coco } from "./lib/coco";
+import { AuthProvider, useAuth } from "./contexts/AuthContext";
 
 import "./index.css";
 
-const router = createRouter({ routeTree });
+const router = createRouter({
+  routeTree,
+  context: {
+    auth: undefined!, // Will be set by InnerApp
+  },
+});
 
 declare module "@tanstack/react-router" {
   interface Register {
@@ -14,8 +18,13 @@ declare module "@tanstack/react-router" {
   }
 }
 
+function InnerApp() {
+  const auth = useAuth();
+  return <RouterProvider router={router} context={{ auth }} />;
+}
+
 createRoot(document.getElementById("root")!).render(
-  <CocoCashuProvider manager={coco}>
-    <RouterProvider router={router} />
-  </CocoCashuProvider>
+  <AuthProvider>
+    <InnerApp />
+  </AuthProvider>
 );
