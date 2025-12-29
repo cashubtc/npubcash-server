@@ -11,17 +11,6 @@ export class User {
     this.mint_url = mint_url;
   }
 
-  static async createUser(pubkey: string, name: string, mint_url?: string) {
-    const mintUrl = mint_url ? mint_url : process.env.MINTURL!;
-    const res = await queryWrapper(
-      `INSERT INTO l_users (pubkey, name) VALUES ($1, $2)`,
-      [pubkey, name],
-    );
-    if (res.rowCount === 0) {
-      throw new Error("Could not create user");
-    }
-    return new User(pubkey, name, mintUrl);
-  }
   static async getUserByPubkey(pubkey: string) {
     const res = await queryWrapper<User>(
       `SELECT * FROM l_users WHERE pubkey = $1`,
@@ -69,11 +58,6 @@ WHERE l_users.name IS NULL;`;
     if (queryRes.rowCount === 0) {
       throw new Error("Did not update username");
     }
-  }
-
-  async upsertMintByPubkey(mintUrl: string) {
-    await User.upsertMintByPubkey(this.pubkey, mintUrl);
-    this.mint_url = this.mint_url;
   }
 
   static async checkIfUsernameExists(username: string) {

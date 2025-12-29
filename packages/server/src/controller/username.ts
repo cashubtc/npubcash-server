@@ -66,7 +66,7 @@ async function validatePayment(
       "Invalid payment: " + reason,
     );
   }
-  let decodedToken: Token | undefined;
+  let decodedToken: Token;
   try {
     decodedToken = getDecodedToken(tokenString);
   } catch (e) {

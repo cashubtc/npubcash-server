@@ -2,6 +2,7 @@ import { config } from "dotenv";
 import {
   getApiModeFromEnv,
   getDbConnectionStringFromEnv,
+  getDbTypeFromEnv,
   getEnvVar,
   getJwtSecretFromEnv,
   getLogLevelFromEnv,
@@ -20,6 +21,7 @@ export class AppConfig {
     min: 1000,
     max: 100000000,
   };
+  private _dbType: "postgres" | "sqlite";
   private _dbConnectionString: string;
   private _apiMode: "BOTH" | "API_ONLY";
   private _usernameConfig:
@@ -31,6 +33,7 @@ export class AppConfig {
   private constructor() {
     this._logLevel = getLogLevelFromEnv();
     this._apiMode = getApiModeFromEnv();
+    this._dbType = getDbTypeFromEnv();
     this._dbConnectionString = getDbConnectionStringFromEnv();
     this._usernameConfig = getUsernameConfigFromEnv();
     if (getEnvVar("NOSTR_ENABLED")) {
@@ -59,6 +62,10 @@ export class AppConfig {
 
   get lnurlLimits() {
     return this._lnurlLimits;
+  }
+
+  get dbType() {
+    return this._dbType;
   }
 
   get dbConnectionString() {

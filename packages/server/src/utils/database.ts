@@ -1,49 +1,36 @@
-import pg, { QueryConfig, QueryResultRow } from "pg";
-import migrate from "node-pg-migrate";
-import { WithdrawalStore } from "../models/withdrawal";
-import { logger } from "@/utils/logger";
 import { AppConfig } from "../config/index";
-import { resolve } from "path";
+import { runMigrations } from "../migrations";
+import { DatabaseAdapter, createDatabaseAdapter } from "../database";
 
 const config = AppConfig.getInstance();
 
-const rootDir = process.env.ROOT_DIR
-  ? resolve(process.env.ROOT_DIR, "./packages/server/migrations")
-  : resolve(process.cwd(), "./migrations");
-
-const pool = new pg.Pool({
-  connectionString: config.dbConnectionString,
-});
-
-export function setupStore() {
-  return WithdrawalStore.getInstance(pool);
-}
+let adapter: DatabaseAdapter | null = null;
 
 export async function setupDatabase() {
-  await migrate({
-    databaseUrl: config.dbConnectionString,
-    dir: rootDir,
-    direction: "up",
-    migrationsTable: "pgmigrations",
-    count: Infinity,
-    logger: logger,
+  adapter = await createDatabaseAdapter({
+    type: config.dbType,
+    connectionString: config.dbConnectionString,
   });
+  await runMigrations(adapter);
 }
 
-export async function getDbClient() {
-  return await pool.connect();
+export function getAdapter(): DatabaseAdapter {
+  if (!adapter) {
+    throw new Error("Database not initialized. Call setupDatabase() first.");
+  }
+  return adapter;
 }
 
-export function queryWrapper<T extends QueryResultRow>(
-  query: string | QueryConfig<any[]>,
-  values: any[],
+export function queryWrapper<T = Record<string, unknown>>(
+  query: string,
+  values: unknown[]
 ) {
-  return pool.query<T>(query, values);
+  return getAdapter().query<T>(query, values);
 }
 
 export function createBulkInsertPayload(
   columnArray: string[],
-  nestedValueArray: any[][],
+  nestedValueArray: unknown[][]
 ) {
   let counter = 1;
   const sanitizedValueArray: string[] = [];
@@ -64,16 +51,16 @@ export function createBulkInsertPayload(
   return { valueString: valueStrings, flatValues: nestedValueArray.flat() };
 }
 
-export function createBulkInsertQuery<T extends QueryResultRow>(
+export async function createBulkInsertQuery<T = Record<string, unknown>>(
   tableName: string,
   columnArray: string[],
-  nestedValueArray: any[][],
+  nestedValueArray: unknown[][]
 ) {
   const payload = createBulkInsertPayload(columnArray, nestedValueArray);
   const query = `INSERT INTO ${tableName} (${columnArray.join(",")}) VALUES ${
     payload.valueString
   };`;
-  return pool.query<T>(query, payload.flatValues);
+  return getAdapter().query<T>(query, payload.flatValues);
 }
 
 export function createSanitizedValueString(n: number) {

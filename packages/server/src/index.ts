@@ -1,7 +1,7 @@
 loadEnvFile();
 
 import app from "./app";
-import { setupDatabase, setupStore } from "./utils/database";
+import { setupDatabase } from "./utils/database";
 import ws from "ws";
 import { useWebSocketImplementation } from "nostr-tools/pool";
 import { logger } from "./utils/logger";
@@ -12,7 +12,6 @@ import { communicatorService } from "./config";
 
 const config = AppConfig.getInstance();
 useWebSocketImplementation(ws);
-setupStore();
 logger.info("+++ Loaded App Config +++");
 logger.info(`Log Level: ${config.logLevel}`);
 logger.info(`Nostr enabled: ${config.nostr.nostrEnabled}`);

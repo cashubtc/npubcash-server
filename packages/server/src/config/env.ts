@@ -41,9 +41,29 @@ export function getJwtSecretFromEnv() {
   return Buffer.from(entropy).toString("hex");
 }
 
+export function getDbTypeFromEnv(): "postgres" | "sqlite" {
+  const envVar = getEnvVar("DATABASE_TYPE");
+  if (envVar === "postgres") {
+    return "postgres";
+  }
+  return "sqlite"; // default
+}
+
+function getDefaultSqlitePath(): string {
+  if (process.env.NODE_ENV === "development") {
+    return "./data.db";
+  }
+  // Production: assume /data volume mount
+  return "/data/npubcash.db";
+}
+
 export function getDbConnectionStringFromEnv(): string {
   const envVar = getEnvVar("DATABASE_URL");
   if (!envVar) {
+    // Default to SQLite file if DATABASE_URL not set
+    if (getDbTypeFromEnv() === "sqlite") {
+      return getDefaultSqlitePath();
+    }
     throw new Error("Could not find DATABASE_URL in env");
   }
   return envVar;

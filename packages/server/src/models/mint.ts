@@ -65,16 +65,16 @@ export class MintQuote implements MintQuoteConfig {
   static castRowToQuote(row: MintQuoteRow) {
     return new MintQuote({
       id: row.id,
-      createdAt: row.created_at,
+      createdAt: new Date(row.created_at),
       mintUrl: row.mint_url,
       unit: row.unit,
       paymentRequest: row.payment_request,
       quoteId: row.quote_id,
-      expiresAt: row.expires_at,
+      expiresAt: new Date(row.expires_at),
       amount: row.amount,
       pubkey: row.pubkey,
       state: row.state,
-      paidAt: row.paid_at,
+      paidAt: row.paid_at ? new Date(row.paid_at) : undefined,
       serializedZapRequest: row.serialized_zap_request,
       locked: row.locked,
     });
@@ -125,7 +125,7 @@ export class MintQuote implements MintQuoteConfig {
 
   static async getToBeExpiredMintQuotes() {
     const res = await queryWrapper<MintQuoteRow>(
-      `SELECT * FROM mint_quotes WHERE expires_at <= NOW() AND state = "UNPAID"`,
+      `SELECT * FROM mint_quotes WHERE expires_at <= NOW() AND state = 'UNPAID'`,
       [],
     );
     return res.rows.map((r) => this.castRowToQuote(r));
