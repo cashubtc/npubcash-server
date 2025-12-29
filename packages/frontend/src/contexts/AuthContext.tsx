@@ -6,46 +6,88 @@ import {
   type ReactNode,
 } from "react";
 
-interface User {
-  id: string;
-  // Add additional user fields as needed
-}
+import { type Event, type EventTemplate } from "nostr-tools";
+
+type NostrConfig = {
+  type: "extension";
+  pubkey: string;
+  signer: (t: EventTemplate) => Promise<Event>;
+};
 
 export interface AuthContextType {
-  user: User | null;
+  nostrConfig: NostrConfig | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (credentials: { username: string; password: string }) => Promise<void>;
+  login: () => Promise<void>;
   logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+const CONFIG_KEY = "npc-login";
+
+function getStoredPubkey(): string | null {
+  return localStorage.getItem(CONFIG_KEY);
+}
+
+function setStoredPubkey(pubkey: string) {
+  localStorage.setItem(CONFIG_KEY, pubkey);
+}
+
+function clearStoredPubkey() {
+  localStorage.removeItem(CONFIG_KEY);
+}
+
+function createExtensionSigner(): (t: EventTemplate) => Promise<Event> {
+  return (t: EventTemplate) => {
+    if (!window.nostr) {
+      return Promise.reject(new Error("Nostr extension not available"));
+    }
+    return window.nostr.signEvent(t);
+  };
+}
+
+function getInitialConfig(): NostrConfig | null {
+  const storedPubkey = getStoredPubkey();
+  if (storedPubkey) {
+    return {
+      type: "extension",
+      pubkey: storedPubkey,
+      signer: createExtensionSigner(),
+    };
+  }
+  return null;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [nostrConfig, setNostrConfig] = useState<NostrConfig | null>(getInitialConfig);
   const [isLoading, setIsLoading] = useState(false);
 
-  const login = useCallback(
-    async (_credentials: { username: string; password: string }) => {
-      setIsLoading(true);
-      try {
-        // TODO: Implement actual login API call
-        // const response = await fetch('/api/auth/login', { ... });
-        // const userData = await response.json();
-        setUser({ id: "user-1" }); // Placeholder
-      } finally {
-        setIsLoading(false);
+  const login = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      if (!window.nostr) {
+        throw new Error("Nostr extension not available");
       }
-    },
-    []
-  );
+      const pk = await window.nostr.getPublicKey();
+      setStoredPubkey(pk);
+      setNostrConfig({
+        type: "extension",
+        pubkey: pk,
+        signer: createExtensionSigner(),
+      });
+    } catch (e) {
+      console.error("Login failed:", e);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   const logout = useCallback(async () => {
     setIsLoading(true);
     try {
-      // TODO: Implement actual logout API call
-      // await fetch('/api/auth/logout', { method: 'POST' });
-      setUser(null);
+      clearStoredPubkey();
+      setNostrConfig(null);
     } finally {
       setIsLoading(false);
     }
@@ -54,8 +96,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return (
     <AuthContext.Provider
       value={{
-        user,
-        isAuthenticated: user !== null,
+        nostrConfig,
+        isAuthenticated: nostrConfig !== null,
         isLoading,
         login,
         logout,

@@ -20,6 +20,9 @@ function Home() {
       <p>Home (Authenticated)</p>
       <div className="flex gap-2">
         <Button asChild>
+          <Link to="/wallet">Wallet</Link>
+        </Button>
+        <Button asChild variant="outline">
           <Link to="/about">About</Link>
         </Button>
         <Button variant="outline" onClick={handleLogout}>
