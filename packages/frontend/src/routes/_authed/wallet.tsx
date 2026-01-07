@@ -8,6 +8,8 @@ import {
 } from "coco-cashu-react";
 import type { HistoryEntry } from "coco-cashu-core";
 import { getEncodedToken } from "coco-cashu-core";
+import { npubEncode } from "nostr-tools/nip19";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -28,6 +30,7 @@ function Wallet() {
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Wallet</h1>
       <BalanceCard />
+      <AddressCard />
       <div className="grid gap-6 md:grid-cols-2">
         <SendCard />
         <MintsCard />
@@ -55,6 +58,40 @@ function BalanceCard() {
               {new URL(mintUrl).hostname}: {amount} sats
             </p>
           ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+function AddressCard() {
+  const { nostrConfig } = useAuth();
+  const [copied, setCopied] = useState(false);
+
+  if (!nostrConfig) return null;
+
+  const npub = npubEncode(nostrConfig.pubkey);
+  const hostname = import.meta.env.NPC_HOSTNAME || "npub.cash";
+  const address = `${npub}@${hostname}`;
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(address);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Address</CardTitle>
+        <CardDescription>Your Lightning address for receiving payments</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <p className="break-all rounded bg-muted p-2 font-mono text-sm">
+          {address}
+        </p>
+        <Button onClick={handleCopy} variant="outline">
+          {copied ? "Copied!" : "Copy Address"}
+        </Button>
       </CardContent>
     </Card>
   );
