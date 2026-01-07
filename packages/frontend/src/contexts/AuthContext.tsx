@@ -40,6 +40,8 @@ type Nip46ConnectionState = "idle" | "awaiting" | "connected" | "error";
 export interface AuthContextType {
   nostrConfig: NostrConfig | null;
   isAuthenticated: boolean;
+  /** True while restoring a previous session on app load */
+  isRestoring: boolean;
   isLoading: boolean;
   login: () => Promise<void>;
   /** Initiates NIP-46 login flow and returns the nostrconnect:// URI to display */
@@ -154,10 +156,28 @@ const DEFAULT_NIP46_RELAYS = [
   "wss://relay.damus.io",
 ];
 
+// Check if we need to restore a session on initial load
+function getInitialState(): {
+  config: NostrConfig | null;
+  isRestoring: boolean;
+} {
+  // First check for extension config (synchronous)
+  const extensionConfig = getInitialExtensionConfig();
+  if (extensionConfig) {
+    return { config: extensionConfig, isRestoring: false };
+  }
+
+  // Check if there's a stored NIP-46 config that needs async restoration
+  const hasStoredNip46 = getStoredNip46Config() !== null;
+  return { config: null, isRestoring: hasStoredNip46 };
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const [initialState] = useState(getInitialState);
   const [nostrConfig, setNostrConfig] = useState<NostrConfig | null>(
-    getInitialExtensionConfig
+    initialState.config
   );
+  const [isRestoring, setIsRestoring] = useState(initialState.isRestoring);
   const [isLoading, setIsLoading] = useState(false);
   const [nip46State, setNip46State] = useState<Nip46ConnectionState>("idle");
   const [nip46Error, setNip46Error] = useState<string | null>(null);
@@ -170,22 +190,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Attempt to restore NIP-46 session on mount
   const hasAttemptedNip46Restore = useRef(false);
-  if (!hasAttemptedNip46Restore.current && !nostrConfig) {
+  if (!hasAttemptedNip46Restore.current && isRestoring) {
     hasAttemptedNip46Restore.current = true;
-    const stored = getStoredNip46Config();
-    if (stored) {
-      // Set loading state and attempt reconnection
-      setIsLoading(true);
-      reconnectNip46()
-        .then((config) => {
-          if (config) {
-            setNostrConfig(config);
-          }
-        })
-        .finally(() => {
-          setIsLoading(false);
-        });
-    }
+    reconnectNip46()
+      .then((config) => {
+        if (config) {
+          setNostrConfig(config);
+        }
+      })
+      .finally(() => {
+        setIsRestoring(false);
+      });
   }
 
   const login = useCallback(async () => {
@@ -331,6 +346,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         nostrConfig,
         isAuthenticated: nostrConfig !== null,
+        isRestoring,
         isLoading,
         login,
         loginWithNip46,
