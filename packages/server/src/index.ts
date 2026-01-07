@@ -1,11 +1,9 @@
-loadEnvFile();
-
 import app from "./app";
 import { setupDatabase } from "./utils/database";
 import ws from "ws";
 import { useWebSocketImplementation } from "nostr-tools/pool";
 import { logger } from "./utils/logger";
-import { AppConfig, loadEnvFile } from "./config/index";
+import { AppConfig } from "./config/index";
 import { createServer } from "http";
 import { websocketUpgradeController } from "./websocket/controller";
 import { communicatorService } from "./config";

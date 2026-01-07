@@ -43,7 +43,6 @@
     "@types/jsonwebtoken": "^9.0.9",
     "@types/pg": "^8.11.13",
     "@types/ws": "^8.5.13",
-    "dotenv": "^16.3.1",
     "npubcash-types": "workspace:^",
     "pg": "^8.11.3",
     "typescript": "^5.8.3"

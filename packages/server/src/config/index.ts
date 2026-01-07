@@ -1,4 +1,3 @@
-import { config } from "dotenv";
 import {
   getApiModeFromEnv,
   getDbConnectionStringFromEnv,
@@ -11,7 +10,7 @@ import {
   getUsernameConfigFromEnv,
 } from "./env";
 import { NostrConfig, ZapKeys } from "./nostr";
-import { resolve } from "path";
+
 
 export class AppConfig {
   private _logLevel: "info" | "debug";
@@ -89,10 +88,6 @@ export class AppConfig {
   }
 
   static init() {
-    if (process.env.NODE_ENV !== "production") {
-      loadEnvFile();
-    } else {
-    }
     if (AppConfig.instance) {
       return;
     }
@@ -105,10 +100,4 @@ export class AppConfig {
     }
     return AppConfig.instance;
   }
-}
-
-export function loadEnvFile() {
-  const rootDir = process.env.ROOT_DIR ?? process.cwd();
-  const envPath = resolve(rootDir, ".env");
-  config({ path: envPath });
 }

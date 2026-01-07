@@ -25,9 +25,11 @@ app.use((req, _, next) => {
 });
 app.use(baseRouter);
 if (config.apiMode === "BOTH") {
-  app.use("/", express.static(path.join(__dirname, "../frontend")));
+  const frontendPath = path.join(import.meta.dir, "../../frontend/dist");
+  logger.info(`Serving frontend from: ${frontendPath}`);
+  app.use(express.static(frontendPath));
   app.get("*", (_, res: Response) => {
-    res.sendFile(path.join(__dirname, "../frontend/index.html"));
+    res.sendFile(path.join(frontendPath, "index.html"));
   });
 }
 app.use(errorHandler);

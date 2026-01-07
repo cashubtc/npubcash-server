@@ -4,10 +4,10 @@
     "./packages/*"
   ],
   "scripts": {
-    "build": "ROOT_DIR=$(pwd) bun run --filter '*' build",
-    "dev": "ROOT_DIR=$(pwd) bun run --filter '!@npubcash-env' dev",
-    "setup": "ROOT_DIR=$(pwd) node dist/env/index.js",
-    "start": "ROOT_DIR=$(pwd) node dist/server/index.cjs"
+    "build": "bun run --filter '*' build",
+    "dev": "bun run --filter '!@npubcash-env' dev",
+    "setup": "node dist/env/index.js",
+    "start": "NODE_ENV=development bun run --filter '@npubcash/server' start"
   },
   "devDependencies": {
     "vite": "7.3.0"
