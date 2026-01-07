@@ -1,22 +1,22 @@
 import { SimplePool } from "nostr-tools";
-import { CashuMint, CashuWallet } from "@cashu/cashu-ts";
-import { PostgresUserRepository } from "./infrastructure/db/postgresUserRepository";
 import { UserService } from "./domain/user/UserService";
 import { CommunicatorService } from "./domain/communicator/CommunicatorService";
 import { ProofService } from "./domain/proof/proofService";
-import { PostgresProofRepository } from "./infrastructure/db/postgresProofRepository";
-import { PostgresMintRepository } from "./infrastructure/db/postgresMintRepository";
 import { MintService } from "./domain/mint/MintService";
 import { QuoteSubscriptionManager } from "./websocket/subs";
 import { eventBus } from "./events";
+import { createRepositories } from "./infrastructure/db/repositoryFactory";
+import { AppConfig } from "./config/index";
+
+const repos = createRepositories(AppConfig.getInstance().dbType);
 
 export const nostrPool = new SimplePool();
 
-export const userRepository = new PostgresUserRepository();
-export const userService = new UserService(userRepository);
+export const userRepository = repos.userRepository;
+export const userService = new UserService(repos.userRepository);
 export const communicatorService = new CommunicatorService();
-export const proofService = new ProofService(new PostgresProofRepository());
-export const mintService = new MintService(new PostgresMintRepository());
+export const proofService = new ProofService(repos.proofRepository);
+export const mintService = new MintService(repos.mintRepository);
 
 export const subManager = new QuoteSubscriptionManager();
 eventBus.on("quotePaid", (quote) => {
