@@ -4,7 +4,7 @@
     "./packages/*"
   ],
   "scripts": {
-    "build": "bun run --filter '*' build",
+    "build": "bun run --filter '*' --build-order build",
     "dev": "bun run --filter '!@npubcash-env' dev",
     "setup": "node dist/env/index.js",
     "start": "NODE_ENV=development bun run --filter '@npubcash/server' start"
