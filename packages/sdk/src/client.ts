@@ -1,13 +1,13 @@
-import type {
-  ErrorResponse,
-  QuotesResponse,
-  UserResponse,
-  Quote,
-} from "npubcash-types";
+import type { ErrorResponse, QuotesResponse, Quote } from "npubcash-types";
 
 import { SettingsManager } from "./settings";
 import { type Logger, NullLogger } from "./logger";
-import { ApiError } from "./types";
+import {
+  ApiError,
+  type ApiResponse,
+  type AuthProvider,
+  type RequestOptions,
+} from "./types";
 import { SubscriptionManager } from "./subscriber";
 
 const API_PATHS = {
@@ -15,24 +15,6 @@ const API_PATHS = {
 };
 const PAGINATION_LIMIT = 50;
 const THROTTLE_DELAY_MS = 200;
-
-/**
- * Abstraction for authentication used by {@link NPCClient}.
- *
- * Implementations should provide:
- * - an HTTP auth token (e.g., a short‑lived JWT in `Bearer <token>` or Nostr token form)
- * - a NIP‑98 token for WebSocket challenge/response
- */
-export interface AuthProvider {
-  getAuthToken(url: string, method: string): Promise<string>;
-  getNostrToken(url: string, method: string): Promise<string>;
-}
-
-type ApiResponse = QuotesResponse | UserResponse;
-
-interface RequestOptions extends RequestInit {
-  params?: Record<string, string | number | boolean>;
-}
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -76,6 +58,7 @@ export class NPCClient {
    */
   public setLogger(logger: Logger): void {
     this.logger = logger;
+    this.settings.setLogger(logger);
   }
 
   /**

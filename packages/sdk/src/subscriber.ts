@@ -1,4 +1,4 @@
-import type { AuthProvider } from "./client";
+import type { AuthProvider } from "./types";
 import type { Logger } from "./logger";
 
 type ServerMessage =
@@ -66,6 +66,7 @@ export class SubscriptionManager {
 
   private onSocketError(_: Event) {
     this.logger?.error("WebSocket error");
+    this.onError?.("WebSocket connection error");
   }
 
   private onMessage(ev: MessageEvent) {

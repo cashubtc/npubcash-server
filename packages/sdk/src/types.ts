@@ -4,15 +4,9 @@ import type {
   UserResponse,
 } from "npubcash-types";
 
-declare global {
-  interface Window {
-    nostr?: {
-      signEvent(event: EventTemplate): Promise<SignedEvent>;
-    };
-  }
-}
-
-export type EventTemplate = Omit<SignedEvent, "id" | "sig" | "pubkey">;
+// ─────────────────────────────────────────────────────────────────────────────
+// Nostr Event Types
+// ─────────────────────────────────────────────────────────────────────────────
 
 export type SignedEvent = {
   kind: number;
@@ -24,13 +18,39 @@ export type SignedEvent = {
   sig: string;
 };
 
+export type EventTemplate = Omit<SignedEvent, "id" | "sig" | "pubkey">;
+
 export type SigningFunc = (t: EventTemplate) => Promise<SignedEvent>;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Authentication
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Abstraction for authentication used by {@link NPCClient}.
+ *
+ * Implementations should provide:
+ * - an HTTP auth token (e.g., a short-lived JWT in `Bearer <token>` or Nostr token form)
+ * - a NIP-98 token for WebSocket challenge/response
+ */
+export interface AuthProvider {
+  getAuthToken(url: string, method: string): Promise<string>;
+  getNostrToken(url: string, method: string): Promise<string>;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// API Types
+// ─────────────────────────────────────────────────────────────────────────────
 
 export type ApiResponse = QuotesResponse | UserResponse | Nip98Response;
 
 export interface RequestOptions extends RequestInit {
   params?: Record<string, string | number | boolean>;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Errors
+// ─────────────────────────────────────────────────────────────────────────────
 
 export class ApiError extends Error {
   statusCode: number;

@@ -1,10 +1,7 @@
-import type { QuotesResponse, UserResponse } from "npubcash-types";
+import type { UserResponse } from "npubcash-types";
 
-type ApiResponse = QuotesResponse | UserResponse;
-
-interface RequestOptions extends RequestInit {
-  params?: Record<string, string | number | boolean>;
-}
+import type { Logger } from "./logger";
+import type { ApiResponse, RequestOptions } from "./types";
 
 interface AuthenticatedRequest {
   <T extends ApiResponse>(path: string, options?: RequestOptions): Promise<T>;
@@ -17,17 +14,27 @@ interface AuthenticatedRequest {
  */
 export class SettingsManager {
   private readonly _authenticatedRequest: AuthenticatedRequest;
+  private logger?: Logger;
 
-  constructor(authenticatedRequest: AuthenticatedRequest) {
+  constructor(authenticatedRequest: AuthenticatedRequest, logger?: Logger) {
     this._authenticatedRequest = authenticatedRequest;
+    this.logger = logger;
+  }
+
+  /**
+   * Set a logger implementation for diagnostics.
+   * @internal Called by NPCClient when its logger is updated.
+   */
+  setLogger(logger: Logger): void {
+    this.logger = logger;
   }
 
   /**
    * Update the user's preferred mint URL.
-   * @param mintUrl Fully‑qualified Cashu mint URL.
+   * @param mintUrl Fully-qualified Cashu mint URL.
    * @returns Updated user settings resource.
    */
-  async setMintUrl(mintUrl: string) {
+  async setMintUrl(mintUrl: string): Promise<UserResponse> {
     try {
       const response = await this._authenticatedRequest<UserResponse>(
         "/api/v2/user/mint",
@@ -39,10 +46,10 @@ export class SettingsManager {
           body: JSON.stringify({ mint_url: mintUrl }),
         }
       );
-      console.log("Mint URL updated successfully:", response);
+      this.logger?.info("Mint URL updated successfully");
       return response;
     } catch (error) {
-      console.error("Error updating mint URL:", error);
+      this.logger?.error("Error updating mint URL:", error);
       throw error;
     }
   }
@@ -52,7 +59,7 @@ export class SettingsManager {
    * @param lockQuotes When true, new quotes are locked by default.
    * @returns Updated user settings resource.
    */
-  async setLock(lockQuotes: boolean) {
+  async setLock(lockQuotes: boolean): Promise<UserResponse> {
     try {
       const response = await this._authenticatedRequest<UserResponse>(
         "/api/v2/user/lock",
@@ -64,10 +71,10 @@ export class SettingsManager {
           body: JSON.stringify({ lockQuotes }),
         }
       );
-      console.log("Locking updated successfully:", response);
+      this.logger?.info("Lock setting updated successfully");
       return response;
     } catch (error) {
-      console.error("Error updating lock setting:", error);
+      this.logger?.error("Error updating lock setting:", error);
       throw error;
     }
   }
