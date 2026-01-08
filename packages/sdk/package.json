@@ -4,10 +4,10 @@
   "type": "module",
   "main": "./dist/npc-sdk.cjs",
   "module": "./dist/npc-sdk.mjs",
-  "types": "./dist/types/index.d.ts",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/types/index.d.ts",
+      "types": "./dist/index.d.ts",
       "import": "./dist/npc-sdk.mjs",
       "require": "./dist/npc-sdk.cjs"
     }
@@ -16,9 +16,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "vite build && tsc -p tsconfig.build.json",
-    "dev": "vite",
-    "preview": "vite preview"
+    "build": "vite build"
   },
   "dependencies": {
     "nostr-tools": "^2.15.0",
@@ -26,6 +24,7 @@
   },
   "devDependencies": {
     "typescript": "~5.8.3",
-    "vite": "^7.0.4"
+    "vite": "^7.0.4",
+    "vite-plugin-dts": "^4.5.4"
   }
 }
