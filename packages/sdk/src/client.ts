@@ -1,17 +1,27 @@
-import type { ErrorResponse, QuotesResponse, Quote } from "npubcash-types";
+import type {
+  ErrorResponse,
+  QuotesResponse,
+  Quote,
+  UserResponse,
+  User,
+} from "npubcash-types";
 
 import { SettingsManager } from "./settings";
 import { type Logger, NullLogger } from "./logger";
 import {
   ApiError,
+  PaymentRequiredError,
   type ApiResponse,
   type AuthProvider,
   type RequestOptions,
 } from "./types";
 import { SubscriptionManager } from "./subscriber";
+import { PaymentRequest } from "@cashu/cashu-ts";
 
 const API_PATHS = {
   QUOTES: "/api/v2/wallet/quotes",
+  INFO: "/api/v2/user/info",
+  USERNAME: "/api/v2/user/username",
 };
 const PAGINATION_LIMIT = 50;
 const THROTTLE_DELAY_MS = 200;
@@ -62,6 +72,48 @@ export class NPCClient {
   }
 
   /**
+   * Fetch account information for the authenticated user.
+   *
+   * @returns The user's account information.
+   * @throws {ApiError} When the request fails.
+   */
+  public async getInfo(): Promise<User> {
+    const infoRes = await this._authenticatedRequest<UserResponse>(
+      API_PATHS.INFO,
+    );
+    console.log(infoRes);
+    return infoRes.data.user;
+  }
+
+  /**
+   * Set the username for the authenticated user.
+   *
+   * This method supports the Cashu payment flow. Call without a token first
+   * to receive payment requirements, then call again with the token to complete.
+   *
+   * @param username The desired username.
+   * @param token Optional Cashu token for payment.
+   * @throws {PaymentRequiredError} When payment is required. Contains the
+   *         {@link PaymentRequest} with amount and mint details.
+   * @throws {ApiError} When the request fails for other reasons.
+   */
+  public async setUsername(username: string, token?: string) {
+    const requestOptions = {
+      method: "POST",
+      body: JSON.stringify({ username }),
+      headers: {
+        "content-type": "application/json",
+        ...(token ? { "X-Cashu": token } : {}),
+      },
+    };
+    const res = await this._authenticatedRequest(
+      API_PATHS.USERNAME,
+      requestOptions,
+    );
+    return res;
+  }
+
+  /**
    * Fetch quotes created since a UNIX timestamp (in seconds).
    * Handles pagination internally.
    * @param since UNIX timestamp in seconds.
@@ -94,7 +146,7 @@ export class NPCClient {
    */
   public subscribe(
     onUpdate: (quoteId: string) => void,
-    onError?: (msg: string) => void
+    onError?: (msg: string) => void,
   ) {
     const url = new URL(`${this._baseUrl}/api/v2/ws/quote`);
     const wsUrl = `${url.protocol === "https:" ? "wss:" : "ws:"}//${url.host}${
@@ -105,7 +157,7 @@ export class NPCClient {
       this.authProvider,
       onUpdate,
       this.logger,
-      onError
+      onError,
     );
     return () => manager.dispose();
   }
@@ -125,13 +177,13 @@ export class NPCClient {
 
       const data = await this._authenticatedRequest<QuotesResponse>(
         API_PATHS.QUOTES,
-        { params: requestParams }
+        { params: requestParams },
       );
 
       const fetchedQuotes = data.data.quotes;
       allQuotes = allQuotes.concat(fetchedQuotes);
       this.logger.debug(
-        `Fetched ${fetchedQuotes.length} quotes. Total fetched: ${allQuotes.length}`
+        `Fetched ${fetchedQuotes.length} quotes. Total fetched: ${allQuotes.length}`,
       );
 
       const totalAvailable = data.metadata.total;
@@ -146,14 +198,14 @@ export class NPCClient {
     }
 
     this.logger.info(
-      `Successfully fetched a total of ${allQuotes.length} quotes.`
+      `Successfully fetched a total of ${allQuotes.length} quotes.`,
     );
     return allQuotes;
   }
 
   private async _authenticatedRequest<T extends ApiResponse>(
     path: string,
-    options: RequestOptions = {}
+    options: RequestOptions = {},
   ): Promise<T> {
     const url = new URL(`${this._baseUrl}${path}`);
 
@@ -169,7 +221,7 @@ export class NPCClient {
       const urlForAuth = `${url.protocol}//${url.host}${url.pathname}`;
       const authToken = await this.authProvider.getAuthToken(
         urlForAuth,
-        options.method || "GET"
+        options.method || "GET",
       );
       this.logger.debug(`Auth token obtained for URL: ${urlForAuth}`);
 
@@ -188,6 +240,11 @@ export class NPCClient {
           status: res.status,
           url: url.toString(),
         });
+        if (res.status === 402) {
+          const request = res.headers.get("X-Cashu")!;
+          const parsed = PaymentRequest.fromEncodedRequest(request);
+          throw new PaymentRequiredError(errorMessage, parsed);
+        }
         throw new ApiError(errorMessage, res.status);
       }
 

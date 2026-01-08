@@ -1,3 +1,4 @@
+import type { PaymentRequest } from "@cashu/cashu-ts";
 import type {
   Nip98Response,
   QuotesResponse,
@@ -58,5 +59,13 @@ export class ApiError extends Error {
     super(message);
     this.name = "ApiError";
     this.statusCode = status || 500;
+  }
+}
+
+export class PaymentRequiredError extends ApiError {
+  paymentRequest: PaymentRequest;
+  constructor(message: string, paymentRequest: PaymentRequest) {
+    super(message, 402);
+    this.paymentRequest = paymentRequest;
   }
 }
