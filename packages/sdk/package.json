@@ -1,6 +1,6 @@
 {
   "name": "npubcash-sdk",
-  "version": "0.3.0",
+  "version": "0.3.2",
   "type": "module",
   "main": "./dist/npc-sdk.cjs",
   "module": "./dist/npc-sdk.mjs",

@@ -15,7 +15,12 @@ export { NPCClient } from "./client";
 export { type Logger, ConsoleLogger } from "./logger";
 
 // Types for consumers
-export type { AuthProvider, SigningFunc, EventTemplate, SignedEvent } from "./types";
+export type {
+  AuthProvider,
+  SigningFunc,
+  EventTemplate,
+  SignedEvent,
+} from "./types";
 
 // Errors
-export { ApiError } from "./types";
+export { ApiError, PaymentRequiredError } from "./types";
