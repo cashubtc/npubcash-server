@@ -7,11 +7,27 @@ import { normalizeUrl } from "@/utils/utils";
 import { Token } from "@cashu/cashu-ts";
 import { MintCommunicator } from "almnd";
 import { Logger } from "winston";
+import {
+  HybridSubscriptionManager,
+  MintQuotePayload,
+  UnsubscribeHandler,
+} from "./infra";
 
 const config = AppConfig.getInstance();
 
 export class CommunicatorService {
   private communicators: { [mintUrl: string]: MintCommunicator } = {};
+  private subscriptionManager: HybridSubscriptionManager;
+  private activeSubscriptions: Map<string, UnsubscribeHandler> = new Map();
+
+  constructor() {
+    this.subscriptionManager = new HybridSubscriptionManager({
+      slowPollingIntervalMs: 20000,
+      fastPollingIntervalMs: 5000,
+      periodicReconnectMs: 180000, // 3 minutes
+      logger,
+    });
+  }
 
   async redeemToken(token: Token, logger?: Logger) {
     logger?.info(`Receiving proofs on mint ${token.mint}`);
@@ -35,49 +51,101 @@ export class CommunicatorService {
     }
   }
 
-  createQuoteSubscription(quote: MintQuote, logger: Logger) {
-    const expiry = Math.floor(quote.expiresAt.getTime() / 1000);
-    const sub = this.getCommunicator(quote.mintUrl).pollForMintQuote(
-      quote.quoteId,
-      expiry,
-    );
-    sub.on("polling", () => {
-      logger?.debug(
-        `Polling for mint quote update: ${quote.quoteId}`,
-        quote.quoteId,
-      );
+  createQuoteSubscription(quote: MintQuote, reqLogger: Logger) {
+    const mintUrl = normalizeUrl(quote.mintUrl);
+    const quoteId = quote.quoteId;
+
+    // Check if already subscribed
+    if (this.activeSubscriptions.has(quoteId)) {
+      reqLogger.debug("[CommSvc] Already subscribed to quote", { quoteId });
+      return;
+    }
+
+    reqLogger.info("[CommSvc] Creating hybrid subscription for quote", {
+      mintUrl,
+      quoteId,
     });
-    sub.on("paid", () => {
-      logger?.debug(`Mint quote got paid: ${quote.quoteId}`, quote);
+
+    const { subId, unsubscribe } = this.subscriptionManager.subscribe(
+      mintUrl,
+      quoteId,
+      (payload: MintQuotePayload) => {
+        this.handleQuoteUpdate(quote, payload, reqLogger, unsubscribe);
+      },
+    );
+
+    this.activeSubscriptions.set(quoteId, unsubscribe);
+
+    reqLogger.debug("[CommSvc] Subscribed to quote", {
+      mintUrl,
+      quoteId,
+      subId,
+    });
+  }
+
+  private handleQuoteUpdate(
+    quote: MintQuote,
+    payload: MintQuotePayload,
+    reqLogger: Logger,
+    unsubscribe: UnsubscribeHandler,
+  ) {
+    reqLogger.debug("[CommSvc] Received quote update", {
+      state: payload.state,
+      quoteId: quote.quoteId,
+    });
+
+    if (payload.state === "PAID") {
+      reqLogger.info("[CommSvc] Mint quote got paid", { quoteId: quote.quoteId });
       eventBus.emit("quotePaid", quote);
       quote.setPaid();
+
       if (quote.serializedZapRequest && config.nostr.nostrEnabled) {
         try {
           const zapRequest = JSON.parse(quote.serializedZapRequest);
           handleZapRequest(quote.quoteId, zapRequest, quote.paymentRequest);
         } catch (e) {
-          logger?.error(
-            `Failed to handle zap request for quote: ${quote.quoteId}`,
-          );
+          reqLogger.error("[CommSvc] Failed to handle zap request", { quoteId: quote.quoteId });
         }
       }
-      sub.cancel();
-    });
-    sub.on("expired", () => {
-      logger?.debug(`Mint quote expired: ${quote.quoteId}`);
+
+      this.cleanupSubscription(quote.quoteId, unsubscribe);
+    } else if (payload.state === "ISSUED") {
+      // Already minted, just cleanup
+      reqLogger.debug("[CommSvc] Quote already issued", { quoteId: quote.quoteId });
+      this.cleanupSubscription(quote.quoteId, unsubscribe);
+    } else if (this.isExpired(payload.expiry)) {
+      reqLogger.debug("[CommSvc] Mint quote expired", { quoteId: quote.quoteId });
       quote.setStateAndUpdateDb("EXPIRED");
-      sub.cancel();
-    });
+      this.cleanupSubscription(quote.quoteId, unsubscribe);
+    }
+  }
+
+  private isExpired(expiry: number): boolean {
+    return expiry > 0 && Date.now() / 1000 > expiry;
+  }
+
+  private cleanupSubscription(
+    quoteId: string,
+    unsubscribe: UnsubscribeHandler,
+  ) {
+    unsubscribe();
+    this.activeSubscriptions.delete(quoteId);
   }
 
   async setupPoller() {
     const pendingSubs = await MintQuote.getPendingMintQuotes();
-    logger.debug(
-      `Poller-Setup: Retrieved ${pendingSubs.length} pending subs from DB`,
-    );
+    logger.info("[CommSvc] Setup: Retrieved pending subscriptions from DB", {
+      count: pendingSubs.length,
+    });
     pendingSubs.forEach((quote) => {
       this.createQuoteSubscription(quote, logger);
     });
+  }
+
+  shutdown() {
+    logger.info("[CommSvc] Shutting down");
+    this.subscriptionManager.closeAll();
+    this.activeSubscriptions.clear();
   }
 
   getCommunicator(mintUrl: string) {
