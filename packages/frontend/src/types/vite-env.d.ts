@@ -1,7 +1,8 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
-  readonly NPC_HOSTNAME?: string;
+  readonly HOSTNAME?: string;
+  readonly NPC_BASEURL?: string;
 }
 
 interface ImportMeta {

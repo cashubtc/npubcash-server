@@ -6,7 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { NPCProvider } from "@/contexts/NPCContext";
 import { initializeWallet, type Manager } from "@/lib/coco";
 
-const NPC_BASE_URL = "https://npubx.cash";
+const NPC_BASE_URL = import.meta.env.NPC_BASEURL ?? import.meta.env.HOSTNAME ?? "https://npubcash.me";
 
 export const Route = createFileRoute("/_authed")({
   beforeLoad: ({ context }) => {
