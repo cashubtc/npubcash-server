@@ -1,8 +1,8 @@
-app = "npubx-cash"
+app = "nightly-npubcash"
 primary_region = "ams"
 
 [env]
-HOSTNAME = "https://npubx.cash"
+HOSTNAME = "https://npuby.cash"
 LNURL_MAX_AMOUNT = "100000000"
 LNURL_MIN_AMOUNT = "1000"
 MINTURL = "https://mint.minibits.cash/Bitcoin"
@@ -17,6 +17,10 @@ force_https = true
 internal_port = 8_000
 min_machines_running = 0
 processes = ["app"]
+
+[mounts]
+source = "nighly_npc_data"
+destination = "/data"
 
 [[vm]]
 size = "shared-cpu-1x"

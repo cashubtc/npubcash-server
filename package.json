@@ -10,6 +10,7 @@
     "start": "NODE_ENV=development bun run --filter '@npubcash/server' start"
   },
   "devDependencies": {
+    "@flydotio/dockerfile": "^0.7.10",
     "vite": "7.3.0"
   },
   "overrides": {
