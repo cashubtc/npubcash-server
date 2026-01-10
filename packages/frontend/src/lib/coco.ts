@@ -42,7 +42,8 @@ export async function initializeWallet(
 ): Promise<Manager> {
   const repo = new IndexedDbRepositories({ name: `coco-${pubkey}` });
   const logger = new ConsoleLogger("coco", { level: "debug" });
-  const npcPlugin = new NPCPlugin("https://npubx.cash", signer, {
+  const baseUrl = import.meta.env.NPC_HOSTNAME || "https://npub.cash";
+  const npcPlugin = new NPCPlugin(baseUrl, signer, {
     useWebsocket: true,
     syncIntervalMs: 90000,
     logger,
@@ -56,5 +57,7 @@ export async function initializeWallet(
     logger,
   });
   await npcPlugin.sync();
+  // @ts-expect-error for testing
+  window.coco = coco;
   return coco;
 }

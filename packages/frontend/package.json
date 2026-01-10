@@ -18,7 +18,7 @@
     "clsx": "^2.1.1",
     "coco-cashu-core": "^1.1.2-rc.38",
     "coco-cashu-indexeddb": "^1.1.2-rc.38",
-    "coco-cashu-plugin-npc": "2.2.3",
+    "coco-cashu-plugin-npc": "^2.2.4",
     "coco-cashu-react": "^1.1.2-rc.38",
     "lucide-react": "^0.562.0",
     "nostr-tools": "^2.19.4",
