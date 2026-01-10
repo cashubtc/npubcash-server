@@ -4,6 +4,7 @@ import {
   useState,
   useCallback,
   useRef,
+  useEffect,
   type ReactNode,
 } from "react";
 
@@ -183,10 +184,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [nip46Error, setNip46Error] = useState<string | null>(null);
 
   // Track pending NIP-46 connection for cancellation
+  // connectionId increments on each new attempt so old attempts can detect they're stale
   const pendingNip46Ref = useRef<{
     bunkerSigner: BunkerSigner | null;
-    cancelled: boolean;
-  }>({ bunkerSigner: null, cancelled: false });
+    connectionId: number;
+  }>({ bunkerSigner: null, connectionId: 0 });
+
+  // Store connection params for reconnection on visibility change
+  const nip46ConnectionRef = useRef<{
+    clientSecretKey: Uint8Array;
+    connectionURI: string;
+  } | null>(null);
 
   // Attempt to restore NIP-46 session on mount
   const hasAttemptedNip46Restore = useRef(false);
@@ -223,30 +231,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const loginWithNip46 = useCallback(
-    (relays: string[] = DEFAULT_NIP46_RELAYS): string => {
-      // Reset state
-      setNip46State("awaiting");
-      setNip46Error(null);
-      pendingNip46Ref.current = { bunkerSigner: null, cancelled: false };
+  // Start the async NIP-46 connection process
+  const startNip46Connection = useCallback(
+    (clientSecretKey: Uint8Array, connectionURI: string) => {
+      // Increment connection ID and capture it for this attempt
+      const myConnectionId = ++pendingNip46Ref.current.connectionId;
+      pendingNip46Ref.current.bunkerSigner = null;
 
-      // Generate a new client keypair for this connection
-      const clientSecretKey = generateSecretKey();
-      const clientPubkey = getPublicKey(clientSecretKey);
+      // Helper to check if this connection attempt is still current
+      const isStale = () => pendingNip46Ref.current.connectionId !== myConnectionId;
 
-      // Generate a random secret for the connection
-      const secret = bytesToHex(crypto.getRandomValues(new Uint8Array(16)));
-
-      // Create the nostrconnect:// URI
-      const connectionURI = createNostrConnectURI({
-        clientPubkey,
-        relays,
-        secret,
-        name: "npub.cash",
-        perms: ["sign_event"],
-      });
-
-      // Start the async connection process
       (async () => {
         try {
           // Wait for the bunker to connect
@@ -263,8 +257,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             120000 // 2 minute timeout
           );
 
-          // Check if cancelled while waiting
-          if (pendingNip46Ref.current.cancelled) {
+          // Check if this attempt was superseded by a newer one
+          if (isStale()) {
             await bunkerSigner.close();
             return;
           }
@@ -275,8 +269,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // so we just need to get the user's public key
           const userPubkey = await bunkerSigner.getPublicKey();
 
-          // Check again if cancelled
-          if (pendingNip46Ref.current.cancelled) {
+          // Check again if stale
+          if (isStale()) {
             await bunkerSigner.close();
             return;
           }
@@ -301,27 +295,92 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             bunkerSigner,
           };
 
+          // Clear connection params since we're done
+          nip46ConnectionRef.current = null;
+
           setNostrConfig(config);
           setNip46State("connected");
         } catch (e) {
-          if (!pendingNip46Ref.current.cancelled) {
+          // Only show error if this is still the current connection attempt
+          if (!isStale()) {
             console.error("NIP-46 login failed:", e);
             setNip46State("error");
             setNip46Error(e instanceof Error ? e.message : "Connection failed");
           }
         }
       })();
-
-      return connectionURI;
     },
     []
   );
 
+  const loginWithNip46 = useCallback(
+    (relays: string[] = DEFAULT_NIP46_RELAYS): string => {
+      // Reset state
+      setNip46State("awaiting");
+      setNip46Error(null);
+
+      // Generate a new client keypair for this connection
+      const clientSecretKey = generateSecretKey();
+      const clientPubkey = getPublicKey(clientSecretKey);
+
+      // Generate a random secret for the connection
+      const secret = bytesToHex(crypto.getRandomValues(new Uint8Array(16)));
+
+      // Create the nostrconnect:// URI
+      const connectionURI = createNostrConnectURI({
+        clientPubkey,
+        relays,
+        secret,
+        name: "npub.cash",
+        perms: ["sign_event"],
+      });
+
+      // Store params for reconnection on visibility change
+      nip46ConnectionRef.current = { clientSecretKey, connectionURI };
+
+      // Start the connection
+      startNip46Connection(clientSecretKey, connectionURI);
+
+      return connectionURI;
+    },
+    [startNip46Connection]
+  );
+
+  // Re-establish NIP-46 connection when browser returns to foreground
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (
+        document.visibilityState === "visible" &&
+        nip46State === "awaiting" &&
+        nip46ConnectionRef.current
+      ) {
+        console.log("Browser foregrounded, re-establishing NIP-46 connection...");
+
+        // Close current bunkerSigner if exists (startNip46Connection will invalidate old attempt via connection ID)
+        if (pendingNip46Ref.current.bunkerSigner) {
+          pendingNip46Ref.current.bunkerSigner.close();
+        }
+
+        // Restart connection with same params
+        const { clientSecretKey, connectionURI } = nip46ConnectionRef.current;
+        startNip46Connection(clientSecretKey, connectionURI);
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [nip46State, startNip46Connection]);
+
   const cancelNip46Login = useCallback(() => {
-    pendingNip46Ref.current.cancelled = true;
+    // Increment connection ID to invalidate any pending connection
+    pendingNip46Ref.current.connectionId++;
     if (pendingNip46Ref.current.bunkerSigner) {
       pendingNip46Ref.current.bunkerSigner.close();
     }
+    // Clear connection params to prevent reconnection on visibility change
+    nip46ConnectionRef.current = null;
     setNip46State("idle");
     setNip46Error(null);
   }, []);

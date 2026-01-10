@@ -72,9 +72,15 @@ function Login() {
         </p>
 
         <div className="flex flex-col items-center gap-4 rounded-lg border bg-card p-6">
-          <div className="rounded-lg bg-white p-3">
+          <a
+            href={nostrConnectURI}
+            className="rounded-lg bg-white p-3 transition-opacity hover:opacity-80"
+          >
             <QRCode value={nostrConnectURI} size={200} />
-          </div>
+          </a>
+          <p className="text-xs text-muted-foreground">
+            Tap to open in Amber or scan with your signer app
+          </p>
           <Button variant="outline" size="sm" onClick={copyToClipboard}>
             Copy Connection String
           </Button>
