@@ -20,7 +20,11 @@ app.use(requireHTTPS);
 
 app.use((req, _, next) => {
   req.reqId = randomUUID();
-  logger.info({ message: "Incoming request", reqId: req.reqId, path: req.url });
+  const isApiRequest =
+    req.url.startsWith("/api") || req.url.startsWith("/.well-known");
+  if (isApiRequest) {
+    logger.info({ message: "Incoming request", reqId: req.reqId, path: req.url });
+  }
   next();
 });
 app.use(baseRouter);

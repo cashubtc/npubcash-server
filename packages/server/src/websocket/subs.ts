@@ -1,5 +1,4 @@
-import { eventBus } from "@/events";
-import { MintQuote } from "@/models/mint";
+import { MintQuote } from "@/domain/mintQuote/MintQuote";
 import { logger } from "@/utils/logger";
 
 export class QuoteSubscriptionManager {

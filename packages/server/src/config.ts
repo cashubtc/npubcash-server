@@ -13,8 +13,9 @@ const repos = createRepositories(AppConfig.getInstance().dbType);
 export const nostrPool = new SimplePool();
 
 export const userRepository = repos.userRepository;
+export const mintQuoteRepository = repos.mintQuoteRepository;
 export const userService = new UserService(repos.userRepository);
-export const communicatorService = new CommunicatorService();
+export const communicatorService = new CommunicatorService(repos.mintQuoteRepository);
 export const proofService = new ProofService(repos.proofRepository);
 export const mintService = new MintService(repos.mintRepository);
 

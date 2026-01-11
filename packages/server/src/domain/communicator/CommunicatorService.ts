@@ -1,6 +1,7 @@
 import { AppConfig } from "@/config/index";
+import { MintQuote } from "@/domain/mintQuote/MintQuote";
+import { MintQuoteRepository } from "@/domain/mintQuote/MintQuoteRepository";
 import { eventBus } from "@/events";
-import { MintQuote } from "@/models/mint";
 import { logger } from "@/utils/logger";
 import { handleZapRequest } from "@/utils/nostr";
 import { normalizeUrl } from "@/utils/utils";
@@ -19,8 +20,10 @@ export class CommunicatorService {
   private communicators: { [mintUrl: string]: MintCommunicator } = {};
   private subscriptionManager: HybridSubscriptionManager;
   private activeSubscriptions: Map<string, UnsubscribeHandler> = new Map();
+  private mintQuoteRepository: MintQuoteRepository;
 
-  constructor() {
+  constructor(mintQuoteRepository: MintQuoteRepository) {
+    this.mintQuoteRepository = mintQuoteRepository;
     this.subscriptionManager = new HybridSubscriptionManager({
       slowPollingIntervalMs: 20000,
       fastPollingIntervalMs: 5000,
@@ -83,7 +86,7 @@ export class CommunicatorService {
     });
   }
 
-  private handleQuoteUpdate(
+  private async handleQuoteUpdate(
     quote: MintQuote,
     payload: MintQuotePayload,
     reqLogger: Logger,
@@ -97,7 +100,7 @@ export class CommunicatorService {
     if (payload.state === "PAID") {
       reqLogger.info("[CommSvc] Mint quote got paid", { quoteId: quote.quoteId });
       eventBus.emit("quotePaid", quote);
-      quote.setPaid();
+      await this.mintQuoteRepository.setPaid(quote.id);
 
       if (quote.serializedZapRequest && config.nostr.nostrEnabled) {
         try {
@@ -115,7 +118,7 @@ export class CommunicatorService {
       this.cleanupSubscription(quote.quoteId, unsubscribe);
     } else if (this.isExpired(payload.expiry)) {
       reqLogger.debug("[CommSvc] Mint quote expired", { quoteId: quote.quoteId });
-      quote.setStateAndUpdateDb("EXPIRED");
+      await this.mintQuoteRepository.updateState(quote.id, "EXPIRED");
       this.cleanupSubscription(quote.quoteId, unsubscribe);
     }
   }
@@ -133,7 +136,7 @@ export class CommunicatorService {
   }
 
   async setupPoller() {
-    const pendingSubs = await MintQuote.getPendingMintQuotes();
+    const pendingSubs = await this.mintQuoteRepository.getPending();
     logger.info("[CommSvc] Setup: Retrieved pending subscriptions from DB", {
       count: pendingSubs.length,
     });

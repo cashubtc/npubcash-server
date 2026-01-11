@@ -1,4 +1,5 @@
-import { MintQuote } from "@/models/mint";
+import { mintQuoteRepository } from "@/config";
+import { MintQuote } from "@/domain/mintQuote/MintQuote";
 import { dateToUnix } from "@/utils/time";
 import { NextFunction, Request, Response } from "express";
 import { Quote, QuotesResponse, ReponseMetadata } from "@npubcash/types";
@@ -25,14 +26,14 @@ export async function getMintQuotes(
 
     const parsedQuery = parseQueryParameters(req.query);
 
-    const lastQuotes = await MintQuote.getUserMintHistory(
+    const lastQuotes = await mintQuoteRepository.getUserHistory(
       authData.data.pubkey,
       parsedQuery.limit,
       parsedQuery.offset,
       parsedQuery.since,
     );
 
-    const quotes = lastQuotes.mints.map(mapMintQuoteToResponse);
+    const quotes = lastQuotes.quotes.map(mapMintQuoteToResponse);
     const metadata = createMetadata(parsedQuery, lastQuotes.total);
 
     const response: QuotesResponse = {

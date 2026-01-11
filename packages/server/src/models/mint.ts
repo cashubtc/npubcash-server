@@ -125,7 +125,7 @@ export class MintQuote implements MintQuoteConfig {
 
   static async getToBeExpiredMintQuotes() {
     const res = await queryWrapper<MintQuoteRow>(
-      `SELECT * FROM mint_quotes WHERE expires_at <= NOW() AND state = 'UNPAID'`,
+      `SELECT * FROM mint_quotes WHERE expires_at <= CURRENT_TIMESTAMP AND state = 'UNPAID'`,
       [],
     );
     return res.rows.map((r) => this.castRowToQuote(r));
@@ -152,7 +152,7 @@ export class MintQuote implements MintQuoteConfig {
     }
     const query = `
     WITH total_count AS (
-        SELECT COUNT(*)::int AS count
+        SELECT COUNT(*) AS count
         FROM mint_quotes
         WHERE ${filter.join(" and ")}
     )

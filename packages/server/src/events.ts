@@ -1,4 +1,4 @@
-import { MintQuote } from "./models/mint";
+import { MintQuote } from "./domain/mintQuote/MintQuote";
 import { logger } from "./utils/logger";
 
 type Events = {

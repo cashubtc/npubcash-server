@@ -1,6 +1,10 @@
 app = "nightly-npubcash"
 primary_region = "ams"
 
+[build]
+  [build.args]
+    HOSTNAME = "https://npuby.cash"
+
 [env]
 HOSTNAME = "https://npuby.cash"
 LNURL_MAX_AMOUNT = "100000000"

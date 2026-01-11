@@ -1,6 +1,5 @@
-import { communicatorService, userService } from "@/config";
+import { communicatorService, mintQuoteRepository, userService } from "@/config";
 import { BadRequestError } from "@/errors";
-import { MintQuote } from "@/models/mint";
 import { createLnurlResponse, isValidAmount } from "@/utils/lnurl";
 import { getRequestLogger } from "@/utils/logger";
 import { decodeAndValidateZapRequest } from "@/utils/nostr";
@@ -53,7 +52,7 @@ export async function lnurlController(
         userdata,
         userdata.mintUrl,
       );
-    const mintQuote = await MintQuote.createNewMintQuoteInDb({
+    const mintQuote = await mintQuoteRepository.create({
       unit: "sat",
       quoteId: quote,
       expiresAt: unixToDate(expiry),
