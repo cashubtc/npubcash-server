@@ -1,6 +1,7 @@
 import { User, UserWithName } from "@/domain/user/user";
 import { UserRepository } from "@/domain/user/userRepository";
 import { queryWrapper } from "@/utils/database";
+import { config } from "@/config/index";
 
 type UserTableRow = {
   id: number;
@@ -54,7 +55,7 @@ VALUES ($1, $2, $3)
 ON CONFLICT (pubkey)
 DO UPDATE SET name = $3
 RETURNING *;`;
-    const params = [pubkey, process.env.MINTURL, name];
+    const params = [pubkey, config.mintUrl, name];
     const queryRes = await queryWrapper<UserTableRow>(query, params);
     if (queryRes.rowCount === 0) {
       throw new Error("Did not update username");

@@ -6,9 +6,7 @@ import { decodeAndValidateZapRequest } from "@/utils/nostr";
 import { unixToDate } from "@/utils/time";
 import { NextFunction, Request, Response } from "express";
 import { Event } from "nostr-tools";
-import { AppConfig } from "@/config/index";
-
-const config = AppConfig.getInstance();
+import { config } from "@/config/index";
 
 export async function lnurlController(
   req: Request<

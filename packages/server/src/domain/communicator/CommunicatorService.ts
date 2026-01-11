@@ -1,4 +1,4 @@
-import { AppConfig } from "@/config/index";
+import { config } from "@/config/index";
 import { MintQuote } from "@/domain/mintQuote/MintQuote";
 import { MintQuoteRepository } from "@/domain/mintQuote/MintQuoteRepository";
 import { eventBus } from "@/events";
@@ -13,8 +13,6 @@ import {
   MintQuotePayload,
   UnsubscribeHandler,
 } from "./infra";
-
-const config = AppConfig.getInstance();
 
 export class CommunicatorService {
   private communicators: { [mintUrl: string]: MintCommunicator } = {};

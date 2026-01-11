@@ -2,9 +2,7 @@ import { nip19, nip98 } from "nostr-tools";
 import jwt from "jsonwebtoken";
 import { AuthData, RawAuthToken, SuccessfullAuthData } from "../types";
 import { createHash } from "crypto";
-import { AppConfig } from "../config/index";
-
-const config = AppConfig.getInstance();
+import { config } from "../config/index";
 
 export async function verifyAuth(
   authHeader: string,

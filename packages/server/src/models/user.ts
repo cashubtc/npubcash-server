@@ -1,4 +1,5 @@
 import { queryWrapper } from "../utils/database";
+import { config } from "../config/index";
 
 export class User {
   pubkey: string;
@@ -53,7 +54,7 @@ VALUES ($1, $2, $3)
 ON CONFLICT (pubkey)
 DO UPDATE SET name = $3
 WHERE l_users.name IS NULL;`;
-    const params = [pubkey, process.env.MINTURL, username];
+    const params = [pubkey, config.mintUrl, username];
     const queryRes = await queryWrapper(query, params);
     if (queryRes.rowCount === 0) {
       throw new Error("Did not update username");

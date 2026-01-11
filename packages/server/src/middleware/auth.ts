@@ -1,12 +1,13 @@
 import { NextFunction, Request, Response } from "express";
 import { verifyAuth } from "../utils/auth";
 import { UnauthorizedError } from "@/errors";
+import { config } from "@/config/index";
 
 export function isAuthMiddleware(path: string, method: string) {
   async function isAuth(req: Request, res: Response, next: NextFunction) {
     const userAgent = req.get("user-agent");
     const hostname = req.header("host");
-    const protocol = process.env.NODE_ENV === "development" ? "http" : "https";
+    const protocol = config.nodeEnv === "development" ? "http" : "https";
     if (!hostname || !userAgent) {
       res.status(400);
       return next(new UnauthorizedError("Missing headers!"));

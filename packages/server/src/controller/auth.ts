@@ -2,9 +2,7 @@ import { Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { createHash } from "crypto";
 import { RawAuthToken } from "../types";
-import { AppConfig } from "../config/index";
-
-const config = AppConfig.getInstance();
+import { config } from "../config/index";
 
 function generateAuthJwt(
   pubkey: string,

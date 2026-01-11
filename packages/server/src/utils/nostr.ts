@@ -8,10 +8,8 @@ import {
 import { wrapEvent } from "nostr-tools/nip17";
 import { ZapRequestData } from "../types";
 import { nostrPool } from "../config";
-import { AppConfig } from "../config/index";
+import { config } from "../config/index";
 import { Logger } from "winston";
-
-const config = AppConfig.getInstance();
 
 export function getTagValues(e: Event, tag: string, position: number) {
   const tags = e.tags;
@@ -141,8 +139,8 @@ export async function publishOtp(
   otp: string,
   preferredRelay?: string,
 ) {
-  if (!process.env.ZAP_SECRET_KEY) {
-    throw new Error("No nostr key set");
+  if (!config.nostr.nostrEnabled) {
+    throw new Error("Nostr is not enabled");
   }
   const wrap = wrapEvent(
     config.nostr.zapKeys.secretKey,

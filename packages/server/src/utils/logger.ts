@@ -1,9 +1,9 @@
 import { Request } from "express";
 import winston from "winston";
-import { AppConfig } from "../config/index";
+import { config } from "../config/index";
 
 export const logger = winston.createLogger({
-  level: AppConfig.getInstance().logLevel,
+  level: config.logLevel,
   format: winston.format.json(),
   transports: [new winston.transports.Console()],
 });

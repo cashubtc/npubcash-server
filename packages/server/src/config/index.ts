@@ -3,101 +3,53 @@ import {
   getDbConnectionStringFromEnv,
   getDbTypeFromEnv,
   getEnvVar,
+  getHostnameFromEnv,
   getJwtSecretFromEnv,
   getLogLevelFromEnv,
+  getMintUrlFromEnv,
+  getNodeEnvFromEnv,
+  getPortFromEnv,
   getRelaysFromEnv,
   getSecretKeyFromEnv,
   getUsernameConfigFromEnv,
 } from "./env";
 import { NostrConfig, ZapKeys } from "./nostr";
 
-
-export class AppConfig {
-  private _logLevel: "info" | "debug";
-  private _jwtSecret: string;
-  private _nostr: NostrConfig;
-  private _lnurlLimits: { min: number; max: number } = {
-    min: 1000,
-    max: 100000000,
-  };
-  private _dbType: "postgres" | "sqlite";
-  private _dbConnectionString: string;
-  private _apiMode: "BOTH" | "API_ONLY";
-  private _usernameConfig:
-    | { enabled: false }
-    | { enabled: true; mintUrl: string; amount: number };
-
-  private static instance: AppConfig;
-
-  private constructor() {
-    this._logLevel = getLogLevelFromEnv();
-    this._apiMode = getApiModeFromEnv();
-    this._dbType = getDbTypeFromEnv();
-    this._dbConnectionString = getDbConnectionStringFromEnv();
-    this._usernameConfig = getUsernameConfigFromEnv();
-    if (getEnvVar("NOSTR_ENABLED")) {
-      const secretKey = getSecretKeyFromEnv();
-      const defaultRelays = getRelaysFromEnv();
-      this._nostr = new NostrConfig({
-        nostrEnabled: true,
-        zapKeys: new ZapKeys(secretKey),
-        defaultRelays,
-      });
-    } else {
-      this._nostr = new NostrConfig({ nostrEnabled: false });
-    }
-    this._jwtSecret = getJwtSecretFromEnv();
-    if (process.env.LNURL_MIN_AMOUNT) {
-      this._lnurlLimits.min = parseInt(process.env.LNURL_MIN_AMOUNT);
-    }
-    if (process.env.LNURL_MAX_AMOUNT) {
-      this._lnurlLimits.max = parseInt(process.env.LNURL_MAX_AMOUNT);
-    }
+function createLnurlLimits() {
+  const limits = { min: 1000, max: 100000000 };
+  if (process.env.LNURL_MIN_AMOUNT) {
+    limits.min = parseInt(process.env.LNURL_MIN_AMOUNT);
   }
-
-  get logLevel() {
-    return this._logLevel;
+  if (process.env.LNURL_MAX_AMOUNT) {
+    limits.max = parseInt(process.env.LNURL_MAX_AMOUNT);
   }
-
-  get lnurlLimits() {
-    return this._lnurlLimits;
-  }
-
-  get dbType() {
-    return this._dbType;
-  }
-
-  get dbConnectionString() {
-    return this._dbConnectionString;
-  }
-
-  get nostr() {
-    return this._nostr;
-  }
-
-  get jwtSecret() {
-    return this._jwtSecret;
-  }
-
-  get apiMode() {
-    return this._apiMode;
-  }
-
-  get usernameConfig() {
-    return this._usernameConfig;
-  }
-
-  static init() {
-    if (AppConfig.instance) {
-      return;
-    }
-    AppConfig.instance = new AppConfig();
-  }
-
-  static getInstance(): AppConfig {
-    if (!AppConfig.instance) {
-      AppConfig.init();
-    }
-    return AppConfig.instance;
-  }
+  return limits;
 }
+
+function createNostrConfig() {
+  if (getEnvVar("NOSTR_ENABLED")) {
+    return new NostrConfig({
+      nostrEnabled: true,
+      zapKeys: new ZapKeys(getSecretKeyFromEnv()),
+      defaultRelays: getRelaysFromEnv(),
+    });
+  }
+  return new NostrConfig({ nostrEnabled: false });
+}
+
+export const config = {
+  logLevel: getLogLevelFromEnv(),
+  apiMode: getApiModeFromEnv(),
+  dbType: getDbTypeFromEnv(),
+  dbConnectionString: getDbConnectionStringFromEnv(),
+  usernameConfig: getUsernameConfigFromEnv(),
+  port: getPortFromEnv(),
+  mintUrl: getMintUrlFromEnv(),
+  hostname: getHostnameFromEnv(),
+  nodeEnv: getNodeEnvFromEnv(),
+  nostr: createNostrConfig(),
+  jwtSecret: getJwtSecretFromEnv(),
+  lnurlLimits: createLnurlLimits(),
+} as const;
+
+export type AppConfig = typeof config;

@@ -1,13 +1,11 @@
-import { AppConfig } from "../config/index";
-
-const config = AppConfig.getInstance();
+import { config } from "../config/index";
 
 export function createLnurlResponse(username: string) {
   if (config.nostr.nostrEnabled) {
     return {
-      callback: `${process.env.HOSTNAME}/.well-known/lnurlp/${username}`,
-      maxSendable: Number(process.env.LNURL_MAX_AMOUNT),
-      minSendable: Number(process.env.LNURL_MIN_AMOUNT),
+      callback: `${config.hostname}/.well-known/lnurlp/${username}`,
+      maxSendable: config.lnurlLimits.max,
+      minSendable: config.lnurlLimits.min,
       metadata: JSON.stringify([
         ["text/plain", "A cashu lightning address... Neat!"],
       ]),
@@ -17,9 +15,9 @@ export function createLnurlResponse(username: string) {
     };
   } else {
     return {
-      callback: `${process.env.HOSTNAME}/.well-known/lnurlp/${username}`,
-      maxSendable: Number(process.env.LNURL_MAX_AMOUNT),
-      minSendable: Number(process.env.LNURL_MIN_AMOUNT),
+      callback: `${config.hostname}/.well-known/lnurlp/${username}`,
+      maxSendable: config.lnurlLimits.max,
+      minSendable: config.lnurlLimits.min,
       metadata: JSON.stringify([
         ["text/plain", "A cashu lightning address... Neat!"],
       ]),

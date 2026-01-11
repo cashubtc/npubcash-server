@@ -1,8 +1,6 @@
-import { AppConfig } from "../config/index";
+import { config } from "../config/index";
 import { runMigrations } from "../migrations";
 import { DatabaseAdapter, createDatabaseAdapter } from "../database";
-
-const config = AppConfig.getInstance();
 
 let adapter: DatabaseAdapter | null = null;
 

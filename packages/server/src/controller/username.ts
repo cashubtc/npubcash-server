@@ -6,10 +6,8 @@ import {
 import { NextFunction, Request, Response } from "express";
 import { Token, getDecodedToken } from "@cashu/cashu-ts";
 import { communicatorService, proofService, userService } from "@/config";
-import { AppConfig } from "../config/index";
+import { config } from "../config/index";
 import { SetUsernamePayload } from "npubcash-types";
-
-const config = AppConfig.getInstance();
 
 export async function usernameController(
   req: Request<unknown, unknown, SetUsernamePayload>,

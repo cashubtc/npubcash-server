@@ -6,9 +6,9 @@ import { MintService } from "./domain/mint/MintService";
 import { QuoteSubscriptionManager } from "./websocket/subs";
 import { eventBus } from "./events";
 import { createRepositories } from "./infrastructure/db/repositoryFactory";
-import { AppConfig } from "./config/index";
+import { config } from "./config/index";
 
-const repos = createRepositories(AppConfig.getInstance().dbType);
+const repos = createRepositories(config.dbType);
 
 export const nostrPool = new SimplePool();
 

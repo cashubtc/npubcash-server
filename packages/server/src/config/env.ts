@@ -50,7 +50,7 @@ export function getDbTypeFromEnv(): "postgres" | "sqlite" {
 }
 
 function getDefaultSqlitePath(): string {
-  if (process.env.NODE_ENV === "development") {
+  if (getNodeEnvFromEnv() === "development") {
     return "./data.db";
   }
   // Production: assume /data volume mount
@@ -110,4 +110,30 @@ export function getUsernameConfigFromEnv():
     mintUrl: usernameMint,
     amount: parseInt(usernameCost),
   };
+}
+
+export function getPortFromEnv(): number {
+  const port = getEnvVar("PORT");
+  if (!port) return 8000;
+  const parsed = parseInt(port, 10);
+  if (isNaN(parsed)) throw new Error("PORT must be a number");
+  return parsed;
+}
+
+export function getMintUrlFromEnv(): string {
+  const url = getEnvVar("MINTURL");
+  if (!url) throw new Error("MINTURL is required");
+  return url;
+}
+
+export function getHostnameFromEnv(): string {
+  const hostname = getEnvVar("HOSTNAME");
+  if (!hostname) throw new Error("HOSTNAME is required");
+  return hostname;
+}
+
+export function getNodeEnvFromEnv(): "development" | "production" | "test" {
+  const env = getEnvVar("NODE_ENV");
+  if (env === "production" || env === "test") return env;
+  return "development";
 }

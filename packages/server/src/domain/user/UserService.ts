@@ -3,6 +3,7 @@ import { UserRepository } from "./userRepository";
 import { BadRequestError, NotFoundError } from "@/errors";
 import { User, UserWithName } from "./user";
 import { usernameRegex } from "@/constants/regex";
+import { config } from "@/config/index";
 
 export class UserService {
   constructor(private readonly userRepo: UserRepository) {}
@@ -21,7 +22,7 @@ export class UserService {
         username: userParam,
         pubkey: decoded.data,
         isNpub: true,
-        mintUrl: userObj?.mintUrl || process.env.MINTURL!,
+        mintUrl: userObj?.mintUrl || config.mintUrl,
         lockQuote: userObj?.lockQuote || false,
       };
     } else {
@@ -74,7 +75,7 @@ export class UserService {
     return new User({
       pubkey,
       name,
-      mintUrl: mintUrl || process.env.MINTURL!,
+      mintUrl: mintUrl || config.mintUrl,
       lockQuote: lockQuote || false,
     });
   }

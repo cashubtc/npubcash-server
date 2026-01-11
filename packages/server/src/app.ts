@@ -6,11 +6,10 @@ import path from "path";
 import baseRouter from "./routes";
 import { errorHandler } from "./errors/middleware";
 import { randomUUID } from "crypto";
-import { AppConfig } from "./config/index";
+import { config } from "./config/index";
 import { logger } from "./utils/logger";
 
 const app = express();
-const config = AppConfig.getInstance();
 
 app.use(express.json());
 (app as any).use(compression());
