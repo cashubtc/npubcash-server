@@ -2,6 +2,7 @@ import { createRoot } from "react-dom/client";
 import { RouterProvider, createRouter } from "@tanstack/react-router";
 import { routeTree } from "./routeTree.gen";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { AuthLoadingScreen } from "./components/AuthLoadingScreen";
 
 import "./index.css";
 
@@ -18,21 +19,12 @@ declare module "@tanstack/react-router" {
   }
 }
 
-function LoadingScreen() {
-  return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-4">
-      <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-      <p className="text-sm text-muted-foreground">Loading...</p>
-    </div>
-  );
-}
-
 function InnerApp() {
   const auth = useAuth();
 
   // Don't render router until session restoration is complete
   if (auth.isRestoring) {
-    return <LoadingScreen />;
+    return <AuthLoadingScreen onClearSession={auth.clearSession} />;
   }
 
   return <RouterProvider router={router} context={{ auth }} />;

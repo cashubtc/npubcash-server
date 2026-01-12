@@ -51,6 +51,8 @@ export interface AuthContextType {
   nip46State: Nip46ConnectionState;
   nip46Error: string | null;
   logout: () => Promise<void>;
+  /** Clears stored session data and stops any pending restoration */
+  clearSession: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -196,18 +198,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     connectionURI: string;
   } | null>(null);
 
+  // Track if restoration was aborted by user
+  const restorationAbortedRef = useRef(false);
+
   // Attempt to restore NIP-46 session on mount
   const hasAttemptedNip46Restore = useRef(false);
   if (!hasAttemptedNip46Restore.current && isRestoring) {
     hasAttemptedNip46Restore.current = true;
     reconnectNip46()
       .then((config) => {
-        if (config) {
+        // Don't restore if user cleared the session
+        if (config && !restorationAbortedRef.current) {
           setNostrConfig(config);
         }
       })
       .finally(() => {
-        setIsRestoring(false);
+        if (!restorationAbortedRef.current) {
+          setIsRestoring(false);
+        }
       });
   }
 
@@ -400,6 +408,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [nostrConfig]);
 
+  const clearSession = useCallback(() => {
+    restorationAbortedRef.current = true;
+    clearAllStoredConfig();
+    setNostrConfig(null);
+    setIsRestoring(false);
+    setNip46State("idle");
+    setNip46Error(null);
+  }, []);
+
   return (
     <AuthContext.Provider
       value={{
@@ -413,6 +430,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         nip46State,
         nip46Error,
         logout,
+        clearSession,
       }}
     >
       {children}
