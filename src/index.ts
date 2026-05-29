@@ -1,3 +1,4 @@
+import "./utils/webcrypto";
 import { useWebSocketImplementation } from "nostr-tools";
 import { injectWebSocketImpl } from "@cashu/cashu-ts";
 import app from "./app";
