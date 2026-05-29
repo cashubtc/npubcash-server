@@ -1,9 +1,10 @@
 import { NextFunction, Request, Response } from "express";
 import { User } from "../models";
 import { sign, verify } from "jsonwebtoken";
-import { lnProvider } from "../config";
+import { wallet } from "../config";
 import { PaymentJWTPayload } from "../types";
 import { usernameRegex } from "../constants/regex";
+import { PaymentSettlementService } from "../services/paymentSettlement";
 
 export async function getInfoController(req: Request, res: Response) {
   try {
@@ -73,19 +74,21 @@ export async function putUsernameInfoController(
     return res.json({ error: true, message: "This username is already taken" });
   }
   if (!paymentToken) {
-    const { paymentRequest } = await lnProvider.createInvoice(5000);
+    const quote = await wallet.createMintQuoteBolt11(5000, "Username fee");
     const token = sign(
       {
         pubkey: req.authData!.data.pubkey,
         username: parsedUsername,
-        paymentRequest,
+        quoteId: quote.quote,
+        paymentRequest: quote.request,
+        amount: 5000,
       },
       process.env.JWT_SECRET!,
     );
     return res.status(402).json({
       error: true,
       message: "Payment required",
-      data: { paymentToken: token, paymentRequest },
+      data: { paymentToken: token, paymentRequest: quote.request },
     });
   }
   const payload = verify(
@@ -94,9 +97,13 @@ export async function putUsernameInfoController(
   ) as PaymentJWTPayload;
   if (payload.pubkey !== req.authData!.data.pubkey) {
     res.status(403);
-    res.json({ error: true, message: "Forbidden!" });
+    return res.json({ error: true, message: "Forbidden!" });
   }
-  const { paid } = await lnProvider.checkPayment(payload.paymentRequest);
+  const paid = await PaymentSettlementService.getInstance().settleServiceRevenueQuote(
+    payload.quoteId,
+    payload.paymentRequest,
+    payload.amount || 5000,
+  );
   if (!paid) {
     return res.status(402).json({ error: true, message: "Invoice unpaid..." });
   }

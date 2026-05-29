@@ -2,6 +2,7 @@ import supertest from "supertest";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import app from "../../app";
 import { User } from "../../models";
+import { wallet } from "../../config";
 
 const pubkey =
   "ca9881c70e72981b356353453f4bbfd8153d209acd9b7b5b4200e80c7dec8c7a";
@@ -24,6 +25,22 @@ vi.mock("../../middleware/auth.ts", () => ({
 }));
 
 vi.mock("../../models/user.ts");
+
+vi.mock("../../config.ts", () => ({
+  wallet: {
+    createMintQuoteBolt11: vi.fn(),
+  },
+}));
+
+const settlementServiceMock = vi.hoisted(() => ({
+  settleServiceRevenueQuote: vi.fn(),
+}));
+
+vi.mock("../../services/paymentSettlement", () => ({
+  PaymentSettlementService: {
+    getInstance: vi.fn(() => settlementServiceMock),
+  },
+}));
 
 describe("PUT username", () => {
   beforeEach(() => {
@@ -79,6 +96,97 @@ describe("PUT username", () => {
       error: true,
       message: "Username already set",
     });
+  });
+
+  test("should return payment token and Cashu invoice on first request", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("JWT_SECRET", "secret");
+    vi.mocked(wallet.createMintQuoteBolt11).mockResolvedValueOnce({
+      quote: "quote-id",
+      request: "invoice",
+      amount: 5000,
+      state: "UNPAID",
+      expiry: null,
+      unit: "sat",
+    });
+
+    const res = await supertest(app)
+      .put("/api/v1/info/username")
+      .send({ username: "testUser" })
+      .set("authorization", "validHeader");
+
+    expect(res.status).toBe(402);
+    expect(wallet.createMintQuoteBolt11).toHaveBeenCalledWith(
+      5000,
+      "Username fee",
+    );
+    expect(res.body.data.paymentRequest).toBe("invoice");
+    expect(res.body.data.paymentToken).toEqual(expect.any(String));
+  });
+
+  test("should assign username after paid quote", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("JWT_SECRET", "secret");
+    vi.mocked(wallet.createMintQuoteBolt11).mockResolvedValueOnce({
+      quote: "quote-id",
+      request: "invoice",
+      amount: 5000,
+      state: "UNPAID",
+      expiry: null,
+      unit: "sat",
+    });
+    const first = await supertest(app)
+      .put("/api/v1/info/username")
+      .send({ username: "testUser" })
+      .set("authorization", "validHeader");
+
+    settlementServiceMock.settleServiceRevenueQuote.mockResolvedValueOnce(true);
+    vi.mocked(User.upsertUsernameByPubkey).mockResolvedValueOnce();
+
+    const res = await supertest(app)
+      .put("/api/v1/info/username")
+      .send({
+        username: "testUser",
+        paymentToken: first.body.data.paymentToken,
+      })
+      .set("authorization", "validHeader");
+
+    expect(res.status).toBe(200);
+    expect(settlementServiceMock.settleServiceRevenueQuote).toHaveBeenCalled();
+    expect(User.upsertUsernameByPubkey).toHaveBeenCalledWith(
+      pubkey,
+      "testuser",
+    );
+  });
+
+  test("should keep username payment required while quote is unpaid", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("JWT_SECRET", "secret");
+    vi.mocked(wallet.createMintQuoteBolt11).mockResolvedValueOnce({
+      quote: "quote-id",
+      request: "invoice",
+      amount: 5000,
+      state: "UNPAID",
+      expiry: null,
+      unit: "sat",
+    });
+    const first = await supertest(app)
+      .put("/api/v1/info/username")
+      .send({ username: "testUser" })
+      .set("authorization", "validHeader");
+
+    settlementServiceMock.settleServiceRevenueQuote.mockResolvedValueOnce(false);
+
+    const res = await supertest(app)
+      .put("/api/v1/info/username")
+      .send({
+        username: "testUser",
+        paymentToken: first.body.data.paymentToken,
+      })
+      .set("authorization", "validHeader");
+
+    expect(res.status).toBe(402);
+    expect(res.body).toEqual({ error: true, message: "Invoice unpaid..." });
   });
 });
 

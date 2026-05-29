@@ -1,10 +1,14 @@
 import { useWebSocketImplementation } from "nostr-tools";
+import { injectWebSocketImpl } from "@cashu/cashu-ts";
 import app from "./app";
 import { setupDatabase, setupStore } from "./utils/database";
-import { setupCallbacks } from "./utils/blink";
 import { Analyzer } from "./utils/analytics";
+import { wallet } from "./config";
+import { PaymentSettlementService } from "./services/paymentSettlement";
 
-useWebSocketImplementation(require("ws"));
+const WebSocket = require("ws");
+useWebSocketImplementation(WebSocket);
+injectWebSocketImpl(WebSocket);
 setupStore();
 setInterval(
   () => {
@@ -22,9 +26,10 @@ async function startServer() {
     process.exit(1);
   }
   try {
-    await setupCallbacks();
+    await wallet.loadMint();
+    await PaymentSettlementService.getInstance().recoverUnfulfilledTransactions();
   } catch (e) {
-    console.warn("Failed to setup callbacks...");
+    console.warn("Failed to setup Cashu wallet...");
     console.log(e);
     process.exit(1);
   }

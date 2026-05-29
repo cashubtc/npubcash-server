@@ -1,7 +1,12 @@
 import { Request, Response } from "express";
-import { CashuMint, getEncodedToken } from "@cashu/cashu-ts";
+import {
+  CheckStateEnum,
+  getEncodedToken,
+  hashToCurve,
+} from "@cashu/cashu-ts";
 import { Claim, User } from "../models";
 import { WithdrawalStore } from "../models/withdrawal";
+import { wallet } from "../config";
 
 export async function balanceController(req: Request, res: Response) {
   const isAuth = req.authData!;
@@ -29,11 +34,15 @@ export async function claimGetController(req: Request, res: Response) {
     return res.json({ error: true, message: "No proofs to claim" });
   }
   const proofs = allClaims.claims.map((claim) => claim.proof);
-  const payload = { proofs: proofs.map((p) => ({ secret: p.secret })) };
-  const { spendable } = await new CashuMint(process.env.MINTURL!).check(
-    payload,
+  const payload = {
+    Ys: proofs.map((p) =>
+      hashToCurve(new TextEncoder().encode(p.secret)).toHex(true),
+    ),
+  };
+  const { states } = await wallet.mint.check(payload);
+  const spendableProofs = proofs.filter(
+    (_, i) => states[i]?.state === CheckStateEnum.UNSPENT,
   );
-  const spendableProofs = proofs.filter((_, i) => spendable[i]);
   try {
     await WithdrawalStore.getInstance()?.saveWithdrawal(
       allClaims.claims,
@@ -41,7 +50,8 @@ export async function claimGetController(req: Request, res: Response) {
     );
     const token = getEncodedToken({
       memo: "",
-      token: [{ mint: process.env.MINTURL!, proofs: spendableProofs }],
+      mint: process.env.MINTURL!,
+      proofs: spendableProofs,
     });
     if (spendableProofs.length === 0) {
       return res.json({ error: true, message: "No proofs to claim" });

@@ -19,24 +19,6 @@ export type FailedPayment = {
   transaction_id: number;
 };
 
-export interface PaymentProvider {
-  createInvoice: (
-    amount: number,
-    memo?: string,
-    descriptionHash?: string,
-  ) => Promise<{
-    paymentRequest: string;
-    paymentHash: string;
-    paymentSecret: string;
-  }>;
-  payInvoice: (invoice: string) => Promise<PaymentResponse>;
-  checkPayment: (invoice: string) => Promise<{ paid: boolean }>;
-}
-
-type PaymentResponse<TStatus = boolean> = TStatus extends true
-  ? { paid: TStatus; preimage: string }
-  : { paid: TStatus };
-
 export type AuthData =
   | { authorized: false }
   | { authorized: true; data: { pubkey: string; npub: string } };
@@ -71,7 +53,9 @@ export type LNBitsInvoiceResponse = {
 export interface PaymentJWTPayload extends JwtPayload {
   username: string;
   pubkey: string;
+  quoteId: string;
   paymentRequest: string;
+  amount: number;
 }
 
 export type ZapRequestData = {

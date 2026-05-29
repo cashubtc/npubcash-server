@@ -1,13 +1,14 @@
 import { NextFunction, Request, Response } from "express";
 import { Event, nip19 } from "nostr-tools";
+import { MintQuoteBolt11Response } from "@cashu/cashu-ts";
+import { createHash } from "crypto";
 
-import { parseInvoice } from ".././utils/lightning";
-import { lnProvider, wallet } from "../config";
+import { wallet } from "../config";
 import { Transaction, User } from "../models";
 import { createLnurlResponse } from "../utils/lnurl";
 import { decodeAndValidateZapRequest } from "../utils/nostr";
-import { createHash } from "crypto";
 import { Analyzer } from "../utils/analytics";
+import { PaymentSettlementService } from "../services/paymentSettlement";
 
 export async function lnurlController(
   req: Request<
@@ -60,12 +61,19 @@ export async function lnurlController(
         .json({ error: true, message: "Invalid zap request" });
     }
   }
-  let mintPr: string,
-    mintHash: string,
-    invoiceRes: { paymentRequest: string; paymentHash: string };
+  const quoteAmount = Math.floor(parsedAmount / 1000);
+  let quote: MintQuoteBolt11Response;
   try {
-    const mintRes = await wallet.requestMint(Math.floor(parsedAmount / 1000));
-    ({ pr: mintPr, hash: mintHash } = mintRes);
+    if (zapRequest) {
+      quote = await wallet.createMintQuote<MintQuoteBolt11Response>("bolt11", {
+        amount: quoteAmount,
+        description_hash: createHash("sha256")
+          .update(JSON.stringify(zapRequest))
+          .digest("hex"),
+      });
+    } else {
+      quote = await wallet.createMintQuoteBolt11(quoteAmount, "Cashu Address");
+    }
   } catch (e) {
     console.log("Failed to create invoice: Mint failed");
     console.log(e);
@@ -73,37 +81,23 @@ export async function lnurlController(
     return res.json({ error: true, message: "Something went wrong..." });
   }
 
-  const { amount: mintAmount, expiresIn } = parseInvoice(mintPr);
-
-  //TODO:)Parse invoice for expiry and pass it to blink
+  Analyzer.getInstance().logPaymentCreated(
+    quote.quote,
+    quote.expiry ? quote.expiry - Math.floor(Date.now() / 1000) : 3600,
+  );
   try {
-    invoiceRes = await lnProvider.createInvoice(
-      mintAmount / 1000,
-      "Cashu Address",
-      zapRequest
-        ? createHash("sha256").update(JSON.stringify(zapRequest)).digest("hex")
-        : undefined,
-    );
-  } catch (e) {
-    console.log("Failed to create invoice: Invoice creation failed");
-    console.log(e);
-    res.status(500);
-    return res.json({ error: true, message: "Something went wrong..." });
-  }
-
-  Analyzer.getInstance().logPaymentCreated(invoiceRes.paymentHash, expiresIn);
-  try {
-    await Transaction.createTransaction(
-      mintPr,
-      mintHash,
-      invoiceRes.paymentRequest,
-      invoiceRes.paymentHash,
+    const transaction = await Transaction.createCashuTransaction(
+      quote.quote,
+      quote.request,
       username,
       zapRequest,
       parsedAmount / 1000,
     );
+    PaymentSettlementService.getInstance().startWatchingTransaction(
+      transaction,
+    );
     res.json({
-      pr: invoiceRes.paymentRequest,
+      pr: quote.request,
       routes: [],
     });
   } catch (e) {

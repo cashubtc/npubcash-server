@@ -4,7 +4,7 @@ import { decodeAndValidateZapRequest } from "../../utils/nostr";
 import app from "../../app";
 import { Transaction, User } from "../../models";
 import { createLnurlResponse } from "../../utils/lnurl";
-import { lnProvider, wallet } from "../../config";
+import { wallet } from "../../config";
 
 vi.mock("../../models/user.ts");
 vi.mock("../../models/transaction.ts");
@@ -41,10 +41,18 @@ vi.mock("nostr-tools", () => ({
 
 vi.mock("../../config.ts", () => ({
   wallet: {
-    requestMint: vi.fn(),
+    createMintQuote: vi.fn(),
+    createMintQuoteBolt11: vi.fn(),
   },
-  lnProvider: {
-    createInvoice: vi.fn(),
+}));
+
+const settlementServiceMock = vi.hoisted(() => ({
+  startWatchingTransaction: vi.fn(),
+}));
+
+vi.mock("../../services/paymentSettlement", () => ({
+  PaymentSettlementService: {
+    getInstance: vi.fn(() => settlementServiceMock),
   },
 }));
 
@@ -124,15 +132,15 @@ describe("lnurlController", () => {
       mint_url: "https://mint.minibits.cash/Bitcoin",
       pubkey: "testPubkey...",
     });
-    vi.mocked(wallet.requestMint).mockResolvedValue({
-      pr: "lnbc15u1p3xnhl2pp5jptserfk3zk4qy42tlucycrfwxhydvlemu9pqr93tuzlv9cc7g3sdqsvfhkcap3xyhx7un8cqzpgxqzjcsp5f8c52y2stc300gl6s4xswtjpc37hrnnr3c9wvtgjfuvqmpm35evq9qyyssqy4lgd8tj637qcjp05rdpxxykjenthxftej7a2zzmwrmrl70fyj9hvj0rewhzj7jfyuwkwcg9g2jpwtk3wkjtwnkdks84hsnu8xps5vsq4gj5hs",
-      hash: "456",
-    });
-    const lnProviderMock = vi
-      .mocked(lnProvider.createInvoice, { partial: true })
+    const createMintQuoteMock = vi
+      .mocked(wallet.createMintQuoteBolt11)
       .mockResolvedValue({
-        paymentRequest: "invoice",
-        paymentHash: "hash",
+        quote: "quote-id",
+        request: "invoice",
+        amount: 21,
+        state: "UNPAID",
+        expiry: null,
+        unit: "sat",
       });
     vi.mocked(Transaction.createTransaction, {
       partial: true,
@@ -146,6 +154,20 @@ describe("lnurlController", () => {
       amount: 21,
       fulfilled: false,
     });
+    vi.mocked(Transaction.createCashuTransaction, {
+      partial: true,
+    }).mockResolvedValue({
+      id: 1,
+      mint_pr: "invoice",
+      mint_hash: "quote-id",
+      server_pr: "invoice",
+      server_hash: "quote-id",
+      cashu_quote_id: "quote-id",
+      user: "testUser",
+      zap_request: undefined,
+      amount: 21,
+      fulfilled: false,
+    });
 
     vi.stubEnv("LNURL_MIN_AMOUNT", "10");
     vi.stubEnv("LNURL_MAX_AMOUNT", "1000000");
@@ -154,12 +176,80 @@ describe("lnurlController", () => {
       "/.well-known/lnurlp/testUser?amount=21000",
     );
 
-    expect(lnProviderMock).toHaveBeenCalledWith(
-      1500,
-      "Cashu Address",
+    expect(createMintQuoteMock).toHaveBeenCalledWith(21, "Cashu Address");
+    expect(Transaction.createCashuTransaction).toHaveBeenCalledWith(
+      "quote-id",
+      "invoice",
+      "testUser",
       undefined,
+      21,
+    );
+    expect(settlementServiceMock.startWatchingTransaction).toHaveBeenCalled();
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ pr: "invoice", routes: [] });
+  });
+
+  it("should create zap invoices with the zap request description hash", async () => {
+    const zapRequest = {
+      id: "zap-id",
+      pubkey: "zap-pubkey",
+      created_at: 1,
+      kind: 9734,
+      tags: [],
+      content: "",
+      sig: "sig",
+    };
+    vi.mocked(User.getUserByName, { partial: true }).mockResolvedValue({
+      name: "testUser",
+      mint_url: "https://mint.minibits.cash/Bitcoin",
+      pubkey: "testPubkey...",
+    });
+    vi.mocked(decodeAndValidateZapRequest).mockReturnValue(zapRequest);
+    const createMintQuoteMock = vi
+      .mocked(wallet.createMintQuote)
+      .mockResolvedValue({
+        quote: "quote-id",
+        request: "invoice",
+        amount: 21,
+        state: "UNPAID",
+        expiry: null,
+        unit: "sat",
+      });
+    vi.mocked(Transaction.createCashuTransaction, {
+      partial: true,
+    }).mockResolvedValue({
+      id: 1,
+      mint_pr: "invoice",
+      mint_hash: "quote-id",
+      server_pr: "invoice",
+      server_hash: "quote-id",
+      cashu_quote_id: "quote-id",
+      user: "testUser",
+      zap_request: zapRequest,
+      amount: 21,
+      fulfilled: false,
+    });
+
+    vi.stubEnv("LNURL_MIN_AMOUNT", "10");
+    vi.stubEnv("LNURL_MAX_AMOUNT", "1000000");
+
+    const res = await request(app).get(
+      "/.well-known/lnurlp/testUser?amount=21000&nostr=zapRequest",
     );
 
+    expect(createMintQuoteMock).toHaveBeenCalledWith("bolt11", {
+      amount: 21,
+      description_hash: "mockedHash",
+    });
+    expect(wallet.createMintQuoteBolt11).not.toHaveBeenCalled();
+    expect(Transaction.createCashuTransaction).toHaveBeenCalledWith(
+      "quote-id",
+      "invoice",
+      "testUser",
+      zapRequest,
+      21,
+    );
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ pr: "invoice", routes: [] });
   });
