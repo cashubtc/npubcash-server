@@ -13,6 +13,8 @@ RUN npm ci
 
 FROM base AS builder
 WORKDIR /app
+ARG NPC_ADDRESS_DOMAIN
+ENV NPC_ADDRESS_DOMAIN=$NPC_ADDRESS_DOMAIN
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/npubcash-website/node_modules ./npubcash-website/node_modules
 COPY . .
