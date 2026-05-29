@@ -35,7 +35,7 @@ git clone -b migrations --recurse-submodules https://github.com/cashubtc/npubcas
 cd npubcash-server
 
 npm ci
-
+<
 npm run build
 ```
 
