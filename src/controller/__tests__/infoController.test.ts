@@ -1,8 +1,8 @@
 import supertest from "supertest";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import app from "../../app";
-import { User } from "../../models";
 import { wallet } from "../../config";
+import { User } from "../../models";
 
 const pubkey =
   "ca9881c70e72981b356353453f4bbfd8153d209acd9b7b5b4200e80c7dec8c7a";
@@ -104,7 +104,7 @@ describe("PUT username", () => {
     vi.mocked(wallet.createMintQuoteBolt11).mockResolvedValueOnce({
       quote: "quote-id",
       request: "invoice",
-      amount: 5000,
+      amount: 10,
       state: "UNPAID",
       expiry: null,
       unit: "sat",
@@ -117,7 +117,33 @@ describe("PUT username", () => {
 
     expect(res.status).toBe(402);
     expect(wallet.createMintQuoteBolt11).toHaveBeenCalledWith(
-      5000,
+      10,
+      "Username fee",
+    );
+    expect(res.body.data.paymentRequest).toBe("invoice");
+    expect(res.body.data.paymentToken).toEqual(expect.any(String));
+  });
+
+  test("should charge a premium fee for satoshi", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("JWT_SECRET", "secret");
+    vi.mocked(wallet.createMintQuoteBolt11).mockResolvedValueOnce({
+      quote: "quote-id",
+      request: "invoice",
+      amount: 1000000,
+      state: "UNPAID",
+      expiry: null,
+      unit: "sat",
+    });
+
+    const res = await supertest(app)
+      .put("/api/v1/info/username")
+      .send({ username: "satoshi" })
+      .set("authorization", "validHeader");
+
+    expect(res.status).toBe(402);
+    expect(wallet.createMintQuoteBolt11).toHaveBeenCalledWith(
+      1000000,
       "Username fee",
     );
     expect(res.body.data.paymentRequest).toBe("invoice");
@@ -130,7 +156,7 @@ describe("PUT username", () => {
     vi.mocked(wallet.createMintQuoteBolt11).mockResolvedValueOnce({
       quote: "quote-id",
       request: "invoice",
-      amount: 5000,
+      amount: 10,
       state: "UNPAID",
       expiry: null,
       unit: "sat",
@@ -165,7 +191,7 @@ describe("PUT username", () => {
     vi.mocked(wallet.createMintQuoteBolt11).mockResolvedValueOnce({
       quote: "quote-id",
       request: "invoice",
-      amount: 5000,
+      amount: 10,
       state: "UNPAID",
       expiry: null,
       unit: "sat",
@@ -175,7 +201,9 @@ describe("PUT username", () => {
       .send({ username: "testUser" })
       .set("authorization", "validHeader");
 
-    settlementServiceMock.settleServiceRevenueQuote.mockResolvedValueOnce(false);
+    settlementServiceMock.settleServiceRevenueQuote.mockResolvedValueOnce(
+      false,
+    );
 
     const res = await supertest(app)
       .put("/api/v1/info/username")

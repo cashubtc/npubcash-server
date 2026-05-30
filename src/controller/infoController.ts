@@ -1,10 +1,19 @@
 import { NextFunction, Request, Response } from "express";
-import { User } from "../models";
 import { sign, verify } from "jsonwebtoken";
 import { wallet } from "../config";
-import { PaymentJWTPayload } from "../types";
 import { usernameRegex } from "../constants/regex";
+import { User } from "../models";
 import { PaymentSettlementService } from "../services/paymentSettlement";
+import { PaymentJWTPayload } from "../types";
+
+const DEFAULT_USERNAME_FEE_SATS = 10;
+const SPECIAL_USERNAME_FEE_SATS: Readonly<Record<string, number>> = {
+  satoshi: 1_000_000,
+};
+
+const getUsernameFeeSats = (username: string): number => {
+  return SPECIAL_USERNAME_FEE_SATS[username] ?? DEFAULT_USERNAME_FEE_SATS;
+};
 
 export async function getInfoController(req: Request, res: Response) {
   try {
@@ -73,15 +82,19 @@ export async function putUsernameInfoController(
     res.status(400);
     return res.json({ error: true, message: "This username is already taken" });
   }
+  const usernameFeeSats = getUsernameFeeSats(parsedUsername);
   if (!paymentToken) {
-    const quote = await wallet.createMintQuoteBolt11(5000, "Username fee");
+    const quote = await wallet.createMintQuoteBolt11(
+      usernameFeeSats,
+      "Username fee",
+    );
     const token = sign(
       {
         pubkey: req.authData!.data.pubkey,
         username: parsedUsername,
         quoteId: quote.quote,
         paymentRequest: quote.request,
-        amount: 5000,
+        amount: usernameFeeSats,
       },
       process.env.JWT_SECRET!,
     );
@@ -99,11 +112,12 @@ export async function putUsernameInfoController(
     res.status(403);
     return res.json({ error: true, message: "Forbidden!" });
   }
-  const paid = await PaymentSettlementService.getInstance().settleServiceRevenueQuote(
-    payload.quoteId,
-    payload.paymentRequest,
-    payload.amount || 5000,
-  );
+  const paid =
+    await PaymentSettlementService.getInstance().settleServiceRevenueQuote(
+      payload.quoteId,
+      payload.paymentRequest,
+      payload.amount || usernameFeeSats,
+    );
   if (!paid) {
     return res.status(402).json({ error: true, message: "Invoice unpaid..." });
   }

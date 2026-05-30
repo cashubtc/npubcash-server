@@ -108,10 +108,11 @@ describe("PaymentSettlementService", () => {
       "quote-id",
       { quote: "quote-id", state: "PAID" } as any,
     );
-    const second = PaymentSettlementService.getInstance().settleTransactionQuote(
-      "quote-id",
-      { quote: "quote-id", state: "PAID" } as any,
-    );
+    const second =
+      PaymentSettlementService.getInstance().settleTransactionQuote(
+        "quote-id",
+        { quote: "quote-id", state: "PAID" } as any,
+      );
     releaseMint([{ id: "keyset", amount: 21, secret: "s", C: "c" }]);
     await Promise.all([first, second]);
 
@@ -174,7 +175,7 @@ describe("PaymentSettlementService", () => {
   });
 
   it("mints and stores service revenue proofs for a paid username quote", async () => {
-    const proofs = [{ id: "keyset", amount: 5000, secret: "s", C: "c" }];
+    const proofs = [{ id: "keyset", amount: 10, secret: "s", C: "c" }];
     serviceRevenueClaimMock.getClaimsByQuoteId.mockResolvedValue([]);
     walletMock.checkMintQuoteBolt11.mockResolvedValue({
       quote: "quote-id",
@@ -186,14 +187,14 @@ describe("PaymentSettlementService", () => {
       await PaymentSettlementService.getInstance().settleServiceRevenueQuote(
         "quote-id",
         "invoice",
-        5000,
+        10,
       );
 
     expect(paid).toBe(true);
     expect(serviceRevenueClaimMock.createClaims).toHaveBeenCalledWith(
       "quote-id",
       "invoice",
-      5000,
+      10,
       proofs,
     );
   });
