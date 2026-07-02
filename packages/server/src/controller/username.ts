@@ -33,13 +33,15 @@ export async function usernameController(
       throw new UsernameTakenError();
     }
 
-    const xCashu = req.header("X-Cashu");
-    if (!xCashu) {
-      throw new PaymentRequiredError(amount, mintUrl);
+    if (amount > 0) {
+      const xCashu = req.header("X-Cashu");
+      if (!xCashu) {
+        throw new PaymentRequiredError(amount, mintUrl);
+      }
+      const decodedToken = await validatePayment(xCashu, amount, mintUrl);
+      const newProofs = await communicatorService.redeemToken(decodedToken);
+      await proofService.saveProofs(newProofs);
     }
-    const decodedToken = await validatePayment(xCashu, amount, mintUrl);
-    const newProofs = await communicatorService.redeemToken(decodedToken);
-    await proofService.saveProofs(newProofs);
     const user = await userService.setUsername(
       authData.data.pubkey,
       parsedUsername,
