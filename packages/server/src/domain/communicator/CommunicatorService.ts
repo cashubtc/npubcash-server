@@ -7,14 +7,19 @@ import type { Logger } from "winston";
 
 export class CommunicatorService {
   private readonly communicators: { [mintUrl: string]: MintCommunicator } = {};
+  private walletCache = new Map<string, any>();
 
   constructor(private readonly mintQuoteMonitor: MintQuoteMonitor) {}
 
-  async redeemToken(token: Token, logger?: Logger) {
-    logger?.info(`Receiving proofs on mint ${token.mint}`);
-    const mint = new Mint(token.mint);
-    const mintInfo = await mint.getInfo();
-    const { keysets: rawKeysets } = await mint.getKeys();
+  private async getWallet(mintUrl: string) {
+    const cached = this.walletCache.get(mintUrl);
+    if (cached) return cached;
+
+    const mint = new Mint(mintUrl);
+    const [mintInfo, { keysets: rawKeysets }] = await Promise.all([
+      mint.getInfo(),
+      mint.getKeys(),
+    ]);
     const keysetCache = await Promise.all(
       rawKeysets.map(async (ks: any) => {
         const { keysets: [keyset] } = await mint.getKeys(ks.id) as any;
@@ -23,10 +28,17 @@ export class CommunicatorService {
     );
     const wallet = new Wallet(mint);
     wallet.loadMintFromCache(mintInfo as any, {
-      mintUrl: token.mint,
+      mintUrl,
       unit: "sat",
       keysets: keysetCache as any,
     });
+    this.walletCache.set(mintUrl, wallet);
+    return wallet;
+  }
+
+  async redeemToken(token: Token, logger?: Logger) {
+    logger?.info(`Receiving proofs on mint ${token.mint}`);
+    const wallet = await this.getWallet(token.mint);
     return wallet.receive(token);
   }
 
