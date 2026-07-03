@@ -1,7 +1,7 @@
 import { MintQuote } from "@/domain/mintQuote/MintQuote";
 import type { MintQuoteMonitor } from "@/domain/mintQuoteMonitor/MintQuoteMonitor";
 import { normalizeUrl } from "@/utils/utils";
-import { Token } from "@cashu/cashu-ts";
+import { Mint, Wallet, type Token } from "@cashu/cashu-ts";
 import { MintCommunicator } from "almnd";
 import type { Logger } from "winston";
 
@@ -12,7 +12,22 @@ export class CommunicatorService {
 
   async redeemToken(token: Token, logger?: Logger) {
     logger?.info(`Receiving proofs on mint ${token.mint}`);
-    return this.getCommunicator(token.mint).receive(token);
+    const mint = new Mint(token.mint);
+    const mintInfo = await mint.getInfo();
+    const { keysets: rawKeysets } = await mint.getKeys();
+    const keysetCache = await Promise.all(
+      rawKeysets.map(async (ks: any) => {
+        const { keysets: [keyset] } = await mint.getKeys(ks.id) as any;
+        return { id: ks.id, unit: ks.unit, active: ks.active ?? true, keys: keyset.keys };
+      }),
+    );
+    const wallet = new Wallet(mint);
+    wallet.loadMintFromCache(mintInfo as any, {
+      mintUrl: token.mint,
+      unit: "sat",
+      keysets: keysetCache as any,
+    });
+    return wallet.receive(token);
   }
 
   async createMintQuote(

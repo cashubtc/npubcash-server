@@ -1,4 +1,4 @@
-import { CashuMint } from "@cashu/cashu-ts";
+import { Mint as CashuMint, MintInfo } from "@cashu/cashu-ts";
 import { MintRepository } from "./MintRepository";
 import { Mint } from "./Mint";
 import { BadRequestError } from "@/errors";
@@ -20,7 +20,7 @@ export class MintService {
     if (!mint) {
       const cashuMint = new CashuMint(mintUrl);
       try {
-        const info = await cashuMint.getInfo();
+        const info = await cashuMint.getInfo() as unknown as MintInfo;
         mint = new Mint({ url: mintUrl, lastChecked: new Date(), info });
       } catch {
         throw new BadRequestError(
@@ -74,7 +74,7 @@ export class MintService {
 
   async updateMintInfo(mint: Mint) {
     const cashuMint = new CashuMint(mint.url);
-    const info = await cashuMint.getInfo();
+    const info = await cashuMint.getInfo() as unknown as MintInfo;
     mint.updateInfo(info);
     await this.repo.saveMint(mint);
   }
