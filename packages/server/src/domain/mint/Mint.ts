@@ -1,13 +1,13 @@
-import { GetInfoResponse } from "@cashu/cashu-ts";
+import { MintInfo } from "@cashu/cashu-ts";
 
 export class Mint {
   lastChecked: Date;
   url: string;
-  info: GetInfoResponse;
+    info: MintInfo;
 
   constructor(config: {
     url: string;
-    info: GetInfoResponse;
+  info: MintInfo;
     lastChecked: Date;
   }) {
     this.url = config.url;
@@ -19,7 +19,7 @@ export class Mint {
     return this.lastChecked.getTime() + 3600 * 1000 < Date.now();
   }
 
-  updateInfo(info: GetInfoResponse) {
+  updateInfo(info: MintInfo) {
     this.info = info;
     this.lastChecked = new Date();
   }
