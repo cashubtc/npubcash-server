@@ -70,11 +70,11 @@ export function HistoryCard() {
         )}
       </CardContent>
       <CardFooter className="flex flex-col gap-2 sm:flex-row sm:justify-between">
-        <Button asChild variant="outline" size="sm">
-          <Link to="/history">View All</Link>
+        <Button render={<Link to="/history" />} variant="outline" size="sm">
+          View All
         </Button>
-        <Button asChild variant="outline" size="sm">
-          <Link to="/payments">View Payments Chart</Link>
+        <Button render={<Link to="/payments" />} variant="outline" size="sm">
+          View Payments Chart
         </Button>
       </CardFooter>
     </Card>

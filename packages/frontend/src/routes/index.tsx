@@ -61,17 +61,18 @@ function HeroSection() {
         </Card>
 
         <div className="flex flex-col gap-3 sm:flex-row sm:gap-4">
-          <Button asChild size="lg" className="gap-2 px-6">
-            <Link to="/wallet">
-              <Wallet className="h-4 w-4" />
-              Open Wallet
-            </Link>
+          <Button render={<Link to="/wallet" />} size="lg" className="gap-2 px-6">
+            <Wallet className="h-4 w-4" />
+            Open Wallet
           </Button>
-          <Button asChild variant="outline" size="lg" className="gap-2 px-6">
-            <Link to="/wallet">
-              Claim Username
-              <ArrowRight className="h-4 w-4" />
-            </Link>
+          <Button
+            render={<Link to="/wallet" />}
+            variant="outline"
+            size="lg"
+            className="gap-2 px-6"
+          >
+            Claim Username
+            <ArrowRight className="h-4 w-4" />
           </Button>
         </div>
       </div>
@@ -247,11 +248,9 @@ function CTASection() {
         <p className="mb-8 text-muted-foreground">
           Create your Lightning address in seconds. No sign-up required.
         </p>
-        <Button asChild size="lg" className="gap-2 px-8">
-          <Link to="/wallet">
-            <Zap className="h-4 w-4" />
-            Launch Wallet
-          </Link>
+        <Button render={<Link to="/wallet" />} size="lg" className="gap-2 px-8">
+          <Zap className="h-4 w-4" />
+          Launch Wallet
         </Button>
       </div>
     </section>

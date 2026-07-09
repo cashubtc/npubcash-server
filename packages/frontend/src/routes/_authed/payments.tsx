@@ -129,8 +129,8 @@ function Payments() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Incoming Payments</h1>
-        <Button asChild variant="outline" size="sm">
-          <Link to="/wallet">Back to Wallet</Link>
+        <Button render={<Link to="/wallet" />} variant="outline" size="sm">
+          Back to Wallet
         </Button>
       </div>
 
