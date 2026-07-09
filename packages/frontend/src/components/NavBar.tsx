@@ -17,13 +17,19 @@ export function NavBar() {
         <NavigationMenu>
           <NavigationMenuList>
             <NavigationMenuItem>
-              <NavigationMenuLink asChild className={navigationMenuTriggerStyle()}>
-                <Link to="/">Home</Link>
+              <NavigationMenuLink
+                render={<Link to="/" />}
+                className={navigationMenuTriggerStyle()}
+              >
+                Home
               </NavigationMenuLink>
             </NavigationMenuItem>
             <NavigationMenuItem>
-              <NavigationMenuLink asChild className={navigationMenuTriggerStyle()}>
-                <Link to="/wallet">Wallet</Link>
+              <NavigationMenuLink
+                render={<Link to="/wallet" />}
+                className={navigationMenuTriggerStyle()}
+              >
+                Wallet
               </NavigationMenuLink>
             </NavigationMenuItem>
           </NavigationMenuList>
