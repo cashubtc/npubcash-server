@@ -7,7 +7,7 @@ import {
   MintQuoteRepository,
   UserMintHistoryResult,
 } from "@/domain/mintQuote/MintQuoteRepository";
-import { queryWrapper } from "@/utils/database";
+import { DatabaseAdapter } from "@/database/adapter";
 
 type MintQuoteRow = {
   id: number;
@@ -26,12 +26,14 @@ type MintQuoteRow = {
 };
 
 export class PostgresMintQuoteRepository implements MintQuoteRepository {
+  constructor(private readonly db: DatabaseAdapter) {}
+
   async create(input: CreateMintQuoteInput): Promise<MintQuote> {
     const query = `
 INSERT INTO mint_quotes (mint_url, payment_request, unit, quote_id, expires_at, amount, pubkey, state, serialized_zap_request, locked)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 RETURNING *`;
-    const res = await queryWrapper<MintQuoteRow>(query, [
+    const res = await this.db.query<MintQuoteRow>(query, [
       input.mintUrl,
       input.paymentRequest,
       input.unit,
@@ -51,7 +53,7 @@ RETURNING *`;
 
   async updateState(id: number, state: MintQuoteState): Promise<void> {
     const query = `UPDATE mint_quotes SET state = $1 WHERE id = $2`;
-    const res = await queryWrapper(query, [state, id]);
+    const res = await this.db.query(query, [state, id]);
     if (res.rowCount === 0) {
       throw new Error("Failed to update state");
     }
@@ -59,14 +61,14 @@ RETURNING *`;
 
   async setPaid(id: number, paidAt: Date = new Date()): Promise<void> {
     const query = `UPDATE mint_quotes SET state = 'PAID', paid_at = $1 WHERE id = $2`;
-    const res = await queryWrapper(query, [paidAt, id]);
+    const res = await this.db.query(query, [paidAt, id]);
     if (res.rowCount === 0) {
       throw new Error("Failed to update state");
     }
   }
 
   async getExpiredUnpaid(): Promise<MintQuote[]> {
-    const res = await queryWrapper<MintQuoteRow>(
+    const res = await this.db.query<MintQuoteRow>(
       `SELECT * FROM mint_quotes WHERE expires_at <= NOW() AND state = 'UNPAID'`,
       []
     );
@@ -74,7 +76,7 @@ RETURNING *`;
   }
 
   async getPending(): Promise<MintQuote[]> {
-    const res = await queryWrapper<MintQuoteRow>(
+    const res = await this.db.query<MintQuoteRow>(
       `SELECT * FROM mint_quotes WHERE state = 'UNPAID'`,
       []
     );
@@ -102,7 +104,7 @@ RETURNING *`;
 
     // Get total count
     const countParams = since ? [pubkey, since] : [pubkey];
-    const countRes = await queryWrapper<{ count: number }>(
+    const countRes = await this.db.query<{ count: number }>(
       `SELECT COUNT(*) as count FROM mint_quotes WHERE ${whereClause}`,
       countParams
     );
@@ -113,7 +115,7 @@ RETURNING *`;
       ? [pubkey, since, cappedLimit, offset]
       : [pubkey, cappedLimit, offset];
 
-    const dataRes = await queryWrapper<MintQuoteRow>(
+    const dataRes = await this.db.query<MintQuoteRow>(
       `SELECT * FROM mint_quotes WHERE ${whereClause} ORDER BY paid_at DESC LIMIT ${limitParam} OFFSET ${offsetParam}`,
       queryParams
     );
@@ -129,7 +131,7 @@ RETURNING *`;
 
     const placeholders = ids.map((_, i) => `$${i + 2}`).join(",");
     const query = `UPDATE mint_quotes SET state = $1 WHERE id IN (${placeholders})`;
-    await queryWrapper(query, [state, ...ids]);
+    await this.db.query(query, [state, ...ids]);
   }
 
   private castRowToQuote(row: MintQuoteRow): MintQuote {

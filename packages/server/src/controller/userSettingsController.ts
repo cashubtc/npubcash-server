@@ -1,4 +1,4 @@
-import { mintService, userService } from "@/config";
+import { getMintService, getUserService } from "@/config";
 import { BadRequestError } from "@/errors";
 import { normalizeUrl } from "@/utils/utils";
 import {
@@ -14,6 +14,7 @@ export async function getUserSettings(
   next: NextFunction,
 ) {
   try {
+    const userService = getUserService();
     const {
       data: { pubkey },
     } = req.authData!;
@@ -37,6 +38,8 @@ export async function updateUserSettingLock(
   next: NextFunction,
 ) {
   try {
+    const mintService = getMintService();
+    const userService = getUserService();
     const {
       data: { pubkey },
     } = req.authData!;
@@ -68,6 +71,8 @@ export async function updateUserMintSetting(
   next: NextFunction,
 ) {
   try {
+    const mintService = getMintService();
+    const userService = getUserService();
     const authData = req.authData!;
     //WARNING: Inconsistent casing!!
     const { mint_url } = req.body;

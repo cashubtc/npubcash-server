@@ -1,4 +1,4 @@
-import { DatabaseType } from "@/database/adapter";
+import { DatabaseAdapter } from "@/database/adapter";
 import { MintRepository } from "@/domain/mint/MintRepository";
 import { MintQuoteRepository } from "@/domain/mintQuote/MintQuoteRepository";
 import { ProofRepository } from "@/domain/proof/proofRepository";
@@ -19,20 +19,27 @@ export interface Repositories {
   mintQuoteRepository: MintQuoteRepository;
 }
 
-export function createRepositories(dbType: DatabaseType): Repositories {
-  if (dbType === "sqlite") {
+interface RepositoryFactoryConfig {
+  mintUrl: string;
+}
+
+export function createRepositories(
+  db: DatabaseAdapter,
+  config: RepositoryFactoryConfig,
+): Repositories {
+  if (db.type === "sqlite") {
     return {
-      userRepository: new SqliteUserRepository(),
-      proofRepository: new SqliteProofRepository(),
-      mintRepository: new SqliteMintRepository(),
-      mintQuoteRepository: new SqliteMintQuoteRepository(),
+      userRepository: new SqliteUserRepository(db, config.mintUrl),
+      proofRepository: new SqliteProofRepository(db),
+      mintRepository: new SqliteMintRepository(db),
+      mintQuoteRepository: new SqliteMintQuoteRepository(db),
     };
   }
 
   return {
-    userRepository: new PostgresUserRepository(),
-    proofRepository: new PostgresProofRepository(),
-    mintRepository: new PostgresMintRepository(),
-    mintQuoteRepository: new PostgresMintQuoteRepository(),
+    userRepository: new PostgresUserRepository(db, config.mintUrl),
+    proofRepository: new PostgresProofRepository(db),
+    mintRepository: new PostgresMintRepository(db),
+    mintQuoteRepository: new PostgresMintQuoteRepository(db),
   };
 }

@@ -6,7 +6,7 @@ import { logger } from "./utils/logger";
 import { config } from "./config/index";
 import { createServer } from "http";
 import { websocketUpgradeController } from "./websocket/controller";
-import { communicatorService } from "./config";
+import { getCommunicatorService } from "./config";
 useWebSocketImplementation(ws);
 logger.info("+++ Loaded App Config +++");
 logger.info(`Log Level: ${config.logLevel}`);
@@ -29,7 +29,7 @@ async function startServer() {
     console.error(e);
     process.exit(1);
   }
-  await communicatorService.setupPoller();
+  await getCommunicatorService().setupPoller();
   const server = createServer(app);
   server.on("upgrade", websocketUpgradeController);
   server.listen(config.port, () => {

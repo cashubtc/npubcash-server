@@ -41,12 +41,45 @@ export function getJwtSecretFromEnv() {
   return Buffer.from(entropy).toString("hex");
 }
 
-export function getDbTypeFromEnv(): "postgres" | "sqlite" {
-  const envVar = getEnvVar("DATABASE_TYPE");
-  if (envVar === "postgres") {
+type DatabaseType = "postgres" | "sqlite";
+
+function inferDbTypeFromConnectionString(
+  connectionString: string | undefined,
+): DatabaseType | undefined {
+  if (!connectionString) {
+    return undefined;
+  }
+  if (
+    connectionString.startsWith("postgres://") ||
+    connectionString.startsWith("postgresql://")
+  ) {
     return "postgres";
   }
-  return "sqlite"; // default
+  if (connectionString.includes("://")) {
+    throw new Error(
+      "DATABASE_URL must be a PostgreSQL URL or a SQLite file path",
+    );
+  }
+  return "sqlite";
+}
+
+export function getDbTypeFromEnv(): DatabaseType {
+  const explicitType = getEnvVar("DATABASE_TYPE");
+  const inferredType = inferDbTypeFromConnectionString(getEnvVar("DATABASE_URL"));
+
+  if (explicitType) {
+    if (explicitType !== "postgres" && explicitType !== "sqlite") {
+      throw new Error("DATABASE_TYPE must be either 'postgres' or 'sqlite'");
+    }
+    if (inferredType && inferredType !== explicitType) {
+      throw new Error(
+        `DATABASE_TYPE=${explicitType} does not match DATABASE_URL (${inferredType})`,
+      );
+    }
+    return explicitType;
+  }
+
+  return inferredType ?? "sqlite";
 }
 
 function getDefaultSqlitePath(): string {

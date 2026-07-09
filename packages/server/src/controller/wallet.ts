@@ -1,4 +1,4 @@
-import { mintQuoteRepository } from "@/config";
+import { getMintQuoteRepository } from "@/config";
 import { MintQuote } from "@/domain/mintQuote/MintQuote";
 import { dateToUnix } from "@/utils/time";
 import { NextFunction, Request, Response } from "express";
@@ -22,6 +22,7 @@ export async function getMintQuotes(
   next: NextFunction,
 ): Promise<void> {
   try {
+    const mintQuoteRepository = getMintQuoteRepository();
     const authData = req.authData!;
 
     const parsedQuery = parseQueryParameters(req.query);

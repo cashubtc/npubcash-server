@@ -5,19 +5,65 @@ import { ProofService } from "./domain/proof/proofService";
 import { MintService } from "./domain/mint/MintService";
 import { QuoteSubscriptionManager } from "./websocket/subs";
 import { eventBus } from "./events";
-import { createRepositories } from "./infrastructure/db/repositoryFactory";
-import { config } from "./config/index";
+import { Repositories } from "./infrastructure/db/repositoryFactory";
+import { UserRepository } from "./domain/user/userRepository";
+import { MintQuoteRepository } from "./domain/mintQuote/MintQuoteRepository";
 
-const repos = createRepositories(config.dbType);
+interface AppServices {
+  userRepository: UserRepository;
+  mintQuoteRepository: MintQuoteRepository;
+  userService: UserService;
+  communicatorService: CommunicatorService;
+  proofService: ProofService;
+  mintService: MintService;
+}
+
+let appServices: AppServices | null = null;
 
 export const nostrPool = new SimplePool();
 
-export const userRepository = repos.userRepository;
-export const mintQuoteRepository = repos.mintQuoteRepository;
-export const userService = new UserService(repos.userRepository);
-export const communicatorService = new CommunicatorService(repos.mintQuoteRepository);
-export const proofService = new ProofService(repos.proofRepository);
-export const mintService = new MintService(repos.mintRepository);
+export function initializeAppServices(repos: Repositories): AppServices {
+  appServices = {
+    userRepository: repos.userRepository,
+    mintQuoteRepository: repos.mintQuoteRepository,
+    userService: new UserService(repos.userRepository),
+    communicatorService: new CommunicatorService(repos.mintQuoteRepository),
+    proofService: new ProofService(repos.proofRepository),
+    mintService: new MintService(repos.mintRepository),
+  };
+  return appServices;
+}
+
+function getAppServices(): AppServices {
+  if (!appServices) {
+    throw new Error("App services not initialized. Call setupDatabase() first.");
+  }
+  return appServices;
+}
+
+export function getUserRepository(): UserRepository {
+  return getAppServices().userRepository;
+}
+
+export function getMintQuoteRepository(): MintQuoteRepository {
+  return getAppServices().mintQuoteRepository;
+}
+
+export function getUserService(): UserService {
+  return getAppServices().userService;
+}
+
+export function getCommunicatorService(): CommunicatorService {
+  return getAppServices().communicatorService;
+}
+
+export function getProofService(): ProofService {
+  return getAppServices().proofService;
+}
+
+export function getMintService(): MintService {
+  return getAppServices().mintService;
+}
 
 export const subManager = new QuoteSubscriptionManager();
 eventBus.on("quotePaid", (quote) => {

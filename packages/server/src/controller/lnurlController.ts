@@ -1,4 +1,8 @@
-import { communicatorService, mintQuoteRepository, userService } from "@/config";
+import {
+  getCommunicatorService,
+  getMintQuoteRepository,
+  getUserService,
+} from "@/config";
 import { BadRequestError } from "@/errors";
 import { createLnurlResponse, isValidAmount } from "@/utils/lnurl";
 import { getRequestLogger } from "@/utils/logger";
@@ -19,6 +23,9 @@ export async function lnurlController(
   next: NextFunction,
 ) {
   try {
+    const communicatorService = getCommunicatorService();
+    const mintQuoteRepository = getMintQuoteRepository();
+    const userService = getUserService();
     const logger = getRequestLogger(req);
     const { amount, nostr } = req.query;
     const userParam = req.params.user;

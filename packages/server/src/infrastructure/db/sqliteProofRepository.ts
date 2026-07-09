@@ -1,5 +1,5 @@
 import { ProofRepository } from "@/domain/proof/proofRepository";
-import { queryWrapper } from "@/utils/database";
+import { DatabaseAdapter } from "@/database/adapter";
 import { Proof } from "@cashu/cashu-ts";
 
 type ProofSpendState = "UNSPENT" | "INFLIGHT" | "SPENT";
@@ -39,6 +39,8 @@ class DatabaseProof {
 }
 
 export class SqliteProofRepository implements ProofRepository {
+  constructor(private readonly db: DatabaseAdapter) {}
+
   async saveProofs(proofs: Proof[]): Promise<void> {
     if (proofs.length === 0) {
       return;
@@ -57,7 +59,7 @@ export class SqliteProofRepository implements ProofRepository {
     ]);
 
     const query = `INSERT INTO proofs (${columns.join(", ")}) VALUES ${placeholders}`;
-    const res = await queryWrapper<DatabaseProof>(query, values);
+    const res = await this.db.query<DatabaseProof>(query, values);
 
     if (res.rowCount !== proofs.length) {
       throw new Error("Something went wrong adding proofs to db");

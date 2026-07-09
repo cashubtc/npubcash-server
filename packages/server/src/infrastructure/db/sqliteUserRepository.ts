@@ -1,7 +1,6 @@
 import { User, UserWithName } from "@/domain/user/user";
 import { UserRepository } from "@/domain/user/userRepository";
-import { queryWrapper } from "@/utils/database";
-import { config } from "@/config/index";
+import { DatabaseAdapter } from "@/database/adapter";
 
 type UserTableRow = {
   id: number;
@@ -13,8 +12,13 @@ type UserTableRow = {
 };
 
 export class SqliteUserRepository implements UserRepository {
+  constructor(
+    private readonly db: DatabaseAdapter,
+    private readonly defaultMintUrl: string,
+  ) {}
+
   async getUserByPubkey(pubkey: string): Promise<User | null> {
-    const res = await queryWrapper<UserTableRow>(
+    const res = await this.db.query<UserTableRow>(
       `SELECT * from l_users WHERE pubkey = ?;`,
       [pubkey],
     );
@@ -25,7 +29,7 @@ export class SqliteUserRepository implements UserRepository {
   }
 
   async getUserByName(name: string): Promise<UserWithName | null> {
-    const res = await queryWrapper<UserTableRow & { name: string }>(
+    const res = await this.db.query<UserTableRow & { name: string }>(
       `SELECT * from l_users WHERE name = ?;`,
       [name],
     );
@@ -41,7 +45,7 @@ export class SqliteUserRepository implements UserRepository {
   }
 
   async createUser(pubkey: string, name: string): Promise<void> {
-    const res = await queryWrapper<UserTableRow>(
+    const res = await this.db.query<UserTableRow>(
       `INSERT INTO l_users (pubkey, name) VALUES (?, ?);`,
       [pubkey, name],
     );
@@ -57,8 +61,8 @@ VALUES (?, ?, ?)
 ON CONFLICT (pubkey)
 DO UPDATE SET name = excluded.name
 RETURNING *;`;
-    const params = [pubkey, config.mintUrl, name];
-    const queryRes = await queryWrapper<UserTableRow>(query, params);
+    const params = [pubkey, this.defaultMintUrl, name];
+    const queryRes = await this.db.query<UserTableRow>(query, params);
     if (queryRes.rowCount === 0) {
       throw new Error("Did not update username");
     }
@@ -74,7 +78,7 @@ INSERT INTO l_users (lock_quote, pubkey)
 VALUES (?, ?)
 ON CONFLICT (pubkey)
 DO UPDATE SET lock_quote = excluded.lock_quote;`;
-    const queryRes = await queryWrapper(query, [
+    const queryRes = await this.db.query(query, [
       shouldLockQuote ? 1 : 0,
       pubkey,
     ]);
@@ -93,7 +97,7 @@ name = excluded.name,
 mint_url = excluded.mint_url,
 lock_quote = excluded.lock_quote;
 `;
-    const queryRes = await queryWrapper(query, [
+    const queryRes = await this.db.query(query, [
       user.pubkey,
       user.name,
       user.mintUrl,

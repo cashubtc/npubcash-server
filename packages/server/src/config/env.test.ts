@@ -90,12 +90,42 @@ describe("env.ts", () => {
     expect(getApiModeFromEnv()).toBe("API_ONLY");
   });
 
-  test("getDbTypeFromEnv defaults to sqlite", () => {
+  test("getDbTypeFromEnv defaults to sqlite and infers postgres URLs", () => {
     delete process.env.DATABASE_TYPE;
+    delete process.env.DATABASE_URL;
     expect(getDbTypeFromEnv()).toBe("sqlite");
 
     process.env.DATABASE_TYPE = "postgres";
     expect(getDbTypeFromEnv()).toBe("postgres");
+
+    delete process.env.DATABASE_TYPE;
+    process.env.DATABASE_URL = "postgres://localhost/db";
+    expect(getDbTypeFromEnv()).toBe("postgres");
+
+    process.env.DATABASE_URL = "postgresql://localhost/db";
+    expect(getDbTypeFromEnv()).toBe("postgres");
+
+    process.env.DATABASE_URL = "./data.db";
+    expect(getDbTypeFromEnv()).toBe("sqlite");
+  });
+
+  test("getDbTypeFromEnv rejects invalid types and URL mismatches", () => {
+    process.env.DATABASE_TYPE = "mysql";
+    expect(() => getDbTypeFromEnv()).toThrow(
+      "DATABASE_TYPE must be either 'postgres' or 'sqlite'",
+    );
+
+    process.env.DATABASE_TYPE = "sqlite";
+    process.env.DATABASE_URL = "postgres://localhost/db";
+    expect(() => getDbTypeFromEnv()).toThrow(
+      "DATABASE_TYPE=sqlite does not match DATABASE_URL (postgres)",
+    );
+
+    delete process.env.DATABASE_TYPE;
+    process.env.DATABASE_URL = "mysql://localhost/db";
+    expect(() => getDbTypeFromEnv()).toThrow(
+      "DATABASE_URL must be a PostgreSQL URL or a SQLite file path",
+    );
   });
 
   test("getDbConnectionStringFromEnv returns URL or default SQLite path", () => {
