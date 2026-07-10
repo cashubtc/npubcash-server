@@ -66,6 +66,21 @@ async function createV2Fixture(client: Client): Promise<void> {
   `);
 }
 
+async function assertEmptyPublicSchema(client: Client): Promise<void> {
+  const result = await client.query<{ count: string }>(`
+    SELECT COUNT(*)::text AS count
+    FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public'
+      AND c.relkind IN ('r', 'p', 'v', 'm', 'S')
+  `);
+  if (result.rows[0]?.count !== "0") {
+    throw new Error(
+      "MIGRATION_BENCH_DATABASE_URL must name a database with an empty public schema",
+    );
+  }
+}
+
 async function replaceProofFixture(
   client: Client,
   rows: number,
@@ -81,14 +96,16 @@ async function replaceProofFixture(
 
 async function runBenchmark(databaseUrl: string): Promise<BenchmarkResult[]> {
   const suffix = `${process.pid}_${Date.now()}`;
-  const sourceSchema = `migration_cursor_bench_source_${suffix}`;
+  const sourceSchema = "public";
   const targetSchema = `migration_cursor_bench_target_${suffix}`;
   const source = new Client({ connectionString: databaseUrl });
   const target = new Client({ connectionString: databaseUrl });
+  let ownsSourceFixture = false;
 
   await Promise.all([source.connect(), target.connect()]);
   try {
-    await source.query(`CREATE SCHEMA ${quoteIdentifier(sourceSchema)}`);
+    await assertEmptyPublicSchema(source);
+    ownsSourceFixture = true;
     await source.query(`CREATE SCHEMA ${quoteIdentifier(targetSchema)}`);
     await source.query(`SET search_path TO ${quoteIdentifier(sourceSchema)}`);
     await target.query(`SET search_path TO ${quoteIdentifier(targetSchema)}`);
@@ -128,10 +145,12 @@ async function runBenchmark(databaseUrl: string): Promise<BenchmarkResult[]> {
       source.query("RESET search_path"),
       target.query("RESET search_path"),
     ]);
+    if (ownsSourceFixture) {
+      await source.query(
+        "DROP TABLE IF EXISTS proofs, mints, mint_quotes, l_users, pgmigrations CASCADE",
+      );
+    }
     await Promise.allSettled([
-      source.query(
-        `DROP SCHEMA IF EXISTS ${quoteIdentifier(sourceSchema)} CASCADE`,
-      ),
       source.query(
         `DROP SCHEMA IF EXISTS ${quoteIdentifier(targetSchema)} CASCADE`,
       ),

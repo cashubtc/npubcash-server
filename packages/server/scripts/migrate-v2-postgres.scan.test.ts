@@ -90,6 +90,10 @@ class DryRunSourceClient implements SqlClient {
       return this.result<T>(rows);
     }
 
+    if (normalized === "SELECT current_schema() AS schema_name") {
+      return this.result<T>([{ schema_name: "public" }]);
+    }
+
     if (normalized.includes("FROM pg_tables")) {
       rows = ["pgmigrations", ...Object.keys(activeColumns)].map(
         (tablename) => ({
