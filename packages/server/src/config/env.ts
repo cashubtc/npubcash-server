@@ -93,8 +93,14 @@ function getDefaultSqlitePath(): string {
 export function getDbConnectionStringFromEnv(): string {
   const envVar = getEnvVar("DATABASE_URL");
   if (!envVar) {
+    const dbType = getDbTypeFromEnv();
+    if (getNodeEnvFromEnv() === "production" && !getEnvVar("DATABASE_TYPE")) {
+      throw new Error(
+        "Production requires DATABASE_URL or explicit DATABASE_TYPE=sqlite",
+      );
+    }
     // Default to SQLite file if DATABASE_URL not set
-    if (getDbTypeFromEnv() === "sqlite") {
+    if (dbType === "sqlite") {
       return getDefaultSqlitePath();
     }
     throw new Error("Could not find DATABASE_URL in env");

@@ -81,6 +81,13 @@ leave them in the source and continue. Keep the v2 database until the v3 deploym
 has been verified so switching the application connection string back remains a
 rollback option.
 
+Before deploying, set the target URL as the v3 app's `DATABASE_URL` secret and
+confirm the secret exists on that exact app. Fly secrets are app-specific, so a
+new or renamed app does not inherit the v2 app's secrets. The checked-in
+`fly.toml` is for the nightly SQLite deployment, not an existing-app upgrade.
+See [the deployment guide](docs/deploy.md#flyio-and-v2-to-v3-cutover) for the
+cutover commands and rollback precautions.
+
 ## Roadmap
 
 - [x] Implement basic API

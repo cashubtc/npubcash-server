@@ -43,7 +43,7 @@ The server uses domain-driven design:
 - **Domain layer** (`domain/`) - Business logic services (UserService, MintService, ProofService, CommunicatorService)
 - **Controller layer** (`controller/`) - HTTP request handlers
 - **Infrastructure** (`infrastructure/db/`) - Repository pattern implementations
-- **Database** (`database/`) - Adapter pattern supporting PostgreSQL (production) and SQLite (development)
+- **Database** (`database/`) - Adapter pattern supporting PostgreSQL and SQLite
 
 Key patterns:
 - Event bus for decoupled communication (e.g., `quotePaid` events)
@@ -60,8 +60,12 @@ Key patterns:
 ## Database
 
 Supports dual databases via adapter pattern:
-- **PostgreSQL**: Production (set `PG_CONNECTIONSTRING` or individual `PG*` vars)
-- **SQLite**: Development fallback
+- **PostgreSQL**: Recommended for production (set `DATABASE_URL`)
+- **SQLite**: Development default, or an explicit production choice backed by a persistent volume
+
+Production requires `DATABASE_URL` unless SQLite is explicitly selected with
+`DATABASE_TYPE=sqlite`. PostgreSQL URLs and SQLite file paths infer the database
+type when `DATABASE_TYPE` is omitted.
 
 Migrations run automatically on startup and support both databases.
 
