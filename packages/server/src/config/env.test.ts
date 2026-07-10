@@ -91,6 +91,7 @@ describe("env.ts", () => {
   });
 
   test("getDbTypeFromEnv defaults to sqlite and infers postgres URLs", () => {
+    process.env.NODE_ENV = "production";
     delete process.env.DATABASE_TYPE;
     delete process.env.DATABASE_URL;
     expect(getDbTypeFromEnv()).toBe("sqlite");
@@ -110,6 +111,7 @@ describe("env.ts", () => {
   });
 
   test("getDbTypeFromEnv rejects invalid types and URL mismatches", () => {
+    process.env.NODE_ENV = "production";
     process.env.DATABASE_TYPE = "mysql";
     expect(() => getDbTypeFromEnv()).toThrow(
       "DATABASE_TYPE must be either 'postgres' or 'sqlite'",
@@ -121,6 +123,12 @@ describe("env.ts", () => {
       "DATABASE_TYPE=sqlite does not match DATABASE_URL (postgres)",
     );
 
+    process.env.DATABASE_TYPE = "postgres";
+    process.env.DATABASE_URL = "./data.db";
+    expect(() => getDbTypeFromEnv()).toThrow(
+      "DATABASE_TYPE=postgres does not match DATABASE_URL (sqlite)",
+    );
+
     delete process.env.DATABASE_TYPE;
     process.env.DATABASE_URL = "mysql://localhost/db";
     expect(() => getDbTypeFromEnv()).toThrow(
@@ -129,6 +137,7 @@ describe("env.ts", () => {
   });
 
   test("getDbConnectionStringFromEnv returns URL or default SQLite path", () => {
+    process.env.NODE_ENV = "production";
     process.env.DATABASE_URL = "postgres://localhost/db";
     expect(getDbConnectionStringFromEnv()).toBe("postgres://localhost/db");
 
@@ -136,12 +145,28 @@ describe("env.ts", () => {
     delete process.env.DATABASE_TYPE;
     process.env.NODE_ENV = "development";
     expect(getDbConnectionStringFromEnv()).toBe("./data.db");
+  });
 
+  test("getDbConnectionStringFromEnv requires a database choice in production", () => {
+    delete process.env.DATABASE_URL;
+    delete process.env.DATABASE_TYPE;
     process.env.NODE_ENV = "production";
+    expect(() => getDbConnectionStringFromEnv()).toThrow(
+      "Production requires DATABASE_URL or explicit DATABASE_TYPE=sqlite",
+    );
+
+    process.env.DATABASE_TYPE = "sqlite";
     expect(getDbConnectionStringFromEnv()).toBe("/data/npubcash.db");
 
     process.env.DATABASE_TYPE = "postgres";
-    expect(() => getDbConnectionStringFromEnv()).toThrow("Could not find DATABASE_URL");
+    process.env.DATABASE_URL = "postgres://localhost/db";
+    expect(getDbTypeFromEnv()).toBe("postgres");
+    expect(getDbConnectionStringFromEnv()).toBe("postgres://localhost/db");
+
+    delete process.env.DATABASE_URL;
+    expect(() => getDbConnectionStringFromEnv()).toThrow(
+      "Could not find DATABASE_URL",
+    );
   });
 
   test("getUsernameConfigFromEnv returns enabled/disabled config", () => {

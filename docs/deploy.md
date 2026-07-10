@@ -4,7 +4,7 @@
 
 In order to deploy npub.cash yourself you will need:
 
-- A postgres database to connect to
+- A PostgreSQL database, or a persistent volume if you explicitly choose SQLite
 - A Blink API account
 
 ## Deploy npubcash-server
@@ -39,19 +39,26 @@ npm ci
 npm run build
 ```
 
-Once deployed you can start the service using `npm run start`. Make sure to set your environment variables accordingly (see below)
+Once deployed, start the server package in production mode. The root-level
+`start` script is for development and must not be used for a production deploy:
+
+```sh
+cd packages/server
+NODE_ENV=production bun run start
+```
+
+Make sure to set your environment variables accordingly (see below).
 
 ### Env variables
 
 npubcash-server needs a couple of environment variables to run.
 
 ```sh
-#Your database connection settings
-PGUSER=
-PGPASSWORD=
-PGHOST=
-PGDATABASE=
-PGPORT=
+# PostgreSQL (DATABASE_TYPE is inferred)
+DATABASE_URL=postgres://user:password@host/database
+# Or explicitly opt in to SQLite. DATABASE_URL may be omitted to use the
+# production default, /data/npubcash.db, on a persistent volume.
+# DATABASE_TYPE=sqlite
 # The url of the default mint
 MINTURL=
 # You Blink API settings
@@ -66,6 +73,37 @@ LNURL_MAX_AMOUNT=
 # The hostname your app will be reached under
 HOSTNAME=
 ```
+
+Production startup fails when both `DATABASE_URL` and `DATABASE_TYPE` are
+missing. This prevents a missing PostgreSQL secret from silently starting the
+server on an empty SQLite database. If both variables are set, their database
+types must agree.
+
+### Fly.io and v2-to-v3 cutover
+
+The checked-in `fly.toml` targets the `nightly-npubcash` app and its SQLite
+volume. It is a staging or new-app configuration, not an in-place upgrade
+configuration. Do not deploy it unchanged over an existing v2 installation.
+
+Fly secrets are scoped to an app and their values cannot be copied out of Fly.
+Before deploying v3, retrieve the target PostgreSQL URL from its original
+secure source and set it explicitly on the app that will run v3:
+
+```sh
+fly secrets set --app "$V3_APP" DATABASE_URL="$V3_DATABASE_URL"
+fly secrets list --app "$V3_APP"
+fly deploy --app "$V3_APP"
+```
+
+Confirm that `DATABASE_URL` appears in the secret list before deploying. The
+list shows secret names and digests, not their values. Keep the v2 app, its
+secrets, and its PostgreSQL database unchanged until the v3 migration and
+deployment have been verified. This preserves the option to direct traffic
+back to v2 during rollback.
+
+When migrating into a separate v3 database, set `DATABASE_URL` to the target
+URL used by the migration command, not the v2 source URL. See the migration
+instructions in the project README for the data-copy and verification steps.
 
 ## Setup Blink
 
