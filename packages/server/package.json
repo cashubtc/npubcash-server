@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "description": "",
   "scripts": {
+    "benchmark:migration-cursor": "bun scripts/migrate-v2-postgres.cursor.bench.ts",
     "dev": "NODE_ENV=development bun --watch src/index.ts",
     "migrate:v2-postgres": "bun scripts/migrate-v2-postgres.ts",
     "test": "bun test",
