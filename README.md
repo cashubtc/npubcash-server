@@ -88,12 +88,13 @@ receipt reports the previous success without copying data again.
 
 Use the reported state to decide whether to retry:
 
-| Status | Target commit | Retry behavior |
-| --- | --- | --- |
-| `dry_run_completed` | `not_attempted` | The target was not changed; the migration may be run. |
-| `failed_before_target_commit` | `not_attempted` | The target transaction was not committed; correct the error and retry. |
-| `migration_completed` | `confirmed` | Do not retry. Continue with target verification and cutover. |
-| `target_commit_unknown` | `unknown` | Do not retry until the target is reachable and the command can inspect its receipt. |
+| Status | Target commit | Retry safe | Retry behavior |
+| --- | --- | --- | --- |
+| `dry_run_completed` | `not_attempted` | `true` | The target was not changed; the migration may be run. |
+| `failed_before_target_commit` | `not_attempted` | `true` | The target transaction was not committed; correct the error and retry. |
+| `failed_before_target_commit` | `not_attempted` | `false` | Do not retry automatically. Follow `operatorGuidance`; a non-standard source schema requires manual migration. |
+| `migration_completed` | `confirmed` | `false` | Do not retry. Continue with target verification and cutover. |
+| `target_commit_unknown` | `unknown` | `false` | Do not retry until the target is reachable and the command can inspect its receipt. |
 
 If writing `--report` fails after a confirmed commit, the command prints a warning
 but still reports the migration as completed. Save the JSON printed to standard
