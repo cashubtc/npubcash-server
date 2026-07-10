@@ -72,7 +72,28 @@ bun run migrate:v2-postgres -- \
 
 Run the same command with `--dry-run` first to validate the source schema and
 produce row counts and checksums without modifying the target. The source database
-is never modified, and the target must be empty.
+is never modified. The target must be empty on the first run; later runs recognize
+a matching completed migration receipt.
+
+The migration report records `status`, `targetCommit`, `retrySafe`, and
+`operatorGuidance`. A successful migration also stores a receipt in the target
+database as part of the same transaction as the copied data. If the connection is
+lost while waiting for `COMMIT`, the command uses a separate connection to check
+that receipt. Running the command again against a target with a matching completed
+receipt reports the previous success without copying data again.
+
+Use the reported state to decide whether to retry:
+
+| Status | Target commit | Retry behavior |
+| --- | --- | --- |
+| `dry_run_completed` | `not_attempted` | The target was not changed; the migration may be run. |
+| `failed_before_target_commit` | `not_attempted` | The target transaction was not committed; correct the error and retry. |
+| `migration_completed` | `confirmed` | Do not retry. Continue with target verification and cutover. |
+| `target_commit_unknown` | `unknown` | Do not retry until the target is reachable and the command can inspect its receipt. |
+
+If writing `--report` fails after a confirmed commit, the command prints a warning
+but still reports the migration as completed. Save the JSON printed to standard
+output and do not rerun the migration to recreate the file.
 
 The script copies `l_users`, `mint_quotes`, `mints`, and `proofs`. Populated v1-only
 tables stop the migration by default because v3 cannot use their data. After
