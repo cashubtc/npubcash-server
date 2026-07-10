@@ -5,6 +5,7 @@
   "description": "",
   "scripts": {
     "dev": "NODE_ENV=development bun --watch src/index.ts",
+    "migrate:v2-postgres": "bun scripts/migrate-v2-postgres.ts",
     "test": "bun test",
     "start": "bun src/index.ts"
   },

@@ -55,6 +55,32 @@ npm run dev
 By default the dev server will include the projects landing page on the root domain.
 For more details check out the [documentation](https://docs.cashu-address.com)
 
+### Migrating a v2 PostgreSQL database
+
+The v3 server uses a clean database initialized by its dialect-aware migrations. To
+move an existing v2 PostgreSQL installation, create a separate empty PostgreSQL
+database, stop every v2 server instance, and run:
+
+```sh
+cd packages/server
+bun run migrate:v2-postgres -- \
+  --source "$V2_DATABASE_URL" \
+  --target "$V3_DATABASE_URL" \
+  --confirm-v2-stopped \
+  --report migration-report.json
+```
+
+Run the same command with `--dry-run` first to validate the source schema and
+produce row counts and checksums without modifying the target. The source database
+is never modified, and the target must be empty.
+
+The script copies `l_users`, `mint_quotes`, `mints`, and `proofs`. Populated v1-only
+tables stop the migration by default because v3 cannot use their data. After
+reviewing and backing up those tables, pass `--allow-unmigrated-legacy-data` to
+leave them in the source and continue. Keep the v2 database until the v3 deployment
+has been verified so switching the application connection string back remains a
+rollback option.
+
 ## Roadmap
 
 - [x] Implement basic API
