@@ -1,5 +1,6 @@
 node_modules
 coverage
 dist
+packages/frontend/src/routeTree.gen.ts
 .env
 venv
