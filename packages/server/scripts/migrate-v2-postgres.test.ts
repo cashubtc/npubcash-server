@@ -22,7 +22,11 @@ const migrationOptions: MigrationOptions = {
 };
 
 class EmptySourceClient implements SqlClient {
-  constructor(private readonly failCleanup = false) {}
+  constructor(
+    private readonly failCleanup = false,
+    private readonly schema = "public",
+    private readonly failSchemaInspection = false,
+  ) {}
 
   async query<T extends QueryResultRow = QueryResultRow>(
     sql: string,
@@ -34,6 +38,12 @@ class EmptySourceClient implements SqlClient {
       (normalized === "COMMIT" || normalized === "ROLLBACK")
     ) {
       throw new Error("source connection lost during cleanup");
+    }
+    if (normalized.includes("current_schema() AS schema_name")) {
+      if (this.failSchemaInspection) {
+        throw new Error("source connection timed out");
+      }
+      return result<T>([{ schema_name: this.schema }]);
     }
     if (normalized.includes("FROM pg_tables")) {
       return result<T>([
@@ -206,6 +216,50 @@ describe("migrate-v2-postgres CLI", () => {
 });
 
 describe("migrateV2PostgresToV3", () => {
+  test("a non-standard source schema requires manual migration", async () => {
+    const targetClient = new EmptyTargetClient();
+
+    try {
+      await migrateV2PostgresToV3(
+        new EmptySourceClient(false, "tenant_v2"),
+        targetClient,
+        migrationOptions,
+      );
+      throw new Error("expected migration to fail");
+    } catch (error) {
+      expect(error).toBeInstanceOf(MigrationExecutionError);
+      expect((error as MigrationExecutionError).report).toMatchObject({
+        status: "failed_before_target_commit",
+        targetCommit: "not_attempted",
+        error:
+          'Source database schema "tenant_v2" is non-standard. Automatic migration only supports the v2 "public" schema; this database requires a manual migration.',
+      });
+    }
+
+    expect(targetClient.committed).toBe(false);
+  });
+
+  test("a source schema query failure is safe to retry", async () => {
+    try {
+      await migrateV2PostgresToV3(
+        new EmptySourceClient(false, "public", true),
+        new EmptyTargetClient(),
+        migrationOptions,
+      );
+      throw new Error("expected migration to fail");
+    } catch (error) {
+      expect(error).toBeInstanceOf(MigrationExecutionError);
+      expect((error as MigrationExecutionError).report).toMatchObject({
+        status: "failed_before_target_commit",
+        targetCommit: "not_attempted",
+        retrySafe: true,
+      });
+      expect((error as MigrationExecutionError).report.operatorGuidance).toContain(
+        "Restore source database connectivity and retry",
+      );
+    }
+  });
+
   test("a source cleanup failure leaves the target uncommitted and safe to retry", async () => {
     const targetClient = new EmptyTargetClient();
 
@@ -276,6 +330,29 @@ describe("migrateV2PostgresToV3", () => {
       retrySafe: false,
       recoveredFromReceipt: true,
     });
+  });
+
+  test("a receipt is not accepted for a non-standard source schema", async () => {
+    const targetClient = new EmptyTargetClient();
+    await migrateV2PostgresToV3(
+      new EmptySourceClient(),
+      targetClient,
+      migrationOptions,
+    );
+
+    try {
+      await migrateV2PostgresToV3(
+        new EmptySourceClient(false, "tenant_v2"),
+        targetClient,
+        migrationOptions,
+      );
+      throw new Error("expected migration to fail");
+    } catch (error) {
+      expect(error).toBeInstanceOf(MigrationExecutionError);
+      expect((error as MigrationExecutionError).report.error).toBe(
+        'Source database schema "tenant_v2" is non-standard. Automatic migration only supports the v2 "public" schema; this database requires a manual migration.',
+      );
+    }
   });
 
   test("a receipt read failure reports an unknown commit instead of a generic failure", async () => {

@@ -75,6 +75,10 @@ produce row counts and checksums without modifying the target. The source databa
 is never modified. The target must be empty on the first run; later runs recognize
 a matching completed migration receipt.
 
+Automatic migration only supports the standard v2 `public` schema. If the source
+connection selects another schema, the command exits before modifying the target
+and reports that the database requires a manual migration.
+
 The migration report records `status`, `targetCommit`, `retrySafe`, and
 `operatorGuidance`. A successful migration also stores a receipt in the target
 database as part of the same transaction as the copied data. If the connection is

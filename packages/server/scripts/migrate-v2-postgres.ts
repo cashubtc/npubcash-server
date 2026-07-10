@@ -136,6 +136,8 @@ const MIGRATION_RECEIPT_TABLE = "_v2_migration_receipt";
 
 class TargetNotEmptyError extends Error {}
 
+class UnsupportedSourceSchemaError extends Error {}
+
 class ClientDatabaseAdapter implements DatabaseAdapter {
   readonly type = "postgres" as const;
 
@@ -172,7 +174,9 @@ Options:
   --help                               show this help
 
 The source database is never modified. The target must be empty on the first run;
-a matching completed migration receipt is recognized on later runs.`;
+a matching completed migration receipt is recognized on later runs. Automatic
+migration requires the standard v2 public schema; other schemas require a manual
+migration.`;
 }
 
 function readOption(args: string[], index: number, name: string): string {
@@ -375,6 +379,18 @@ async function getColumns(client: SqlClient, table: string): Promise<Set<string>
     [table],
   );
   return new Set(result.rows.map((row) => row.column_name));
+}
+
+async function assertStandardSourceSchema(source: SqlClient): Promise<void> {
+  const result = await source.query<{ schema_name: string | null }>(`
+    SELECT current_schema() AS schema_name
+  `);
+  const schema = result.rows[0]?.schema_name ?? "unknown";
+  if (schema !== "public") {
+    throw new UnsupportedSourceSchemaError(
+      `Source database schema "${schema}" is non-standard. Automatic migration only supports the v2 "public" schema; this database requires a manual migration.`,
+    );
+  }
 }
 
 async function findCompletedMigration(
@@ -682,6 +698,31 @@ export async function migrateV2PostgresToV3(
   }
 
   const startedAt = new Date().toISOString();
+  try {
+    await assertStandardSourceSchema(source);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const unsupportedSchema = error instanceof UnsupportedSourceSchemaError;
+    throw new MigrationExecutionError(
+      message,
+      {
+        version: 2,
+        startedAt,
+        completedAt: new Date().toISOString(),
+        dryRun: options.dryRun,
+        source: options.sourceLabel,
+        target: options.targetLabel,
+        status: "failed_before_target_commit",
+        targetCommit: "not_attempted",
+        retrySafe: !unsupportedSchema,
+        operatorGuidance: unsupportedSchema
+          ? "This source uses an unsupported schema and requires a manual migration. Do not retry automatic migration with this source."
+          : "The target was not modified. Restore source database connectivity and retry.",
+        error: message,
+      },
+      error instanceof Error ? { cause: error } : undefined,
+    );
+  }
   let completedMigration: MigrationReport | undefined;
   try {
     completedMigration = await findCompletedMigration(target, options);
