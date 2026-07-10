@@ -142,6 +142,12 @@ function readOption(args: string[], index: number, name: string): string {
   return value;
 }
 
+function assertValidBatchSize(batchSize: number): void {
+  if (!Number.isInteger(batchSize) || batchSize < 1 || batchSize > 5000) {
+    throw new Error("--batch-size must be an integer between 1 and 5000");
+  }
+}
+
 export function parseArgs(
   args: string[],
   env: Record<string, string | undefined> = process.env,
@@ -195,9 +201,7 @@ export function parseArgs(
   if (!targetUrl) {
     throw new Error("Missing --target or V3_DATABASE_URL");
   }
-  if (!Number.isInteger(batchSize) || batchSize < 1 || batchSize > 5000) {
-    throw new Error("--batch-size must be an integer between 1 and 5000");
-  }
+  assertValidBatchSize(batchSize);
   if (!dryRun && !confirmV2Stopped) {
     throw new Error(
       "Refusing to migrate without --confirm-v2-stopped. Stop every v2 instance first.",
@@ -529,16 +533,19 @@ async function scanTable(
   onRows?: (rows: Row[]) => Promise<void>,
 ): Promise<{ rows: number; checksum: string }> {
   const checksum = createHash("sha256");
-  let offset = 0;
   let rowCount = 0;
+  const cursorName = quoteIdentifier(`migration_${plan.name}_scan`);
+
+  await client.query(
+    `DECLARE ${cursorName} NO SCROLL CURSOR FOR
+     SELECT ${plan.select}
+     FROM ${quoteIdentifier(plan.name)}
+     ORDER BY ${plan.orderBy}`,
+  );
 
   while (true) {
     const result = await client.query<Row>(
-      `SELECT ${plan.select}
-       FROM ${quoteIdentifier(plan.name)}
-       ORDER BY ${plan.orderBy}
-       LIMIT $1 OFFSET $2`,
-      [batchSize, offset],
+      `FETCH FORWARD ${batchSize} FROM ${cursorName}`,
     );
     const rows = result.rows as Row[];
     updateChecksum(checksum, rows);
@@ -546,9 +553,10 @@ async function scanTable(
       await onRows(rows);
     }
     rowCount += rows.length;
-    offset += rows.length;
     if (rows.length < batchSize) break;
   }
+
+  await client.query(`CLOSE ${cursorName}`);
 
   return { rows: rowCount, checksum: checksum.digest("hex") };
 }
@@ -576,6 +584,7 @@ export async function migrateV2PostgresToV3(
   target: SqlClient,
   options: MigrationOptions,
 ): Promise<MigrationReport> {
+  assertValidBatchSize(options.batchSize);
   if (!options.dryRun && !options.confirmV2Stopped) {
     throw new Error("All v2 writers must be stopped before migration");
   }
