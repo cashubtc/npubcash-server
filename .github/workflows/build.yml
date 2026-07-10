@@ -18,3 +18,71 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run build
       - run: docker build --tag npubcash-server:ci .
+
+  production-runtime:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: npubcash
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d npubcash"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - name: Install runtime dependencies only
+        run: bun install --frozen-lockfile --production --omit=peer
+      - name: Verify PostgreSQL operator tooling
+        working-directory: packages/server
+        run: bun run migrate:v2-postgres -- --help
+      - name: Verify PostgreSQL and SQLite startup
+        shell: bash
+        run: |
+          smoke_start() {
+            local database_type="$1"
+            local database_url="$2"
+            local log_file="/tmp/npubcash-${database_type}.log"
+
+            env \
+              API_MODE=API_ONLY \
+              DATABASE_TYPE="$database_type" \
+              DATABASE_URL="$database_url" \
+              HOSTNAME=http://127.0.0.1:8000 \
+              JWT_SECRET=ci-runtime-secret \
+              MINTURL=https://mint.example.com \
+              NODE_ENV=production \
+              PORT=8000 \
+              bun packages/server/src/index.ts >"$log_file" 2>&1 &
+            local server_pid=$!
+
+            for _ in {1..30}; do
+              if ! kill -0 "$server_pid" 2>/dev/null; then
+                cat "$log_file"
+                return 1
+              fi
+              if curl --silent --output /dev/null http://127.0.0.1:8000/; then
+                kill "$server_pid"
+                wait "$server_pid" || true
+                return 0
+              fi
+              sleep 1
+            done
+
+            cat "$log_file"
+            kill "$server_pid" 2>/dev/null || true
+            wait "$server_pid" || true
+            return 1
+          }
+
+          smoke_start postgres postgres://postgres:postgres@127.0.0.1:5432/npubcash
+          smoke_start sqlite /tmp/npubcash-ci.sqlite
