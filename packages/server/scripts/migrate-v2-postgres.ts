@@ -46,17 +46,53 @@ interface TableResult {
 }
 
 export interface MigrationReport {
-  version: 1;
+  version: 2;
   startedAt: string;
   completedAt: string;
   dryRun: boolean;
   source: string;
   target: string;
+  status: "dry_run_completed" | "migration_completed";
+  targetCommit: "not_attempted" | "confirmed";
+  retrySafe: boolean;
+  recoveredFromReceipt: boolean;
+  operatorGuidance: string;
   sourceMigrations: string[];
   zapColumnMode: "typo" | "correct" | "both";
   tables: Record<string, TableResult>;
   legacyTables: Record<string, number>;
   warnings: string[];
+}
+
+export interface MigrationFailureReport {
+  version: 2;
+  startedAt: string;
+  completedAt: string;
+  dryRun: boolean;
+  source: string;
+  target: string;
+  status: "failed_before_target_commit" | "target_commit_unknown";
+  targetCommit: "not_attempted" | "unknown";
+  retrySafe: boolean;
+  operatorGuidance: string;
+  error: string;
+}
+
+export type MigrationOutcomeReport = MigrationReport | MigrationFailureReport;
+export type MigrationReportWriter = (
+  path: string,
+  contents: string,
+) => Promise<unknown>;
+
+export class MigrationExecutionError extends Error {
+  constructor(
+    message: string,
+    readonly report: MigrationFailureReport,
+    options?: ErrorOptions,
+  ) {
+    super(message, options);
+    this.name = "MigrationExecutionError";
+  }
 }
 
 const ACTIVE_TABLE_COLUMNS: Record<string, string[]> = {
@@ -96,6 +132,12 @@ const LEGACY_TABLES = [
   "l_withdrawals",
 ] as const;
 
+const MIGRATION_RECEIPT_TABLE = "_v2_migration_receipt";
+
+class TargetNotEmptyError extends Error {}
+
+class UnsupportedSourceSchemaError extends Error {}
+
 class ClientDatabaseAdapter implements DatabaseAdapter {
   readonly type = "postgres" as const;
 
@@ -131,7 +173,10 @@ Options:
   --report <path>                      write the JSON report to a file
   --help                               show this help
 
-The source database is never modified. The target must be empty.`;
+The source database is never modified. The target must be empty on the first run;
+a matching completed migration receipt is recognized on later runs. Automatic
+migration requires the standard v2 public schema; other schemas require a manual
+migration.`;
 }
 
 function readOption(args: string[], index: number, name: string): string {
@@ -336,7 +381,22 @@ async function getColumns(client: SqlClient, table: string): Promise<Set<string>
   return new Set(result.rows.map((row) => row.column_name));
 }
 
-async function assertTargetEmpty(target: SqlClient): Promise<void> {
+async function assertStandardSourceSchema(source: SqlClient): Promise<void> {
+  const result = await source.query<{ schema_name: string | null }>(`
+    SELECT current_schema() AS schema_name
+  `);
+  const schema = result.rows[0]?.schema_name ?? "unknown";
+  if (schema !== "public") {
+    throw new UnsupportedSourceSchemaError(
+      `Source database schema "${schema}" is non-standard. Automatic migration only supports the v2 "public" schema; this database requires a manual migration.`,
+    );
+  }
+}
+
+async function findCompletedMigration(
+  target: SqlClient,
+  options: MigrationOptions,
+): Promise<MigrationReport | undefined> {
   const result = await target.query<{ relation_name: string }>(`
     SELECT c.relname AS relation_name
     FROM pg_class c
@@ -345,13 +405,69 @@ async function assertTargetEmpty(target: SqlClient): Promise<void> {
       AND c.relkind IN ('r', 'p', 'v', 'm', 'S')
     ORDER BY c.relname
   `);
-  if (result.rows.length > 0) {
-    throw new Error(
-      `Target database is not empty. Found: ${result.rows
-        .map((row) => row.relation_name)
-        .join(", ")}`,
+  if (result.rows.length === 0) return undefined;
+
+  const relations = result.rows.map((row) => row.relation_name);
+  if (relations.includes(MIGRATION_RECEIPT_TABLE)) {
+    const receiptResult = await target.query<{ report: unknown }>(
+      `SELECT report FROM ${MIGRATION_RECEIPT_TABLE} WHERE id = TRUE`,
     );
+    const storedReport = receiptResult.rows[0]?.report;
+    if (isMigrationReport(storedReport)) {
+      if (
+        storedReport.source !== options.sourceLabel ||
+        storedReport.target !== options.targetLabel
+      ) {
+        throw new Error(
+          "Target contains a completed migration receipt for different source or target labels",
+        );
+      }
+      return {
+        ...storedReport,
+        recoveredFromReceipt: true,
+        operatorGuidance:
+          "The target receipt confirms this migration already committed. Do not run it again.",
+        warnings: [
+          ...storedReport.warnings,
+          "A completed migration receipt was found; no data was copied.",
+        ],
+      };
+    }
+    throw new Error("Target contains an unreadable migration receipt");
   }
+
+  throw new TargetNotEmptyError(
+    `Target database is not empty. Found: ${relations.join(", ")}`,
+  );
+}
+
+function isMigrationReport(value: unknown): value is MigrationReport {
+  if (!value || typeof value !== "object") return false;
+  const report = value as Partial<MigrationReport>;
+  return (
+    report.version === 2 &&
+    report.status === "migration_completed" &&
+    report.targetCommit === "confirmed" &&
+    typeof report.source === "string" &&
+    typeof report.target === "string" &&
+    Array.isArray(report.warnings)
+  );
+}
+
+async function storeMigrationReceipt(
+  target: SqlClient,
+  report: MigrationReport,
+): Promise<void> {
+  await target.query(`
+    CREATE TABLE ${MIGRATION_RECEIPT_TABLE} (
+      id BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (id),
+      report JSONB NOT NULL
+    )
+  `);
+  await target.query(
+    `INSERT INTO ${MIGRATION_RECEIPT_TABLE} (id, report) VALUES (TRUE, $1::jsonb)`,
+    [JSON.stringify(report)],
+  );
 }
 
 async function inspectSource(source: SqlClient): Promise<{
@@ -575,16 +691,68 @@ export async function migrateV2PostgresToV3(
   source: SqlClient,
   target: SqlClient,
   options: MigrationOptions,
+  commitVerifier?: SqlClient,
 ): Promise<MigrationReport> {
   if (!options.dryRun && !options.confirmV2Stopped) {
     throw new Error("All v2 writers must be stopped before migration");
   }
 
   const startedAt = new Date().toISOString();
-  await assertTargetEmpty(target);
+  try {
+    await assertStandardSourceSchema(source);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const unsupportedSchema = error instanceof UnsupportedSourceSchemaError;
+    throw new MigrationExecutionError(
+      message,
+      {
+        version: 2,
+        startedAt,
+        completedAt: new Date().toISOString(),
+        dryRun: options.dryRun,
+        source: options.sourceLabel,
+        target: options.targetLabel,
+        status: "failed_before_target_commit",
+        targetCommit: "not_attempted",
+        retrySafe: !unsupportedSchema,
+        operatorGuidance: unsupportedSchema
+          ? "This source uses an unsupported schema and requires a manual migration. Do not retry automatic migration with this source."
+          : "The target was not modified. Restore source database connectivity and retry.",
+        error: message,
+      },
+      error instanceof Error ? { cause: error } : undefined,
+    );
+  }
+  let completedMigration: MigrationReport | undefined;
+  try {
+    completedMigration = await findCompletedMigration(target, options);
+  } catch (error) {
+    if (error instanceof TargetNotEmptyError) throw error;
+    const message = error instanceof Error ? error.message : String(error);
+    throw new MigrationExecutionError(
+      message,
+      {
+        version: 2,
+        startedAt,
+        completedAt: new Date().toISOString(),
+        dryRun: options.dryRun,
+        source: options.sourceLabel,
+        target: options.targetLabel,
+        status: "target_commit_unknown",
+        targetCommit: "unknown",
+        retrySafe: false,
+        operatorGuidance:
+          "The target receipt could not be verified. Do not retry until the target database can be inspected successfully.",
+        error: message,
+      },
+      error instanceof Error ? { cause: error } : undefined,
+    );
+  }
+  if (completedMigration) return completedMigration;
 
   let sourceTransaction = false;
   let targetTransaction = false;
+  let targetCommit: MigrationFailureReport["targetCommit"] = "not_attempted";
   try {
     await source.query("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
     sourceTransaction = true;
@@ -616,7 +784,7 @@ export async function migrateV2PostgresToV3(
           sourceChecksum: sourceResult.checksum,
         };
       }
-      await source.query("COMMIT");
+      await source.query("ROLLBACK");
       sourceTransaction = false;
       return createReport(startedAt, options, sourceInfo, tables);
     }
@@ -654,16 +822,57 @@ export async function migrateV2PostgresToV3(
       await resetIdentity(target, plan.name);
     }
 
+    const report = createReport(startedAt, options, sourceInfo, tables);
+    await storeMigrationReceipt(target, report);
+    await source.query("ROLLBACK");
+    sourceTransaction = false;
+    targetCommit = "unknown";
     await target.query("COMMIT");
     targetTransaction = false;
-    await source.query("COMMIT");
-    sourceTransaction = false;
 
-    return createReport(startedAt, options, sourceInfo, tables);
+    return report;
   } catch (error) {
-    if (targetTransaction) await rollbackQuietly(target);
+    if (targetTransaction && targetCommit === "not_attempted") {
+      await rollbackQuietly(target);
+    }
     if (sourceTransaction) await rollbackQuietly(source);
-    throw error;
+    const message = error instanceof Error ? error.message : String(error);
+    const commitUnknown = targetCommit === "unknown";
+    if (commitUnknown && commitVerifier) {
+      try {
+        const completed = await findCompletedMigration(commitVerifier, options);
+        if (completed) {
+          return {
+            ...completed,
+            warnings: [
+              ...completed.warnings,
+              "The target committed, but the original connection did not acknowledge COMMIT.",
+            ],
+          };
+        }
+      } catch {}
+    }
+    throw new MigrationExecutionError(
+      message,
+      {
+        version: 2,
+        startedAt,
+        completedAt: new Date().toISOString(),
+        dryRun: options.dryRun,
+        source: options.sourceLabel,
+        target: options.targetLabel,
+        status: commitUnknown
+          ? "target_commit_unknown"
+          : "failed_before_target_commit",
+        targetCommit,
+        retrySafe: !commitUnknown,
+        operatorGuidance: commitUnknown
+          ? "Do not retry until the target database has been inspected for a completed migration."
+          : "The target was not committed. It is safe to retry after correcting the reported error.",
+        error: message,
+      },
+      error instanceof Error ? { cause: error } : undefined,
+    );
   }
 }
 
@@ -689,18 +898,54 @@ function createReport(
   }
 
   return {
-    version: 1,
+    version: 2,
     startedAt,
     completedAt: new Date().toISOString(),
     dryRun: options.dryRun,
     source: options.sourceLabel,
     target: options.targetLabel,
+    status: options.dryRun ? "dry_run_completed" : "migration_completed",
+    targetCommit: options.dryRun ? "not_attempted" : "confirmed",
+    retrySafe: options.dryRun,
+    recoveredFromReceipt: false,
+    operatorGuidance: options.dryRun
+      ? "The target was not modified. A migration can be run after reviewing this report."
+      : "The target commit completed. Do not run the migration again against this target.",
     sourceMigrations: sourceInfo.sourceMigrations,
     zapColumnMode: sourceInfo.zapColumnMode,
     tables,
     legacyTables: sourceInfo.legacyTables,
     warnings,
   };
+}
+
+export async function persistMigrationReport(
+  report: MigrationOutcomeReport,
+  path: string,
+  writer: MigrationReportWriter = async (outputPath, contents) => {
+    await Bun.write(outputPath, contents);
+  },
+): Promise<string | undefined> {
+  try {
+    await writer(path, `${JSON.stringify(report, null, 2)}\n`);
+    return undefined;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (report.targetCommit === "confirmed") {
+      return `Migration completed and the target commit is confirmed, but the report could not be written to ${path}: ${message}`;
+    }
+    return `The migration report could not be written to ${path}: ${message}`;
+  }
+}
+
+async function outputMigrationReport(
+  report: MigrationOutcomeReport,
+  reportPath?: string,
+): Promise<void> {
+  console.log(JSON.stringify(report, null, 2));
+  if (!reportPath) return;
+  const warning = await persistMigrationReport(report, reportPath);
+  if (warning) console.error(`WARNING: ${warning}`);
 }
 
 async function main(): Promise<void> {
@@ -712,25 +957,41 @@ async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
   const source = new Client({ connectionString: options.sourceUrl });
   const target = new Client({ connectionString: options.targetUrl });
+  const commitVerifier = new Client({ connectionString: options.targetUrl });
 
   try {
-    await Promise.all([source.connect(), target.connect()]);
+    await Promise.all([
+      source.connect(),
+      target.connect(),
+      commitVerifier.connect(),
+    ]);
     await assertConnectedDatabasesDiffer(source, target);
-    const report = await migrateV2PostgresToV3(source, target, {
-      dryRun: options.dryRun,
-      confirmV2Stopped: options.confirmV2Stopped,
-      allowUnmigratedLegacyData: options.allowUnmigratedLegacyData,
-      batchSize: options.batchSize,
-      sourceLabel: describeDatabase(options.sourceUrl),
-      targetLabel: describeDatabase(options.targetUrl),
-    });
-    const reportJson = JSON.stringify(report, null, 2);
-    console.log(reportJson);
-    if (options.reportPath) {
-      await Bun.write(options.reportPath, `${reportJson}\n`);
+    try {
+      const report = await migrateV2PostgresToV3(
+        source,
+        target,
+        {
+          dryRun: options.dryRun,
+          confirmV2Stopped: options.confirmV2Stopped,
+          allowUnmigratedLegacyData: options.allowUnmigratedLegacyData,
+          batchSize: options.batchSize,
+          sourceLabel: describeDatabase(options.sourceUrl),
+          targetLabel: describeDatabase(options.targetUrl),
+        },
+        commitVerifier,
+      );
+      await outputMigrationReport(report, options.reportPath);
+    } catch (error) {
+      if (!(error instanceof MigrationExecutionError)) throw error;
+      await outputMigrationReport(error.report, options.reportPath);
+      process.exitCode = 1;
     }
   } finally {
-    await Promise.allSettled([source.end(), target.end()]);
+    await Promise.allSettled([
+      source.end(),
+      target.end(),
+      commitVerifier.end(),
+    ]);
   }
 }
 
