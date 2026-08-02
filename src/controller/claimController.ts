@@ -1,7 +1,12 @@
 import { Request, Response } from "express";
-import { CashuMint, getEncodedToken } from "@cashu/cashu-ts";
+import {
+  CashuMint,
+  CheckStateEnum,
+  getEncodedToken,
+} from "@cashu/cashu-ts";
 import { Claim, User } from "../models";
 import { WithdrawalStore } from "../models/withdrawal";
+import { getProofStateYs } from "../utils/cashu";
 
 export async function balanceController(req: Request, res: Response) {
   const isAuth = req.authData!;
@@ -28,29 +33,40 @@ export async function claimGetController(req: Request, res: Response) {
   if (allClaims.count === 0) {
     return res.json({ error: true, message: "No proofs to claim" });
   }
-  const proofs = allClaims.claims.map((claim) => claim.proof);
-  const payload = { proofs: proofs.map((p) => ({ secret: p.secret })) };
-  const { spendable } = await new CashuMint(process.env.MINTURL!).check(
-    payload,
+  const proofYs = allClaims.claims.map((claim) =>
+    getProofStateYs(claim.proof.secret),
   );
-  const spendableProofs = proofs.filter((_, i) => spendable[i]);
+  const { states } = await new CashuMint(process.env.MINTURL!).check({
+    Ys: proofYs.flatMap(({ current, legacy }) => [current, legacy]),
+  });
+  const spendableClaims = allClaims.claims.filter((_, index) => {
+    const { current, legacy } = proofYs[index];
+    return [current, legacy].every((proofY) => {
+      const proofStates = states.filter(({ Y }) => Y === proofY);
+      return (
+        proofStates.length > 0 &&
+        proofStates.every(({ state }) => state === CheckStateEnum.UNSPENT)
+      );
+    });
+  });
+  const spendableProofs = spendableClaims.map((claim) => claim.proof);
+  if (spendableProofs.length === 0) {
+    return res.json({ error: true, message: "No proofs to claim" });
+  }
   try {
     await WithdrawalStore.getInstance()?.saveWithdrawal(
-      allClaims.claims,
+      spendableClaims,
       req.authData!.data.pubkey,
     );
     const token = getEncodedToken({
       memo: "",
       token: [{ mint: process.env.MINTURL!, proofs: spendableProofs }],
     });
-    if (spendableProofs.length === 0) {
-      return res.json({ error: true, message: "No proofs to claim" });
-    }
     res.json({
       error: false,
       data: {
         token: token,
-        count: allClaims.claims.length,
+        count: spendableClaims.length,
         totalPending: allClaims.count,
       },
     });
