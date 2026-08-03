@@ -609,7 +609,7 @@ function createTablePlans(zapExpression: string): TablePlan[] {
       name: "mints",
       keys: ACTIVE_TABLE_COLUMNS.mints,
       select: ACTIVE_TABLE_COLUMNS.mints.map(quoteIdentifier).join(", "),
-      orderBy: quoteIdentifier("mint_url"),
+      orderBy: `${quoteIdentifier("mint_url")} COLLATE "C"`,
       identity: false,
     },
     {

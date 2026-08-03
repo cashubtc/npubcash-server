@@ -118,7 +118,7 @@ class DryRunSourceClient implements SqlClient {
     }
 
     const declare = normalized.match(
-      /^DECLARE "([^"]+)" NO SCROLL CURSOR FOR SELECT .+ FROM "([^"]+)" ORDER BY "([^"]+)"$/,
+      /^DECLARE "([^"]+)" NO SCROLL CURSOR FOR SELECT .+ FROM "([^"]+)" ORDER BY "([^"]+)"(?: COLLATE "C")?$/,
     );
     if (declare) {
       const table = declare[2] as ActiveTable;
@@ -231,6 +231,11 @@ describe("v2 PostgreSQL migration table scanning", () => {
         ),
       ).toBe(true);
     }
+    expect(
+      source.queries.some((query) =>
+        /FROM "mints"\s+ORDER BY "mint_url" COLLATE "C"/.test(query),
+      ),
+    ).toBe(true);
   });
 
   test("scans an exact batch boundary before detecting the end", async () => {
