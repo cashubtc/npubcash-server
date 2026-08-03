@@ -557,11 +557,16 @@ async function inspectSource(source: SqlClient): Promise<{
 }
 
 function createTablePlans(zapExpression: string): TablePlan[] {
+  const bigintIdentity = `${quoteIdentifier("id")}::bigint AS ${quoteIdentifier("id")}`;
+
   return [
     {
       name: "l_users",
       keys: ACTIVE_TABLE_COLUMNS.l_users,
-      select: ACTIVE_TABLE_COLUMNS.l_users.map(quoteIdentifier).join(", "),
+      select: [
+        bigintIdentity,
+        ...ACTIVE_TABLE_COLUMNS.l_users.slice(1).map(quoteIdentifier),
+      ].join(", "),
       orderBy: quoteIdentifier("id"),
       identity: true,
     },
@@ -583,7 +588,7 @@ function createTablePlans(zapExpression: string): TablePlan[] {
         "locked",
       ],
       select: [
-        "id",
+        bigintIdentity,
         "created_at",
         "unit",
         "mint_url",
@@ -610,7 +615,10 @@ function createTablePlans(zapExpression: string): TablePlan[] {
     {
       name: "proofs",
       keys: ACTIVE_TABLE_COLUMNS.proofs,
-      select: ACTIVE_TABLE_COLUMNS.proofs.map(quoteIdentifier).join(", "),
+      select: [
+        bigintIdentity,
+        ...ACTIVE_TABLE_COLUMNS.proofs.slice(1).map(quoteIdentifier),
+      ].join(", "),
       orderBy: quoteIdentifier("id"),
       identity: true,
     },

@@ -221,6 +221,16 @@ describe("v2 PostgreSQL migration table scanning", () => {
     expect(
       source.queries.filter((query) => /^\s*CLOSE\b/.test(query)),
     ).toHaveLength(4);
+    for (const table of ["l_users", "mint_quotes", "proofs"]) {
+      expect(
+        source.queries.some((query) =>
+          new RegExp(
+            `SELECT\\s+"id"::bigint AS "id".+FROM "${table}"`,
+            "s",
+          ).test(query),
+        ),
+      ).toBe(true);
+    }
   });
 
   test("scans an exact batch boundary before detecting the end", async () => {
