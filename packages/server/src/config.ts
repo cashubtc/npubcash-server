@@ -8,6 +8,12 @@ import { eventBus } from "./events";
 import { Repositories } from "./infrastructure/db/repositoryFactory";
 import { UserRepository } from "./domain/user/userRepository";
 import { MintQuoteRepository } from "./domain/mintQuote/MintQuoteRepository";
+import { DefaultMintQuoteMonitor } from "./domain/mintQuoteMonitor/MintQuoteMonitor";
+import { FetchMintQuoteClient } from "./domain/mintQuoteMonitor/MintQuoteClient";
+import { WebSocketQuoteTransport } from "./domain/mintQuoteMonitor/WebSocketQuoteTransport";
+import { config } from "./config/index";
+import { logger } from "./utils/logger";
+import { handleZapRequest } from "./utils/nostr";
 
 interface AppServices {
   userRepository: UserRepository;
@@ -23,11 +29,41 @@ let appServices: AppServices | null = null;
 export const nostrPool = new SimplePool();
 
 export function initializeAppServices(repos: Repositories): AppServices {
+  const mintQuoteMonitor = new DefaultMintQuoteMonitor({
+    store: repos.mintQuoteMonitorStore,
+    client: new FetchMintQuoteClient({
+      timeoutMs: config.mintQuoteMonitor.requestTimeoutMs,
+    }),
+    activeTransport: new WebSocketQuoteTransport({
+      logger,
+      periodicReconnectMs: config.mintQuoteMonitor.periodicReconnectMs,
+    }),
+    policy: config.mintQuoteMonitor,
+    logger,
+    onPaid: async (quote) => {
+      eventBus.emit("quotePaid", quote);
+      if (!quote.serializedZapRequest || !config.nostr.nostrEnabled) return;
+      try {
+        const zapRequest = JSON.parse(quote.serializedZapRequest);
+        await handleZapRequest(
+          quote.quoteId,
+          zapRequest,
+          quote.paymentRequest,
+          logger,
+        );
+      } catch (cause) {
+        logger.error("[QuoteMonitor] Failed to handle zap request", {
+          quoteId: quote.quoteId,
+          cause,
+        });
+      }
+    },
+  });
   appServices = {
     userRepository: repos.userRepository,
     mintQuoteRepository: repos.mintQuoteRepository,
     userService: new UserService(repos.userRepository),
-    communicatorService: new CommunicatorService(repos.mintQuoteRepository),
+    communicatorService: new CommunicatorService(mintQuoteMonitor),
     proofService: new ProofService(repos.proofRepository),
     mintService: new MintService(repos.mintRepository),
   };

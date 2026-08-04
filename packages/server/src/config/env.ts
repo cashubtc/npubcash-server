@@ -1,6 +1,7 @@
 import { accountFromSeedWords } from "nostr-tools/nip06";
 import { HDKey } from "@scure/bip32";
 import { mnemonicToSeedSync } from "@scure/bip39";
+import { DEFAULT_MINT_QUOTE_MONITOR_POLICY } from "@/domain/mintQuoteMonitor/MintQuoteMonitor";
 
 export function getRelaysFromEnv() {
   const relays = getEnvVar("DEFAULT_RELAYS");
@@ -175,4 +176,81 @@ export function getNodeEnvFromEnv(): "development" | "production" | "test" {
   const env = getEnvVar("NODE_ENV");
   if (env === "production" || env === "test") return env;
   return "development";
+}
+
+function getPositiveNumberFromEnv(key: string, fallback: number): number {
+  const raw = getEnvVar(key);
+  if (raw === undefined) return fallback;
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new Error(`${key} must be a positive number`);
+  }
+  return value;
+}
+
+function getRetryScheduleFromEnv(
+  key: string,
+  fallback: readonly number[],
+): number[] {
+  const raw = getEnvVar(key);
+  if (raw === undefined) return [...fallback];
+  const values = raw.split(",").map((value) => Number(value.trim()));
+  if (
+    values.length === 0 ||
+    values.some((value) => !Number.isFinite(value) || value <= 0)
+  ) {
+    throw new Error(`${key} must be a comma-separated list of positive numbers`);
+  }
+  return values;
+}
+
+export function getMintQuoteMonitorConfigFromEnv() {
+  const jitterRaw = getEnvVar("MINT_QUOTE_RETRY_JITTER_RATIO");
+  const jitterRatio =
+    jitterRaw === undefined
+      ? DEFAULT_MINT_QUOTE_MONITOR_POLICY.jitterRatio
+      : Number(jitterRaw);
+  if (!Number.isFinite(jitterRatio) || jitterRatio < 0 || jitterRatio > 1) {
+    throw new Error("MINT_QUOTE_RETRY_JITTER_RATIO must be between 0 and 1");
+  }
+
+  const notFoundInitialMs = getPositiveNumberFromEnv(
+    "MINT_QUOTE_NOT_FOUND_INITIAL_MS",
+    DEFAULT_MINT_QUOTE_MONITOR_POLICY.notFoundInitialMs,
+  );
+  const notFoundMaxMs = getPositiveNumberFromEnv(
+    "MINT_QUOTE_NOT_FOUND_MAX_MS",
+    DEFAULT_MINT_QUOTE_MONITOR_POLICY.notFoundMaxMs,
+  );
+  if (notFoundMaxMs < notFoundInitialMs) {
+    throw new Error(
+      "MINT_QUOTE_NOT_FOUND_MAX_MS must be at least MINT_QUOTE_NOT_FOUND_INITIAL_MS",
+    );
+  }
+
+  return {
+    activePollIntervalMs: getPositiveNumberFromEnv(
+      "MINT_QUOTE_ACTIVE_POLL_MS",
+      DEFAULT_MINT_QUOTE_MONITOR_POLICY.activePollIntervalMs,
+    ),
+    activeRetryMs: getRetryScheduleFromEnv(
+      "MINT_QUOTE_ACTIVE_RETRY_MS",
+      DEFAULT_MINT_QUOTE_MONITOR_POLICY.activeRetryMs,
+    ),
+    reconciliationRetryMs: getRetryScheduleFromEnv(
+      "MINT_QUOTE_RECONCILIATION_RETRY_MS",
+      DEFAULT_MINT_QUOTE_MONITOR_POLICY.reconciliationRetryMs,
+    ),
+    notFoundInitialMs,
+    notFoundMaxMs,
+    jitterRatio,
+    requestTimeoutMs: getPositiveNumberFromEnv(
+      "MINT_QUOTE_REQUEST_TIMEOUT_MS",
+      10_000,
+    ),
+    periodicReconnectMs: getPositiveNumberFromEnv(
+      "MINT_QUOTE_WS_RECONNECT_MS",
+      180_000,
+    ),
+  };
 }

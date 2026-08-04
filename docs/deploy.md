@@ -79,6 +79,30 @@ missing. This prevents a missing PostgreSQL secret from silently starting the
 server on an empty SQLite database. If both variables are set, their database
 types must agree.
 
+### Mint quote monitoring
+
+Unpaid quotes remain recoverable after invoice expiry until the mint returns an
+authoritative quote state. Retry deadlines are stored in the database, so a
+restart does not immediately retry every unavailable mint.
+
+The defaults can be tuned with millisecond values:
+
+```env
+MINT_QUOTE_ACTIVE_POLL_MS=20000
+MINT_QUOTE_ACTIVE_RETRY_MS=5000,10000,30000,60000
+MINT_QUOTE_RECONCILIATION_RETRY_MS=60000,300000,1800000,7200000,21600000
+MINT_QUOTE_NOT_FOUND_INITIAL_MS=3600000
+MINT_QUOTE_NOT_FOUND_MAX_MS=86400000
+MINT_QUOTE_RETRY_JITTER_RATIO=0.2
+MINT_QUOTE_REQUEST_TIMEOUT_MS=10000
+MINT_QUOTE_WS_RECONNECT_MS=180000
+```
+
+Active retry and reconciliation retry values are comma-separated schedules;
+the final value is reused as the cap. A reachable mint that reports a missing
+quote uses the separate not-found delay instead of being treated as expired.
+Run only one quote-monitoring server instance unless a database lease is added.
+
 ### Fly.io and v2-to-v3 cutover
 
 The checked-in `fly.toml` targets the `nightly-npubcash` app and its SQLite

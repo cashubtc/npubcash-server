@@ -14,6 +14,7 @@ import {
   getParsedMnemonicFromEnv,
   getJwtSecretFromEnv,
   getSecretKeyFromEnv,
+  getMintQuoteMonitorConfigFromEnv,
 } from "./env";
 
 let originalEnv: NodeJS.ProcessEnv;
@@ -221,5 +222,30 @@ describe("env.ts", () => {
 
     delete process.env.MNEMONIC;
     expect(() => getSecretKeyFromEnv()).toThrow("Could not find MNEMONIC");
+  });
+
+  test("getMintQuoteMonitorConfigFromEnv parses retry policy overrides", () => {
+    delete process.env.MINT_QUOTE_ACTIVE_POLL_MS;
+    expect(getMintQuoteMonitorConfigFromEnv().activePollIntervalMs).toBe(20_000);
+
+    process.env.MINT_QUOTE_ACTIVE_POLL_MS = "30000";
+    process.env.MINT_QUOTE_ACTIVE_RETRY_MS = "1000,2000,3000";
+    process.env.MINT_QUOTE_RECONCILIATION_RETRY_MS = "60000,300000";
+    process.env.MINT_QUOTE_RETRY_JITTER_RATIO = "0.1";
+    expect(getMintQuoteMonitorConfigFromEnv()).toEqual({
+      activePollIntervalMs: 30_000,
+      activeRetryMs: [1_000, 2_000, 3_000],
+      reconciliationRetryMs: [60_000, 300_000],
+      notFoundInitialMs: 3_600_000,
+      notFoundMaxMs: 86_400_000,
+      jitterRatio: 0.1,
+      requestTimeoutMs: 10_000,
+      periodicReconnectMs: 180_000,
+    });
+
+    process.env.MINT_QUOTE_ACTIVE_RETRY_MS = "1000,nope";
+    expect(() => getMintQuoteMonitorConfigFromEnv()).toThrow(
+      "MINT_QUOTE_ACTIVE_RETRY_MS",
+    );
   });
 });

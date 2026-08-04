@@ -8,6 +8,11 @@ import {
   UserMintHistoryResult,
 } from "@/domain/mintQuote/MintQuoteRepository";
 import { DatabaseAdapter } from "@/database/adapter";
+import {
+  MintQuoteMonitorStore,
+  MintRetryState,
+  QuoteReconciliationState,
+} from "@/domain/mintQuoteMonitor/MintQuoteMonitorStore";
 
 type MintQuoteRow = {
   id: number;
@@ -25,7 +30,25 @@ type MintQuoteRow = {
   locked: boolean;
 };
 
-export class PostgresMintQuoteRepository implements MintQuoteRepository {
+type MintRetryRow = {
+  mint_url: string;
+  failure_count: number;
+  next_attempt_at: Date;
+  last_failure_at: Date;
+  last_error_category: MintRetryState["lastErrorCategory"];
+};
+
+type QuoteReconciliationRow = {
+  mint_quote_id: number;
+  last_checked_at: Date | null;
+  next_check_at: Date;
+  not_found_count: number;
+  last_result: QuoteReconciliationState["lastResult"];
+};
+
+export class PostgresMintQuoteRepository
+  implements MintQuoteRepository, MintQuoteMonitorStore
+{
   constructor(private readonly db: DatabaseAdapter) {}
 
   async create(input: CreateMintQuoteInput): Promise<MintQuote> {
@@ -51,36 +74,125 @@ RETURNING *`;
     return this.castRowToQuote(res.rows[0]);
   }
 
-  async updateState(id: number, state: MintQuoteState): Promise<void> {
-    const query = `UPDATE mint_quotes SET state = $1 WHERE id = $2`;
-    const res = await this.db.query(query, [state, id]);
-    if (res.rowCount === 0) {
-      throw new Error("Failed to update state");
-    }
-  }
-
-  async setPaid(id: number, paidAt: Date = new Date()): Promise<void> {
-    const query = `UPDATE mint_quotes SET state = 'PAID', paid_at = $1 WHERE id = $2`;
-    const res = await this.db.query(query, [paidAt, id]);
-    if (res.rowCount === 0) {
-      throw new Error("Failed to update state");
-    }
-  }
-
-  async getExpiredUnpaid(): Promise<MintQuote[]> {
-    const res = await this.db.query<MintQuoteRow>(
-      `SELECT * FROM mint_quotes WHERE expires_at <= NOW() AND state = 'UNPAID'`,
-      []
-    );
-    return res.rows.map((r) => this.castRowToQuote(r));
-  }
-
-  async getPending(): Promise<MintQuote[]> {
+  async getRecoverableQuotes(): Promise<MintQuote[]> {
     const res = await this.db.query<MintQuoteRow>(
       `SELECT * FROM mint_quotes WHERE state = 'UNPAID'`,
       []
     );
     return res.rows.map((r) => this.castRowToQuote(r));
+  }
+
+  async transitionUnpaidQuote(
+    id: number,
+    state: "PAID" | "ISSUED" | "EXPIRED",
+    paidAt?: Date,
+  ): Promise<MintQuote | undefined> {
+    const res = await this.db.query<MintQuoteRow>(
+      `UPDATE mint_quotes
+       SET state = $1,
+           paid_at = CASE WHEN $1 = 'PAID' THEN $2 ELSE paid_at END
+       WHERE id = $3 AND state = 'UNPAID'
+       RETURNING *`,
+      [state, paidAt ?? null, id],
+    );
+    const row = res.rows[0];
+    return row ? this.castRowToQuote(row) : undefined;
+  }
+
+  async getMintRetryState(
+    mintUrl: string,
+  ): Promise<MintRetryState | undefined> {
+    const res = await this.db.query<MintRetryRow>(
+      "SELECT * FROM mint_quote_mint_retries WHERE mint_url = $1",
+      [mintUrl],
+    );
+    const row = res.rows[0];
+    return row
+      ? {
+          mintUrl: row.mint_url,
+          failureCount: row.failure_count,
+          nextAttemptAt: new Date(row.next_attempt_at),
+          lastFailureAt: new Date(row.last_failure_at),
+          lastErrorCategory: row.last_error_category,
+        }
+      : undefined;
+  }
+
+  async saveMintRetryState(state: MintRetryState): Promise<void> {
+    await this.db.query(
+      `INSERT INTO mint_quote_mint_retries
+         (mint_url, failure_count, next_attempt_at, last_failure_at, last_error_category)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT(mint_url) DO UPDATE SET
+         failure_count = EXCLUDED.failure_count,
+         next_attempt_at = EXCLUDED.next_attempt_at,
+         last_failure_at = EXCLUDED.last_failure_at,
+         last_error_category = EXCLUDED.last_error_category`,
+      [
+        state.mintUrl,
+        state.failureCount,
+        state.nextAttemptAt,
+        state.lastFailureAt,
+        state.lastErrorCategory,
+      ],
+    );
+  }
+
+  async clearMintRetryState(mintUrl: string): Promise<void> {
+    await this.db.query(
+      "DELETE FROM mint_quote_mint_retries WHERE mint_url = $1",
+      [mintUrl],
+    );
+  }
+
+  async getQuoteReconciliationState(
+    mintQuoteId: number,
+  ): Promise<QuoteReconciliationState | undefined> {
+    const res = await this.db.query<QuoteReconciliationRow>(
+      "SELECT * FROM mint_quote_reconciliation WHERE mint_quote_id = $1",
+      [mintQuoteId],
+    );
+    const row = res.rows[0];
+    return row
+      ? {
+          mintQuoteId: Number(row.mint_quote_id),
+          lastCheckedAt: row.last_checked_at
+            ? new Date(row.last_checked_at)
+            : undefined,
+          nextCheckAt: new Date(row.next_check_at),
+          notFoundCount: row.not_found_count,
+          lastResult: row.last_result,
+        }
+      : undefined;
+  }
+
+  async saveQuoteReconciliationState(
+    state: QuoteReconciliationState,
+  ): Promise<void> {
+    await this.db.query(
+      `INSERT INTO mint_quote_reconciliation
+         (mint_quote_id, last_checked_at, next_check_at, not_found_count, last_result)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT(mint_quote_id) DO UPDATE SET
+         last_checked_at = EXCLUDED.last_checked_at,
+         next_check_at = EXCLUDED.next_check_at,
+         not_found_count = EXCLUDED.not_found_count,
+         last_result = EXCLUDED.last_result`,
+      [
+        state.mintQuoteId,
+        state.lastCheckedAt ?? null,
+        state.nextCheckAt,
+        state.notFoundCount,
+        state.lastResult,
+      ],
+    );
+  }
+
+  async clearQuoteReconciliationState(mintQuoteId: number): Promise<void> {
+    await this.db.query(
+      "DELETE FROM mint_quote_reconciliation WHERE mint_quote_id = $1",
+      [mintQuoteId],
+    );
   }
 
   async getUserHistory(
@@ -126,17 +238,9 @@ RETURNING *`;
     };
   }
 
-  async bulkUpdateState(state: MintQuoteState, ids: number[]): Promise<void> {
-    if (ids.length === 0) return;
-
-    const placeholders = ids.map((_, i) => `$${i + 2}`).join(",");
-    const query = `UPDATE mint_quotes SET state = $1 WHERE id IN (${placeholders})`;
-    await this.db.query(query, [state, ...ids]);
-  }
-
   private castRowToQuote(row: MintQuoteRow): MintQuote {
     return new MintQuote({
-      id: row.id,
+      id: Number(row.id),
       createdAt: new Date(row.created_at),
       mintUrl: row.mint_url,
       unit: row.unit,
