@@ -101,6 +101,14 @@ MINT_QUOTE_WS_RECONNECT_MS=180000
 Active retry and reconciliation retry values are comma-separated schedules;
 the final value is reused as the cap. A reachable mint that reports a missing
 quote uses the separate not-found delay instead of being treated as expired.
+At startup, all due unpaid quotes are staged without timers or WebSocket
+subscriptions and grouped by mint. Mints advertising NUT-29 support for
+`bolt11` are checked through the batch endpoint, split by the advertised
+`max_batch_size` when present. Terminal results are persisted before WebSocket
+subscriptions are created for surviving active quotes. Unsupported or invalid
+batch responses activate the individual-check fallback, while mint-wide
+failures retain the normal circuit backoff. Startup reconciliation runs
+independently per mint, so a slow mint does not delay subscriptions for others.
 Run only one quote-monitoring server instance unless a database lease is added.
 
 ### Fly.io and v2-to-v3 cutover

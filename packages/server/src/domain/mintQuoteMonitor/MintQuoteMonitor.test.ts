@@ -4,6 +4,7 @@ import { MintQuote } from "@/domain/mintQuote/MintQuote";
 import { SqliteMintQuoteRepository } from "@/infrastructure/db/sqliteMintQuoteRepository";
 import { runMigrations } from "@/migrations";
 import type {
+  BatchQuoteCheckResult,
   MintQuoteClient,
   MintQuotePayload,
   QuoteCheckResult,
@@ -64,7 +65,9 @@ class FakeClock implements MonitorClock {
 
 class FakeMintClient implements MintQuoteClient {
   readonly calls: Array<{ mintUrl: string; quoteId: string }> = [];
+  readonly batchCalls: Array<{ mintUrl: string; quoteIds: readonly string[] }> = [];
   readonly signals: AbortSignal[] = [];
+  readonly batchSignals: AbortSignal[] = [];
 
   constructor(
     private readonly respond: (
@@ -72,6 +75,13 @@ class FakeMintClient implements MintQuoteClient {
       quoteId: string,
       signal?: AbortSignal,
     ) => QuoteCheckResult | Promise<QuoteCheckResult>,
+    private readonly respondBatch: (
+      mintUrl: string,
+      quoteIds: readonly string[],
+      signal?: AbortSignal,
+    ) => BatchQuoteCheckResult | Promise<BatchQuoteCheckResult> = () => ({
+      kind: "unsupported",
+    }),
   ) {}
 
   async checkQuote(
@@ -82,6 +92,16 @@ class FakeMintClient implements MintQuoteClient {
     this.calls.push({ mintUrl, quoteId });
     if (signal) this.signals.push(signal);
     return this.respond(mintUrl, quoteId, signal);
+  }
+
+  async checkQuotes(
+    mintUrl: string,
+    quoteIds: readonly string[],
+    signal?: AbortSignal,
+  ): Promise<BatchQuoteCheckResult> {
+    this.batchCalls.push({ mintUrl, quoteIds: [...quoteIds] });
+    if (signal) this.batchSignals.push(signal);
+    return this.respondBatch(mintUrl, quoteIds, signal);
   }
 }
 
@@ -156,6 +176,206 @@ async function createQuote(
 }
 
 describe("MintQuoteMonitor", () => {
+  test("batch-reconciles active and expired quotes before subscribing survivors", async () => {
+    const now = Date.parse("2026-08-03T12:00:00.000Z");
+    await createQuote(
+      "expired-paid",
+      "https://mint.example.com",
+      new Date(now - 1),
+    );
+    await createQuote(
+      "active-paid",
+      "https://mint.example.com",
+      new Date(now + 60_000),
+    );
+    await createQuote(
+      "active-unpaid",
+      "https://mint.example.com",
+      new Date(now + 60_000),
+    );
+    const clock = new FakeClock(now);
+    const paid: MintQuote[] = [];
+    const activeTransport = new FakeActiveQuoteTransport();
+    const client = new FakeMintClient(
+      (_mintUrl, quoteId) => ({ kind: "found", payload: paidPayload(quoteId) }),
+      (_mintUrl, quoteIds) => {
+        expect(activeTransport.callbacks.size).toBe(0);
+        return {
+          kind: "found",
+          payloads: quoteIds.map((quoteId) =>
+            quoteId === "active-unpaid"
+              ? {
+                  ...paidPayload(quoteId),
+                  state: "UNPAID",
+                  expiry: Math.floor((now + 60_000) / 1_000),
+                }
+              : paidPayload(quoteId),
+          ),
+        };
+      },
+    );
+    const monitor = new DefaultMintQuoteMonitor({
+      store,
+      client,
+      activeTransport,
+      clock,
+      random: () => 0.5,
+      onPaid: (quote) => {
+        paid.push(quote);
+      },
+    });
+
+    await monitor.start();
+    await clock.advanceBy(0);
+
+    expect(client.batchCalls).toEqual([
+      {
+        mintUrl: "https://mint.example.com",
+        quoteIds: ["expired-paid", "active-paid", "active-unpaid"],
+      },
+    ]);
+    expect(client.calls).toEqual([]);
+    expect(paid.map((quote) => quote.quoteId)).toEqual([
+      "expired-paid",
+      "active-paid",
+    ]);
+    expect([...activeTransport.callbacks.keys()]).toEqual([
+      "https://mint.example.com::active-unpaid",
+    ]);
+  });
+
+  test("unsupported NUT-29 activates subscriptions and individual checks", async () => {
+    const now = Date.parse("2026-08-03T12:00:00.000Z");
+    await createQuote(
+      "single-1",
+      "https://mint.example.com",
+      new Date(now + 60_000),
+    );
+    await createQuote(
+      "single-2",
+      "https://mint.example.com",
+      new Date(now + 60_000),
+    );
+    const clock = new FakeClock(now);
+    const activeTransport = new FakeActiveQuoteTransport();
+    const client = new FakeMintClient((_mintUrl, quoteId) => ({
+      kind: "found",
+      payload: paidPayload(quoteId),
+    }));
+    const monitor = new DefaultMintQuoteMonitor({
+      store,
+      client,
+      activeTransport,
+      clock,
+      random: () => 0.5,
+    });
+
+    await monitor.start();
+
+    expect(client.batchCalls).toHaveLength(1);
+    expect(client.calls).toEqual([]);
+    expect(activeTransport.callbacks.size).toBe(2);
+
+    await clock.advanceBy(0);
+    expect(client.calls.map((call) => call.quoteId).sort()).toEqual([
+      "single-1",
+      "single-2",
+    ]);
+    expect(activeTransport.callbacks.size).toBe(0);
+  });
+
+  test("a failed startup batch activates WebSockets but avoids HTTP fan-out", async () => {
+    const now = Date.parse("2026-08-03T12:00:00.000Z");
+    await createQuote(
+      "offline-1",
+      "https://mint.example.com",
+      new Date(now + 120_000),
+    );
+    await createQuote(
+      "offline-2",
+      "https://mint.example.com",
+      new Date(now + 120_000),
+    );
+    const clock = new FakeClock(now);
+    const activeTransport = new FakeActiveQuoteTransport();
+    const client = new FakeMintClient(
+      (_mintUrl, quoteId) => ({ kind: "found", payload: paidPayload(quoteId) }),
+      () => ({ kind: "mint_unavailable", cause: new Error("offline") }),
+    );
+    const monitor = new DefaultMintQuoteMonitor({
+      store,
+      client,
+      activeTransport,
+      clock,
+      random: () => 0.5,
+      policy: { activeRetryMs: [60_000] },
+    });
+
+    await monitor.start();
+    await clock.advanceBy(59_999);
+
+    expect(client.batchCalls).toHaveLength(1);
+    expect(client.calls).toEqual([]);
+    expect(activeTransport.callbacks.size).toBe(2);
+    await clock.advanceBy(1);
+    expect(client.calls).toHaveLength(2);
+    expect(activeTransport.callbacks.size).toBe(0);
+  });
+
+  test("a slow startup batch does not block subscriptions for another mint", async () => {
+    const now = Date.parse("2026-08-03T12:00:00.000Z");
+    await createQuote(
+      "slow-quote",
+      "https://slow.example.com",
+      new Date(now + 60_000),
+    );
+    await createQuote(
+      "fast-quote",
+      "https://fast.example.com",
+      new Date(now + 60_000),
+    );
+    const clock = new FakeClock(now);
+    const activeTransport = new FakeActiveQuoteTransport();
+    let resolveSlow!: (result: BatchQuoteCheckResult) => void;
+    const slowResult = new Promise<BatchQuoteCheckResult>((resolve) => {
+      resolveSlow = resolve;
+    });
+    const client = new FakeMintClient(
+      (_mintUrl, quoteId) => ({ kind: "found", payload: paidPayload(quoteId) }),
+      (mintUrl) =>
+        mintUrl.includes("slow") ? slowResult : { kind: "unsupported" },
+    );
+    const monitor = new DefaultMintQuoteMonitor({
+      store,
+      client,
+      activeTransport,
+      clock,
+      random: () => 0.5,
+    });
+
+    const starting = monitor.start();
+    for (
+      let turn = 0;
+      turn < 20 && activeTransport.callbacks.size === 0;
+      turn += 1
+    ) {
+      await Promise.resolve();
+    }
+
+    expect(client.batchCalls).toHaveLength(2);
+    expect([...activeTransport.callbacks.keys()]).toEqual([
+      "https://fast.example.com::fast-quote",
+    ]);
+
+    resolveSlow({ kind: "unsupported" });
+    await starting;
+
+    expect([...activeTransport.callbacks.keys()].sort()).toEqual([
+      "https://fast.example.com::fast-quote",
+      "https://slow.example.com::slow-quote",
+    ]);
+  });
+
   test("restores an expired quote and emits the persisted paid model", async () => {
     const now = Date.parse("2026-08-03T12:00:00.000Z");
     const quote = await createQuote(
@@ -287,6 +507,7 @@ describe("MintQuoteMonitor", () => {
       },
     });
     await restarted.start();
+    expect(restartClient.batchCalls).toEqual([]);
     await clock.advanceBy(59_999);
     expect(restartClient.calls).toEqual([]);
     await clock.advanceBy(1);
@@ -333,6 +554,7 @@ describe("MintQuoteMonitor", () => {
       random: () => 0.5,
     });
     await restarted.start();
+    expect(restartClient.batchCalls).toEqual([]);
     await clock.advanceBy(59_999);
     expect(restartClient.calls).toEqual([]);
     await clock.advanceBy(1);
@@ -410,6 +632,7 @@ describe("MintQuoteMonitor", () => {
       random: () => 0.5,
     });
     await restarted.start();
+    expect(restartClient.batchCalls).toEqual([]);
     await clock.advanceBy(3_599_999);
     expect(restartClient.calls).toEqual([]);
     await clock.advanceBy(1);

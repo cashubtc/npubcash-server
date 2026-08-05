@@ -1,6 +1,7 @@
 import { MintQuote } from "@/domain/mintQuote/MintQuote";
 import { normalizeUrl } from "@/utils/utils";
 import type {
+  BatchQuoteCheckResult,
   MintQuoteClient,
   MintQuotePayload,
   QuoteCheckResult,
@@ -69,6 +70,7 @@ interface WatchedQuote {
   quote: MintQuote;
   mintUrl: string;
   phase: QuotePhase;
+  activated: boolean;
   nextCheckAt?: number;
   expiryTimer?: unknown;
   unsubscribeActive?: () => void;
@@ -118,6 +120,8 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
   private readonly sessionLoads = new Map<string, Promise<MintSession>>();
   private started = false;
   private stopped = false;
+  private restoring = false;
+  private startupController?: AbortController;
 
   constructor(options: DefaultMintQuoteMonitorOptions) {
     this.store = options.store;
@@ -139,15 +143,24 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
     this.started = true;
 
     const recoverable = await this.store.getRecoverableQuotes();
-    for (const quote of recoverable) {
-      await this.watch(quote);
+    this.restoring = true;
+    try {
+      for (const quote of recoverable) {
+        await this.registerQuote(quote, false);
+      }
+      await this.reconcileStartupBatches();
+    } finally {
+      this.restoring = false;
+    }
+    if (this.stopped) return;
+    for (const session of this.sessions.values()) {
+      this.rescheduleSession(session);
     }
 
     const now = this.clock.now().getTime();
-    const active = recoverable.filter(
-      (quote) => quote.expiresAt.getTime() > now,
-    ).length;
-    const reconciliationDue = [...this.quotes.values()].filter(
+    const watched = [...this.quotes.values()];
+    const active = watched.filter((entry) => entry.phase === "active").length;
+    const reconciliationDue = watched.filter(
       (entry) =>
         entry.phase === "reconciliation" &&
         (entry.nextCheckAt ?? Number.POSITIVE_INFINITY) <= now,
@@ -155,11 +168,132 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
     this.logger?.info("[QuoteMonitor] Restored recoverable quotes", {
       active,
       reconciliationDue,
-      deferred: recoverable.length - active - reconciliationDue,
+      deferred: watched.length - active - reconciliationDue,
+      resolvedAtStartup: recoverable.length - watched.length,
     });
   }
 
+  private async reconcileStartupBatches(): Promise<void> {
+    const controller = new AbortController();
+    this.startupController = controller;
+    try {
+      await Promise.all(
+        [...this.sessions.values()].map((session) =>
+          this.reconcileAndActivateStartupSession(session, controller.signal),
+        ),
+      );
+    } finally {
+      if (this.startupController === controller) {
+        this.startupController = undefined;
+      }
+    }
+  }
+
+  private async reconcileAndActivateStartupSession(
+    session: MintSession,
+    signal: AbortSignal,
+  ): Promise<void> {
+    try {
+      if (this.stopped) return;
+      const now = this.clock.now().getTime();
+      if (session.retry && session.retry.nextAttemptAt.getTime() > now) return;
+
+      const entries = [...session.quoteIds]
+        .map((id) => this.quotes.get(id))
+        .filter(
+          (entry): entry is WatchedQuote =>
+            entry !== undefined &&
+            entry.nextCheckAt !== undefined &&
+            entry.nextCheckAt <= now,
+        );
+      if (entries.length === 0) return;
+
+      const result = await this.client.checkQuotes(
+        session.mintUrl,
+        entries.map((entry) => entry.quote.quoteId),
+        signal,
+      );
+      if (this.stopped) return;
+      await this.handleStartupBatchResult(session, entries, result);
+    } catch (cause) {
+      if (!this.stopped) {
+        try {
+          await this.openCircuit(session, "mint_unavailable");
+        } catch (persistCause) {
+          this.logger?.error(
+            "[QuoteMonitor] Unexpected startup check failure",
+            { mintUrl: session.mintUrl, cause, persistCause },
+          );
+        }
+      }
+    } finally {
+      for (const id of [...session.quoteIds]) {
+        const entry = this.quotes.get(id);
+        if (entry) await this.activateQuote(entry);
+      }
+    }
+  }
+
+  private async handleStartupBatchResult(
+    session: MintSession,
+    entries: WatchedQuote[],
+    result: BatchQuoteCheckResult,
+  ): Promise<void> {
+    if (result.kind === "unsupported") {
+      this.logger?.debug(
+        "[QuoteMonitor] Mint does not advertise NUT-29; using individual startup checks",
+        { mintUrl: session.mintUrl, count: entries.length },
+      );
+      return;
+    }
+    if (result.kind === "invalid_response") {
+      this.logger?.warn(
+        "[QuoteMonitor] NUT-29 startup check failed; using individual checks",
+        { mintUrl: session.mintUrl, count: entries.length, cause: result.cause },
+      );
+      return;
+    }
+    if (result.kind === "mint_unavailable") {
+      try {
+        await this.openCircuit(session, "mint_unavailable");
+      } catch (cause) {
+        this.logger?.error(
+          "[QuoteMonitor] Failed to persist startup batch retry",
+          { mintUrl: session.mintUrl, cause },
+        );
+      }
+      return;
+    }
+
+    this.logger?.info("[QuoteMonitor] Reconciled startup quotes with NUT-29", {
+      mintUrl: session.mintUrl,
+      count: entries.length,
+    });
+    for (let index = 0; index < entries.length; index += 1) {
+      const entry = entries[index]!;
+      if (this.quotes.get(entry.quote.id) !== entry) continue;
+      try {
+        await this.handleCheckResult(session, entry, {
+          kind: "found",
+          payload: result.payloads[index]!,
+        });
+      } catch (cause) {
+        this.logger?.error(
+          "[QuoteMonitor] Startup batch result handling failed",
+          { mintUrl: entry.mintUrl, quoteId: entry.quote.quoteId, cause },
+        );
+      }
+    }
+  }
+
   async watch(quote: MintQuote): Promise<void> {
+    await this.registerQuote(quote, true);
+  }
+
+  private async registerQuote(
+    quote: MintQuote,
+    activate: boolean,
+  ): Promise<void> {
     if (this.stopped) throw new Error("MintQuoteMonitor has been stopped");
     if (quote.state !== "UNPAID" || this.quotes.has(quote.id)) return;
 
@@ -175,6 +309,7 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
       quote,
       mintUrl,
       phase,
+      activated: false,
       notFoundCount: metadata?.notFoundCount ?? 0,
       invalidResponseCount: 0,
     };
@@ -182,22 +317,6 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
     session.quoteIds.add(quote.id);
 
     if (phase === "active") {
-      try {
-        entry.unsubscribeActive = this.activeTransport.watch(
-          mintUrl,
-          quote.quoteId,
-          (payload) => this.handlePayload(quote.id, payload),
-        );
-      } catch (cause) {
-        this.logger?.warn(
-          "[QuoteMonitor] WebSocket watch failed; HTTP fallback remains active",
-          { mintUrl, quoteId: quote.quoteId, cause },
-        );
-      }
-      entry.expiryTimer = this.clock.schedule(
-        () => this.enterReconciliation(quote.id),
-        quote.expiresAt.getTime() - now,
-      );
       entry.nextCheckAt = metadata?.nextCheckAt.getTime() ?? now;
     } else {
       entry.nextCheckAt = metadata?.nextCheckAt.getTime() ?? now;
@@ -210,7 +329,48 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
         });
       }
     }
-    this.rescheduleSession(session);
+    if (activate) {
+      await this.activateQuote(entry);
+      this.rescheduleSession(session);
+    }
+  }
+
+  private async activateQuote(entry: WatchedQuote): Promise<void> {
+    if (
+      entry.activated ||
+      this.stopped ||
+      this.quotes.get(entry.quote.id) !== entry
+    ) {
+      return;
+    }
+    entry.activated = true;
+    if (entry.phase !== "active") return;
+
+    const now = this.clock.now().getTime();
+    if (entry.quote.expiresAt.getTime() <= now) {
+      await this.enterReconciliation(entry.quote.id);
+      return;
+    }
+    try {
+      entry.unsubscribeActive = this.activeTransport.watch(
+        entry.mintUrl,
+        entry.quote.quoteId,
+        (payload) => this.handlePayload(entry.quote.id, payload),
+      );
+    } catch (cause) {
+      this.logger?.warn(
+        "[QuoteMonitor] WebSocket watch failed; HTTP fallback remains active",
+        {
+          mintUrl: entry.mintUrl,
+          quoteId: entry.quote.quoteId,
+          cause,
+        },
+      );
+    }
+    entry.expiryTimer = this.clock.schedule(
+      () => this.enterReconciliation(entry.quote.id),
+      entry.quote.expiresAt.getTime() - now,
+    );
   }
 
   async stop(): Promise<void> {
@@ -226,6 +386,7 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
       if (session.timer !== undefined) this.clock.cancel(session.timer);
       session.inFlight?.controller.abort();
     }
+    this.startupController?.abort();
     this.quotes.clear();
     this.sessions.clear();
     this.sessionLoads.clear();
@@ -282,7 +443,7 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
   }
 
   private rescheduleSession(session: MintSession): void {
-    if (this.stopped || session.running) return;
+    if (this.stopped || this.restoring || session.running) return;
     if (session.timer !== undefined) {
       this.clock.cancel(session.timer);
       session.timer = undefined;
