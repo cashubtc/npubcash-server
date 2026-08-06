@@ -28,12 +28,12 @@ describe("public request URLs", () => {
   test("derives the complete public URL from the request", () => {
     const req = createRequest({
       host: "NPUB.CASH",
-      url: "/api/v2/auth/nip98?canWithdraw=true",
+      url: "/api/v2/auth/nip98",
       forwardedProtocol: "https",
     });
 
     expect(getPublicRequestUrl(req).toString()).toBe(
-      "https://npub.cash/api/v2/auth/nip98?canWithdraw=true",
+      "https://npub.cash/api/v2/auth/nip98",
     );
   });
 

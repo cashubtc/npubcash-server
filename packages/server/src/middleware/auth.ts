@@ -4,7 +4,7 @@ import { UnauthorizedError } from "@/errors";
 import { config } from "@/config/index";
 import { getPublicRequestUrl } from "@/utils/publicRequest";
 
-export function isAuthMiddleware() {
+export function isAuthMiddleware(path: string, method: string) {
   async function isAuth(req: Request, res: Response, next: NextFunction) {
     const userAgent = req.get("user-agent");
     if (!userAgent) {
@@ -13,7 +13,11 @@ export function isAuthMiddleware() {
     }
     let url: string;
     try {
-      url = getPublicRequestUrl(req, config.allowedHostnames).toString();
+      const publicOrigin = getPublicRequestUrl(
+        req,
+        config.allowedHostnames,
+      ).origin;
+      url = `${publicOrigin}${path}`;
     } catch (error) {
       return next(error);
     }
@@ -22,13 +26,7 @@ export function isAuthMiddleware() {
       res.status(401);
       return next(new UnauthorizedError("Missing authorization header!"));
     }
-    const isAuth = await verifyAuth(
-      authHeader,
-      url,
-      req.method,
-      userAgent,
-      req.body,
-    );
+    const isAuth = await verifyAuth(authHeader, url, method, userAgent);
     if (!isAuth.authorized) {
       res.status(401);
       return next(new UnauthorizedError("Invalid authorization header!"));

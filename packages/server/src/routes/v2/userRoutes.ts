@@ -11,25 +11,25 @@ const userRouter = Router();
 
 userRouter.get(
   "/info",
-  isAuthMiddleware(),
+  isAuthMiddleware("/api/v2/user/info", "GET"),
   getUserSettings,
 );
 
 userRouter.post(
   "/username",
-  isAuthMiddleware(),
+  isAuthMiddleware("/api/v2/user/username", "POST"),
   usernameController,
 );
 
 userRouter.patch(
   "/lock",
-  isAuthMiddleware(),
+  isAuthMiddleware("/api/v2/user/lock", "PATCH"),
   updateUserSettingLock,
 );
 
 userRouter.patch(
   "/mint",
-  isAuthMiddleware(),
+  isAuthMiddleware("/api/v2/user/mint", "PATCH"),
   updateUserMintSetting,
 );
 

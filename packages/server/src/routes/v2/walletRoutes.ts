@@ -6,7 +6,7 @@ const walletRouter = Router();
 
 walletRouter.get(
   "/quotes",
-  isAuthMiddleware(),
+  isAuthMiddleware("/api/v2/wallet/quotes", "GET"),
   getMintQuotes,
 );
 
