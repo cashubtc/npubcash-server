@@ -58,7 +58,7 @@ type Feature = {
 type WalletIntegration = {
   name: string
   description: string
-  capabilities: string[]
+  highlights: string[]
   icon: LucideIcon
   actions: Array<{
     label: string
@@ -110,8 +110,11 @@ const walletIntegrations: WalletIntegration[] = [
   {
     name: "cashu.me",
     description:
-      "Use cashu.me in your browser or install the native beta on iPhone or Android. Its npub.cash integration lets you discover and claim waiting payments.",
-    capabilities: ["Browser", "iOS beta", "Android", "Nostr"],
+      "A Cashu wallet for web and mobile, with npub.cash built in from the start.",
+    highlights: [
+      "Open it in any browser",
+      "Native beta for iPhone and Android",
+    ],
     icon: MonitorSmartphoneIcon,
     actions: [
       {
@@ -120,7 +123,7 @@ const walletIntegrations: WalletIntegration[] = [
         primary: true,
       },
       {
-        label: "Get native app",
+        label: "Explore native apps",
         href: "https://cashu.me/",
       },
     ],
@@ -128,12 +131,15 @@ const walletIntegrations: WalletIntegration[] = [
   {
     name: "Sovran",
     description:
-      "A mobile Bitcoin wallet with Cashu ecash, Lightning, and Nostr built in. Use its npub.cash support from your iPhone.",
-    capabilities: ["iOS", "Cashu", "Lightning", "Nostr"],
+      "A native Bitcoin wallet that brings Cashu ecash, Lightning, Nostr, and npub.cash together.",
+    highlights: [
+      "Designed for iPhone",
+      "Claim npub.cash payments inside the app",
+    ],
     icon: SmartphoneIcon,
     actions: [
       {
-        label: "Visit Sovran",
+        label: "Explore Sovran",
         href: "https://sovran.money/",
         primary: true,
       },
@@ -142,8 +148,11 @@ const walletIntegrations: WalletIntegration[] = [
   {
     name: "CDK CLI",
     description:
-      "A terminal Cashu wallet powered by CDK, with a dedicated npub.cash integration for developers and advanced users.",
-    capabilities: ["CLI", "Rust", "Open source", "Advanced"],
+      "A command-line Cashu wallet with dedicated npub.cash support for developers and advanced users.",
+    highlights: [
+      "Built for terminal workflows",
+      "Open source and powered by CDK",
+    ],
     icon: TerminalIcon,
     actions: [
       {
@@ -494,48 +503,46 @@ function IntegratedWallets() {
       className="scroll-mt-24 border-b bg-muted/30 py-24 sm:py-28"
     >
       <div className="mx-auto flex max-w-7xl flex-col gap-12 px-4 sm:px-6 lg:px-8">
-        <div className="grid items-end gap-8 lg:grid-cols-[1fr_0.72fr]">
-          <SectionHeading
-            title="Choose where you claim your ecash"
-            description="npub.cash does not host a wallet. These independent wallets have integrated npub.cash so you can discover paid quotes and claim the ecash with your Nostr identity."
-          />
-          <Alert>
-            <WalletCardsIcon />
-            <AlertTitle>Your wallet, your choice</AlertTitle>
-            <AlertDescription>
-              Wallet availability and release status are managed by each wallet
-              project. Start with small amounts while the integrations mature.
-            </AlertDescription>
-          </Alert>
-        </div>
+        <SectionHeading
+          title="Wallets that work with npub.cash"
+          description="npub.cash is the Lightning address, not the wallet. Choose an independent integration below to find payments sent to your npub and claim them as ecash."
+          centered
+        />
 
         <div className="grid gap-4 lg:grid-cols-3">
           {walletIntegrations.map(
             ({
               name,
               description,
-              capabilities,
+              highlights,
               icon: Icon,
               actions,
             }) => (
-              <Card key={name} className="h-full">
+              <Card
+                key={name}
+                className="h-full [--card-spacing:--spacing(6)]"
+              >
                 <CardHeader>
                   <CardTitle>{name}</CardTitle>
                   <CardDescription>{description}</CardDescription>
                   <CardAction>
-                    <span className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary [&_svg]:size-5">
+                    <span className="flex size-12 items-center justify-center rounded-xl bg-primary/10 text-primary [&_svg]:size-5">
                       <Icon />
                     </span>
                   </CardAction>
                 </CardHeader>
                 <CardContent className="mt-auto">
-                  <div className="flex flex-wrap gap-2">
-                    {capabilities.map((capability) => (
-                      <Badge key={capability} variant="outline">
-                        {capability}
-                      </Badge>
+                  <ul className="flex flex-col gap-3">
+                    {highlights.map((highlight) => (
+                      <li
+                        key={highlight}
+                        className="flex items-start gap-2 text-sm text-muted-foreground"
+                      >
+                        <CheckCircle2Icon className="mt-0.5 size-4 shrink-0 text-primary" />
+                        <span>{highlight}</span>
+                      </li>
                     ))}
-                  </div>
+                  </ul>
                 </CardContent>
                 <CardFooter className="flex-wrap gap-2">
                   {actions.map(({ label, href, primary }) => (
@@ -557,6 +564,15 @@ function IntegratedWallets() {
             )
           )}
         </div>
+
+        <Alert className="mx-auto max-w-3xl">
+          <WalletCardsIcon />
+          <AlertTitle>Independent wallets</AlertTitle>
+          <AlertDescription>
+            Each wallet is built and released by its own team, so availability
+            may change. Start with small amounts while the integrations mature.
+          </AlertDescription>
+        </Alert>
       </div>
     </section>
   )

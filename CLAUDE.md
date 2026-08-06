@@ -32,7 +32,7 @@ cd packages/frontend && bun run lint
 This is a **Bun monorepo** with four packages:
 
 - **@npubcash/server** (`packages/server/`) - Express.js backend with WebSocket support
-- **@npubcash/frontend** (`packages/frontend/`) - React 19 SPA with TanStack Router and Vite
+- **@npubcash/frontend** (`packages/frontend/`) - React 19 homepage built with Vite, Tailwind CSS, and shadcn/ui
 - **npubcash-sdk** (`packages/sdk/`) - Publishable client library for the npubcash API
 - **npubcash-types** (`packages/types/`) - Shared TypeScript type definitions
 
@@ -52,10 +52,9 @@ Key patterns:
 
 ### Frontend Architecture
 
-- TanStack Router with file-based routing (`routes/`)
-- AuthContext for authentication state
-- CoCo Cashu libraries for token management
-- Vite proxies `/api` to backend at `localhost:8000`
+- Single-page public homepage with no first-party wallet or authenticated routes
+- shadcn/ui components on Base UI with Tailwind CSS v4
+- Static production assets are built to `packages/frontend/dist` and served by the Express server in `API_MODE=BOTH`
 
 ## Database
 

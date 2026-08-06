@@ -16,13 +16,12 @@ export default defineConfig([
       reactRefresh.configs.vite,
     ],
     languageOptions: {
-      ecmaVersion: 2020,
       globals: globals.browser,
     },
   },
-  // Disable react-refresh rule for shadcn components and contexts (they export multiple items)
+  // shadcn components export reusable variants alongside components.
   {
-    files: ['src/components/ui/**/*.{ts,tsx}', 'src/contexts/**/*.{ts,tsx}', 'src/main.tsx'],
+    files: ['src/components/ui/**/*.{ts,tsx}'],
     rules: {
       'react-refresh/only-export-components': 'off',
     },

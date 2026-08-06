@@ -1,6 +1,6 @@
 # npub.cash homepage content brief
 
-Status: content proposal for `frontend-v3`
+Status: implementation reference for `packages/frontend`
 Live-site reference audited: 2026-08-05
 Primary reference: [npub.cash](https://npub.cash)
 
@@ -131,19 +131,19 @@ The current homepage's four ideas—no sign-up, trust minimization, offline rece
 
 **Section heading**
 
-> Choose where you claim your ecash
+> Wallets that work with npub.cash
 
 **Section introduction**
 
-> npub.cash does not host a wallet. These independent wallets have integrated npub.cash so you can discover paid quotes and claim the ecash with your Nostr identity.
+> npub.cash is the Lightning address, not the wallet. Choose an independent integration below to find payments sent to your npub and claim them as ecash.
 
-Present three wallet cards without platform pills:
+Present three wallet cards without platform pills. Give each card a short description, two useful highlights, and a clear action:
 
-1. `cashu.me` — link separately to the [browser wallet](https://wallet.cashu.me/) and [native app downloads](https://cashu.me/).
-2. `Sovran` — link to [sovran.money](https://sovran.money/).
-3. `CDK CLI` — link to the [CDK CLI source and instructions](https://github.com/cashubtc/cdk/tree/main/crates/cdk-cli). Make clear that this is for developers and advanced users rather than presenting it as a consumer mobile app.
+1. `cashu.me` — a Cashu wallet for web and mobile, with npub.cash built in from the start. Link separately to the [browser wallet](https://wallet.cashu.me/) and [native app downloads](https://cashu.me/).
+2. `Sovran` — a native Bitcoin wallet that brings Cashu ecash, Lightning, Nostr, and npub.cash together. Link to [sovran.money](https://sovran.money/).
+3. `CDK CLI` — a command-line Cashu wallet with dedicated npub.cash support for developers and advanced users. Link to the [CDK CLI source and instructions](https://github.com/cashubtc/cdk/tree/main/crates/cdk-cli).
 
-Include a note that these are independent projects and their availability and release status are maintained by their respective teams.
+Keep the section heading centered, make the card actions easy to scan, and place the independent-project note beneath the cards. State that availability may change and that people should start with small amounts while the integrations mature.
 
 ### 5. How it works
 
