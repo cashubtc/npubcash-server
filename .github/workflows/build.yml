@@ -57,7 +57,6 @@ jobs:
               API_MODE=API_ONLY \
               DATABASE_TYPE="$database_type" \
               DATABASE_URL="$database_url" \
-              HOSTNAME=http://127.0.0.1:8000 \
               JWT_SECRET=ci-runtime-secret \
               MINTURL=https://mint.example.com \
               NODE_ENV=production \

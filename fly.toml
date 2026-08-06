@@ -3,13 +3,9 @@
 app = "nightly-npubcash"
 primary_region = "ams"
 
-[build]
-  [build.args]
-    HOSTNAME = "https://npuby.cash"
-
 [env]
+ALLOWED_HOSTNAMES = "npuby.cash,nightly-npubcash.fly.dev"
 DATABASE_TYPE = "sqlite"
-HOSTNAME = "https://npuby.cash"
 LNURL_MAX_AMOUNT = "100000000"
 LNURL_MIN_AMOUNT = "1000"
 MINTURL = "https://mint.minibits.cash/Bitcoin"
