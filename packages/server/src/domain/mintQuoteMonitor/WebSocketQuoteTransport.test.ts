@@ -158,7 +158,7 @@ describe("WebSocketQuoteTransport", () => {
     expect(payloads).toEqual([]);
   });
 
-  test("subscribes a quote added while the old socket is closing exactly once", () => {
+  test("re-subscribes existing quotes when adding one replaces a closing socket", () => {
     const sockets: FakeSocket[] = [];
     const transport = new WsTransport(
       () => {
@@ -186,6 +186,12 @@ describe("WebSocketQuoteTransport", () => {
     const replacementSubscriptions = sockets[1]!.sent
       .map((message) => JSON.parse(message) as WsRequest)
       .filter((request) => request.method === "subscribe");
+    expect(
+      replacementSubscriptions.filter(
+        (request) =>
+          "filters" in request.params && request.params.filters[0] === "quote-1",
+      ),
+    ).toHaveLength(1);
     expect(
       replacementSubscriptions.filter(
         (request) =>

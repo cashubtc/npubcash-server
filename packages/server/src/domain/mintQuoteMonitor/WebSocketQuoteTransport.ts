@@ -61,6 +61,13 @@ export class WebSocketQuoteTransport implements ActiveQuoteTransport {
     onPayload: (payload: MintQuotePayload) => void | Promise<void>,
   ): () => void {
     const mint = this.ensureMint(mintUrl);
+    if (mint.hasOpened) {
+      // Sending can replace a socket that is already closing without emitting
+      // its stale close event, so replay subscriptions that predate this send.
+      for (const existingSubId of mint.bySubId.keys()) {
+        mint.needsResubscribe.add(existingSubId);
+      }
+    }
     const subId = this.createSubscriptionId();
     mint.bySubId.set(subId, { subId, quoteId, onPayload });
     this.sendSubscribe(mintUrl, mint, subId);
