@@ -304,6 +304,9 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
     const now = this.clock.now().getTime();
     const phase: QuotePhase =
       quote.expiresAt.getTime() <= now ? "reconciliation" : "active";
+    if (phase === "active") {
+      await this.clampCircuitForActiveQuote(session);
+    }
     const metadata = await this.store.getQuoteReconciliationState(quote.id);
     const entry: WatchedQuote = {
       quote,
@@ -620,6 +623,38 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
     this.logger?.info("[QuoteMonitor] Mint recovered", {
       mintUrl: session.mintUrl,
       failureCount,
+    });
+  }
+
+  private async clampCircuitForActiveQuote(session: MintSession): Promise<void> {
+    const retry = session.retry;
+    if (!retry) return;
+
+    const scheduleIndex = Math.max(
+      0,
+      Math.min(retry.failureCount - 1, this.policy.activeRetryMs.length - 1),
+    );
+    const activeDelay = this.policy.activeRetryMs[scheduleIndex]!;
+    const nextAttemptAt = new Date(
+      this.clock.now().getTime() + this.withJitter(activeDelay),
+    );
+    if (retry.nextAttemptAt.getTime() <= nextAttemptAt.getTime()) return;
+
+    const clampedRetry = { ...retry, nextAttemptAt };
+    session.retry = clampedRetry;
+    try {
+      await this.store.saveMintRetryState(clampedRetry);
+    } catch (cause) {
+      this.logger?.warn("[QuoteMonitor] Failed to persist active circuit clamp", {
+        mintUrl: session.mintUrl,
+        cause,
+      });
+    }
+    this.logger?.info("[QuoteMonitor] Clamped mint circuit for active quote", {
+      mintUrl: session.mintUrl,
+      failureCount: retry.failureCount,
+      previousNextAttemptAt: retry.nextAttemptAt.toISOString(),
+      nextAttemptAt: clampedRetry.nextAttemptAt.toISOString(),
     });
   }
 

@@ -565,6 +565,52 @@ describe("MintQuoteMonitor", () => {
     ]);
   });
 
+  test("clamps a reconciliation circuit when an active quote joins the mint", async () => {
+    const now = Date.parse("2026-08-03T12:00:00.000Z");
+    const mintUrl = "https://mint.example.com";
+    await createQuote("expired", mintUrl, new Date(now - 1));
+    const clock = new FakeClock(now);
+    let mintAvailable = false;
+    const client = new FakeMintClient((_mintUrl, quoteId) =>
+      mintAvailable
+        ? { kind: "found", payload: paidPayload(quoteId) }
+        : { kind: "mint_unavailable", cause: new Error("offline") },
+    );
+    const monitor = new DefaultMintQuoteMonitor({
+      store,
+      client,
+      activeTransport: new FakeActiveQuoteTransport(),
+      clock,
+      random: () => 0.5,
+      policy: {
+        activeRetryMs: [60_000],
+        reconciliationRetryMs: [21_600_000],
+      },
+    });
+    await monitor.start();
+    await clock.advanceBy(0);
+
+    expect((await store.getMintRetryState(mintUrl))?.nextAttemptAt).toEqual(
+      new Date(now + 21_600_000),
+    );
+
+    const active = await createQuote(
+      "active",
+      mintUrl,
+      new Date(now + 3_600_000),
+    );
+    await monitor.watch(active);
+
+    expect((await store.getMintRetryState(mintUrl))?.nextAttemptAt).toEqual(
+      new Date(now + 60_000),
+    );
+    mintAvailable = true;
+    await clock.advanceBy(59_999);
+    expect(client.calls.map((call) => call.quoteId)).toEqual(["expired"]);
+    await clock.advanceBy(1);
+    expect(client.calls.map((call) => call.quoteId)).toContain("active");
+  });
+
   test("quote not found stays unresolved and is retried quietly", async () => {
     const now = Date.parse("2026-08-03T12:00:00.000Z");
     await createQuote(
