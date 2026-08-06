@@ -17,7 +17,6 @@ import {
   RadioTowerIcon,
   SendIcon,
   ShieldCheckIcon,
-  SparklesIcon,
   SmartphoneIcon,
   SunIcon,
   TerminalIcon,
@@ -56,13 +55,11 @@ const NOSTR_HREF =
 type Feature = {
   title: string
   description: string
-  detail: string
   icon: LucideIcon
 }
 
 type WalletIntegration = {
   name: string
-  platform: string
   description: string
   capabilities: string[]
   icon: LucideIcon
@@ -78,42 +75,36 @@ const features: Feature[] = [
     title: "No registration required",
     description:
       "Use any valid npub as npub1…@npub.cash. You only need an integrated wallet when you want to claim or manage payments.",
-    detail: "Any valid npub",
     icon: CircleUserRoundIcon,
   },
   {
     title: "Receive while offline",
     description:
-      "A sender pays over Lightning while npub.cash tracks the paid mint quote. Your wallet can claim the eCash when you return.",
-    detail: "Claim when you return",
+      "A sender pays over Lightning while npub.cash tracks the paid mint quote. Your wallet can claim the ecash when you return.",
     icon: WifiOffIcon,
   },
   {
     title: "Choose your mint",
     description:
       "Use the provider's default Cashu mint or set a compatible preferred mint for future payments.",
-    detail: "Default or preferred mint",
     icon: LandmarkIcon,
   },
   {
     title: "Optional quote locking",
     description:
       "With a NUT-20-compatible mint, you can request quotes locked to your Nostr public key for additional protection.",
-    detail: "NUT-20 compatible",
     icon: LockKeyholeIcon,
   },
   {
     title: "Nostr-native",
     description:
       "Use Nostr signatures to access your wallet, receive compatible zaps, and attach an optional NIP-05 name to your public key.",
-    detail: "NIP-05 · NIP-57 · NIP-98",
     icon: KeyRoundIcon,
   },
   {
     title: "Open source",
     description:
       "Built on open protocols and published under the MIT License. Inspect the code, run your own instance, or contribute.",
-    detail: "MIT licensed",
     icon: Code2Icon,
   },
 ]
@@ -121,7 +112,6 @@ const features: Feature[] = [
 const walletIntegrations: WalletIntegration[] = [
   {
     name: "cashu.me",
-    platform: "Web + native",
     description:
       "Use cashu.me in your browser or install the native beta on iPhone or Android. Its npub.cash integration lets you discover and claim waiting payments.",
     capabilities: ["Browser", "iOS beta", "Android", "Nostr"],
@@ -140,9 +130,8 @@ const walletIntegrations: WalletIntegration[] = [
   },
   {
     name: "Sovran",
-    platform: "Native mobile",
     description:
-      "A mobile Bitcoin wallet with Cashu eCash, Lightning, and Nostr built in. Use its npub.cash support from your iPhone.",
+      "A mobile Bitcoin wallet with Cashu ecash, Lightning, and Nostr built in. Use its npub.cash support from your iPhone.",
     capabilities: ["iOS", "Cashu", "Lightning", "Nostr"],
     icon: SmartphoneIcon,
     actions: [
@@ -155,7 +144,6 @@ const walletIntegrations: WalletIntegration[] = [
   },
   {
     name: "CDK CLI",
-    platform: "Command line",
     description:
       "A terminal Cashu wallet powered by CDK, with a dedicated npub.cash integration for developers and advanced users.",
     capabilities: ["CLI", "Rust", "Open source", "Advanced"],
@@ -189,9 +177,9 @@ const steps = [
   },
   {
     number: "03",
-    title: "Claim the eCash",
+    title: "Claim the ecash",
     description:
-      "When you return, open an integrated wallet and connect your Nostr signer. It finds your paid quotes and mints the corresponding Cashu eCash.",
+      "When you return, open an integrated wallet and connect your Nostr signer. It finds your paid quotes and mints the corresponding Cashu ecash.",
     detail: "Use cashu.me, Sovran, or CDK",
     icon: CoinsIcon,
   },
@@ -206,12 +194,12 @@ const faqs = [
   {
     question: "Can I really receive while offline?",
     answer:
-      "Yes—the recipient's device can be offline. npub.cash requests and tracks the mint quote while the sender pays over Lightning. Your wallet claims the eCash after you reconnect.",
+      "Yes—the recipient's device can be offline. npub.cash requests and tracks the mint quote while the sender pays over Lightning. Your wallet claims the ecash after you reconnect.",
   },
   {
     question: "Where does the money live?",
     answer:
-      "The Lightning payment goes to a quote from your configured Cashu mint. After payment, your wallet uses that paid quote to mint Cashu eCash. The mint is custodial, while the eCash is stored by your wallet after it is claimed.",
+      "The Lightning payment goes to a quote from your configured Cashu mint. After payment, your wallet uses that paid quote to mint Cashu ecash. The mint is custodial, while the ecash is stored by your wallet after it is claimed.",
   },
   {
     question: "What does quote locking do?",
@@ -221,7 +209,7 @@ const faqs = [
   {
     question: "What is a Cashu mint?",
     answer:
-      "A Cashu mint issues and redeems private bearer eCash backed by its Lightning balance. Mints are custodial, so choose one you trust.",
+      "A Cashu mint issues and redeems private bearer ecash backed by its Lightning balance. Mints are custodial, so choose one you trust.",
   },
   {
     question: "Does npub.cash provide its own wallet?",
@@ -298,7 +286,7 @@ function SectionHeading({
   description,
   centered = false,
 }: {
-  eyebrow: string
+  eyebrow?: string
   title: string
   description: string
   centered?: boolean
@@ -310,7 +298,7 @@ function SectionHeading({
         centered && "mx-auto items-center text-center"
       )}
     >
-      <Badge variant="outline">{eyebrow}</Badge>
+      {eyebrow ? <Badge variant="outline">{eyebrow}</Badge> : null}
       <h2 className="text-3xl font-semibold tracking-tight text-balance sm:text-4xl lg:text-5xl">
         {title}
       </h2>
@@ -389,13 +377,9 @@ function PaymentRoute() {
   return (
     <Card className="relative min-h-[30rem] shadow-2xl shadow-primary/10">
       <CardHeader>
-        <Badge variant="secondary">
-          <RadioTowerIcon data-icon="inline-start" />
-          Ready to receive
-        </Badge>
         <CardTitle>Your payment route</CardTitle>
         <CardDescription>
-          One address connects Lightning to Cashu eCash and your Nostr identity.
+          One address connects Lightning to Cashu ecash and your Nostr identity.
         </CardDescription>
         <CardAction>
           <span className="flex size-2.5">
@@ -407,10 +391,9 @@ function PaymentRoute() {
 
       <CardContent className="flex flex-1 flex-col justify-center gap-5">
         <div className="rounded-xl border bg-muted/40 p-4">
-          <div className="mb-2 flex items-center justify-between gap-3 text-xs text-muted-foreground">
-            <span>Your Lightning address</span>
-            <Badge variant="outline">Live</Badge>
-          </div>
+          <span className="mb-2 block text-xs text-muted-foreground">
+            Your Lightning address
+          </span>
           <code className="block truncate text-sm font-semibold sm:text-base">
             npub1yourkey…@npub.cash
           </code>
@@ -446,18 +429,17 @@ function PaymentRoute() {
             <div className="flex flex-col gap-0.5">
               <p className="text-sm font-medium">Ready when you are</p>
               <p className="text-xs leading-5 text-muted-foreground">
-                Reconnect later and claim the eCash with your signer.
+                Reconnect later and claim the ecash with your signer.
               </p>
             </div>
           </div>
         </div>
       </CardContent>
 
-      <CardFooter className="justify-between gap-3">
+      <CardFooter>
         <span className="text-xs text-muted-foreground">
           Recipient may be offline
         </span>
-        <Badge variant="outline">Nostr signed</Badge>
       </CardFooter>
     </Card>
   )
@@ -479,11 +461,6 @@ function Hero() {
     <section id="top" className="hero-grid relative overflow-hidden border-b">
       <div className="mx-auto grid min-h-[calc(100svh-7rem)] max-w-7xl items-center gap-14 px-4 py-20 sm:px-6 sm:py-24 lg:grid-cols-[1.08fr_0.92fr] lg:px-8 lg:py-28">
         <div className="relative flex max-w-3xl flex-col items-start gap-7">
-          <Badge variant="secondary">
-            <SparklesIcon data-icon="inline-start" />
-            Lightning + Cashu + Nostr
-          </Badge>
-
           <div className="flex flex-col gap-5">
             <h1 className="max-w-4xl text-5xl leading-[0.98] font-semibold tracking-[-0.045em] text-balance sm:text-6xl lg:text-7xl">
               A Nostr-native{" "}
@@ -539,7 +516,7 @@ function Hero() {
           <p className="flex items-start gap-2 text-sm leading-6 text-muted-foreground">
             <BadgeCheckIcon className="mt-0.5 size-4 shrink-0 text-primary" />
             No separate npub.cash account. Your wallet connects your Nostr
-            signer and keeps your eCash on your device.
+            signer and keeps your ecash on your device.
           </p>
         </div>
 
@@ -557,13 +534,12 @@ function Benefits() {
     <section className="border-b py-24 sm:py-28">
       <div className="mx-auto flex max-w-7xl flex-col gap-12 px-4 sm:px-6 lg:px-8">
         <SectionHeading
-          eyebrow="Why npub.cash"
           title="Your Nostr identity, now a Lightning address"
           description="npub.cash connects a familiar Lightning address to your Nostr public key and a Cashu mint, so payments can wait for you until your wallet is online."
         />
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {features.map(({ title, description, detail, icon: Icon }) => (
+          {features.map(({ title, description, icon: Icon }) => (
             <Card key={title} className="h-full">
               <CardHeader>
                 <CardTitle>{title}</CardTitle>
@@ -574,9 +550,6 @@ function Benefits() {
                   </span>
                 </CardAction>
               </CardHeader>
-              <CardContent className="mt-auto">
-                <Badge variant="outline">{detail}</Badge>
-              </CardContent>
             </Card>
           ))}
         </div>
@@ -594,9 +567,8 @@ function IntegratedWallets() {
       <div className="mx-auto flex max-w-7xl flex-col gap-12 px-4 sm:px-6 lg:px-8">
         <div className="grid items-end gap-8 lg:grid-cols-[1fr_0.72fr]">
           <SectionHeading
-            eyebrow="Compatible wallets"
-            title="Choose where you claim your eCash"
-            description="npub.cash does not host a wallet. These independent wallets have integrated npub.cash so you can discover paid quotes and claim the eCash with your Nostr identity."
+            title="Choose where you claim your ecash"
+            description="npub.cash does not host a wallet. These independent wallets have integrated npub.cash so you can discover paid quotes and claim the ecash with your Nostr identity."
           />
           <Alert>
             <WalletCardsIcon />
@@ -612,7 +584,6 @@ function IntegratedWallets() {
           {walletIntegrations.map(
             ({
               name,
-              platform,
               description,
               capabilities,
               icon: Icon,
@@ -620,7 +591,6 @@ function IntegratedWallets() {
             }) => (
               <Card key={name} className="h-full">
                 <CardHeader>
-                  <Badge variant="secondary">{platform}</Badge>
                   <CardTitle>{name}</CardTitle>
                   <CardDescription>{description}</CardDescription>
                   <CardAction>
@@ -672,9 +642,8 @@ function HowItWorks() {
       <div className="mx-auto grid max-w-7xl gap-14 px-4 sm:px-6 lg:grid-cols-[0.8fr_1.2fr] lg:px-8">
         <div className="flex flex-col items-start gap-8 lg:sticky lg:top-28 lg:self-start">
           <SectionHeading
-            eyebrow="How it works"
             title="Receive now. Claim when you're ready."
-            description="Lightning delivers the payment, a Cashu mint prepares the eCash, and your Nostr identity tells the wallet which paid quotes belong to you."
+            description="Lightning delivers the payment, a Cashu mint prepares the ecash, and your Nostr identity tells the wallet which paid quotes belong to you."
           />
 
           <Alert>
@@ -730,7 +699,7 @@ function TrustModel() {
           <SectionHeading
             eyebrow="Trust model"
             title="Know what you are trusting"
-            description="Cashu eCash is issued by a mint, and that mint is a custodian. npub.cash coordinates the Lightning address and keeps the paid quote available for your wallet; it is not the Cashu mint."
+            description="Cashu ecash is issued by a mint, and that mint is a custodian. npub.cash coordinates the Lightning address and keeps the paid quote available for your wallet; it is not the Cashu mint."
           />
           <p className="max-w-2xl leading-7 text-muted-foreground">
             If your chosen mint and wallet support NUT-20, you can enable quotes
@@ -821,7 +790,7 @@ function UsernameCallout() {
           <CardFooter className="flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
             <p className="text-xs leading-5 text-muted-foreground">
               Availability and price are shown before purchase. Payment uses
-              Cashu eCash.
+              Cashu ecash.
             </p>
             <a
               className={buttonVariants({ variant: "default", size: "lg" })}
@@ -842,7 +811,6 @@ function Faq() {
     <section className="border-b py-24 sm:py-28">
       <div className="mx-auto grid max-w-7xl gap-12 px-4 sm:px-6 lg:grid-cols-[0.7fr_1.3fr] lg:px-8">
         <SectionHeading
-          eyebrow="FAQ"
           title="A few things worth knowing"
           description="The short answers to how npub.cash receives, stores, and protects payments."
         />
@@ -906,7 +874,7 @@ function Footer() {
           <div className="flex flex-col gap-3">
             <Brand />
             <p className="text-sm text-muted-foreground">
-              Built with Lightning, Cashu eCash, and Nostr.
+              Built with Lightning, Cashu ecash, and Nostr.
             </p>
           </div>
           <nav className="flex flex-wrap gap-2" aria-label="Footer navigation">

@@ -34,7 +34,7 @@ These are the facts the homepage copy must preserve.
 - A human-readable `username@npub.cash` is optional. Usernames are lowercased, must be at least three alphanumeric characters, cannot begin with `npub1`, must be available, and can require a Cashu payment when username purchases are enabled.
 - A claimed username is also exposed through the server's NIP-05 endpoint, mapping the name to the user's Nostr public key.
 - The sender pays a normal LNURL-pay/Lightning address invoice. npub.cash asks the recipient's configured Cashu mint for the invoice, stores the mint quote, and monitors it until payment or expiry.
-- Once a quote is paid, the recipient's wallet can discover the paid quote and mint the corresponding Cashu eCash when the recipient comes back online.
+- Once a quote is paid, the recipient's wallet can discover the paid quote and mint the corresponding Cashu ecash when the recipient comes back online.
 - The recipient can therefore be offline while a payment arrives. The sender, npub.cash, the Lightning network, and the Cashu mint still need to be online. Use **receive while offline**, not **offline payment**.
 - Quote locking is optional. When the user enables it and the chosen mint supports NUT-20, npub.cash requests a quote locked to the user's public key. Do not say that every balance or payment is locked by default.
 - Cashu mints are custodial. The product may reduce the trust placed in the npub.cash service by using compatible locked quotes, but it does not remove trust in the selected mint.
@@ -77,10 +77,6 @@ The current homepage exposes Home and a first-party Wallet. The new homepage rep
 
 ### 3. Hero
 
-**Eyebrow**
-
-> Lightning + Cashu + Nostr
-
 **H1**
 
 > A Nostr-native Lightning address for everyone
@@ -104,7 +100,7 @@ Label the second example `optional username` so visitors do not mistake it for a
 
 **Expectation beneath the actions**
 
-> No separate npub.cash account. Your integrated wallet connects your Nostr signer and keeps your eCash on your device.
+> No separate npub.cash account. Your integrated wallet connects your Nostr signer and keeps your ecash on your device.
 
 Do not use “Create your Lightning address.” An npub-based address already exists before the user chooses or opens a wallet.
 
@@ -126,7 +122,7 @@ Use these benefit cards:
 
 #### Receive while offline
 
-> A sender pays over Lightning while npub.cash tracks the paid mint quote. Your wallet can claim the Cashu eCash when you return.
+> A sender pays over Lightning while npub.cash tracks the paid mint quote. Your wallet can claim the Cashu ecash when you return.
 
 #### Choose your mint
 
@@ -150,17 +146,17 @@ The current homepage's four ideas—no sign-up, trust minimization, offline rece
 
 **Section heading**
 
-> Choose where you claim your eCash
+> Choose where you claim your ecash
 
 **Section introduction**
 
-> npub.cash does not host a wallet. These independent wallets have integrated npub.cash so you can discover paid quotes and claim the eCash with your Nostr identity.
+> npub.cash does not host a wallet. These independent wallets have integrated npub.cash so you can discover paid quotes and claim the ecash with your Nostr identity.
 
-Present three wallet cards:
+Present three wallet cards without platform pills:
 
-1. `cashu.me` — label as `Web + native`; link separately to the [browser wallet](https://wallet.cashu.me/) and [native app downloads](https://cashu.me/).
-2. `Sovran` — label as `Native mobile`; link to [sovran.money](https://sovran.money/).
-3. `CDK CLI` — label as `Command line`; link to the [CDK CLI source and instructions](https://github.com/cashubtc/cdk/tree/main/crates/cdk-cli). Make clear that this is for developers and advanced users rather than presenting it as a consumer mobile app.
+1. `cashu.me` — link separately to the [browser wallet](https://wallet.cashu.me/) and [native app downloads](https://cashu.me/).
+2. `Sovran` — link to [sovran.money](https://sovran.money/).
+3. `CDK CLI` — link to the [CDK CLI source and instructions](https://github.com/cashubtc/cdk/tree/main/crates/cdk-cli). Make clear that this is for developers and advanced users rather than presenting it as a consumer mobile app.
 
 Include a note that these are independent projects and their availability and release status are maintained by their respective teams.
 
@@ -172,7 +168,7 @@ Include a note that these are independent projects and their availability and re
 
 **Section introduction**
 
-> npub.cash implements the Cashu-Address model: Lightning delivers the payment, a Cashu mint prepares the eCash, and your Nostr identity tells the wallet which paid quotes belong to you.
+> npub.cash implements the Cashu-Address model: Lightning delivers the payment, a Cashu mint prepares the ecash, and your Nostr identity tells the wallet which paid quotes belong to you.
 
 Use a three-step native diagram with accessible text rather than relying on the current externally hosted Excalidraw iframe.
 
@@ -184,9 +180,9 @@ Use a three-step native diagram with accessible text rather than relying on the 
 
 > The sender's wallet resolves the address. npub.cash requests an invoice from your configured Cashu mint and monitors the resulting quote for payment.
 
-#### Step 3 — Claim the eCash
+#### Step 3 — Claim the ecash
 
-> When you return, open an integrated wallet and connect your Nostr signer. It finds your paid quotes and mints the corresponding Cashu eCash from the mint.
+> When you return, open an integrated wallet and connect your Nostr signer. It finds your paid quotes and mints the corresponding Cashu ecash from the mint.
 
 **Supporting link:** `Read the technical docs`
 Do not publish this link until a working documentation target replaces or restores `https://docs.cashu-address.com/`.
@@ -201,7 +197,7 @@ This section is required because the product handles money and the phrase “tru
 
 **Proposed copy**
 
-> Cashu eCash is issued by a mint, and that mint is a custodian. npub.cash coordinates the Lightning address and keeps the paid quote available for your wallet; it is not the Cashu mint. If your chosen mint and wallet support NUT-20, you can enable quotes locked to your Nostr public key. Locking is optional and is not enabled for every payment by default.
+> Cashu ecash is issued by a mint, and that mint is a custodian. npub.cash coordinates the Lightning address and keeps the paid quote available for your wallet; it is not the Cashu mint. If your chosen mint and wallet support NUT-20, you can enable quotes locked to your Nostr public key. Locking is optional and is not enabled for every payment by default.
 
 **Short safety points**
 
@@ -230,7 +226,7 @@ This is a supporting section, not the primary value proposition.
 
 **Purchase note**
 
-> Username availability and price are shown before purchase. Payment is made with Cashu eCash.
+> Username availability and price are shown before purchase. Payment is made with Cashu ecash.
 
 Do not hard-code a username price on the homepage. The feature, price, and payment mint are provider configuration and may change or be disabled.
 
@@ -242,11 +238,11 @@ Do not hard-code a username price on the homepage. The feature, price, and payme
 
 #### Can I really receive while offline?
 
-> Yes—the recipient's device can be offline. npub.cash requests and tracks the mint quote while the sender pays over Lightning. Your wallet claims the eCash after you reconnect.
+> Yes—the recipient's device can be offline. npub.cash requests and tracks the mint quote while the sender pays over Lightning. Your wallet claims the ecash after you reconnect.
 
 #### Where does the money live?
 
-> The Lightning payment goes to a quote from your configured Cashu mint. After payment, your wallet uses that paid quote to mint Cashu eCash. The mint is custodial, while the eCash is stored by your wallet after it is claimed.
+> The Lightning payment goes to a quote from your configured Cashu mint. After payment, your wallet uses that paid quote to mint Cashu ecash. The mint is custodial, while the ecash is stored by your wallet after it is claimed.
 
 #### What does quote locking do?
 
@@ -254,7 +250,7 @@ Do not hard-code a username price on the homepage. The feature, price, and payme
 
 #### What is a Cashu mint?
 
-> A Cashu mint issues and redeems private bearer eCash backed by its Lightning balance. Mints are custodial, so choose one you trust.
+> A Cashu mint issues and redeems private bearer ecash backed by its Lightning balance. Mints are custodial, so choose one you trust.
 
 #### Does npub.cash provide its own wallet?
 
@@ -288,7 +284,7 @@ Avoid the current draft's “Create your Lightning address in seconds”; openin
 **Required content**
 
 - `npub.cash`
-- `Built with Lightning, Cashu eCash, and Nostr.`
+- `Built with Lightning, Cashu ecash, and Nostr.`
 - `Source` — [cashubtc/npubcash-server](https://github.com/cashubtc/npubcash-server)
 - `Documentation` — only after the destination is confirmed working
 - `Nostr` — the maintainer/project profile currently linked from the live homepage
@@ -313,7 +309,7 @@ Do not copy social links from the existing frontend draft without confirmation. 
 
 **Open Graph description**
 
-> Receive over Lightning while offline, then claim Cashu eCash with your Nostr-connected wallet.
+> Receive over Lightning while offline, then claim Cashu ecash with your Nostr-connected wallet.
 
 The live page title is only `npub.cash`, and its description is `A nostr native Lightning Address for everyone`. Preserve the core message while adding the terms people need to understand the page in search and link previews.
 
@@ -323,12 +319,12 @@ Use these consistently:
 
 - `Nostr`, not `nostr`, in prose.
 - `Lightning address`, with a lowercase “address” unless it begins a heading.
-- `Cashu eCash`, not just “cash,” and not `e-cash`.
+- `Cashu ecash`, not just “cash,” and always with lowercase `ecash` spelling.
 - `npub` for the Nostr-encoded public key.
 - `receive while offline`, not `offline payments`.
 - `connect a signer` or `choose a wallet`, not `create an account`.
 - `claim` or `purchase a username`, not `sign up for a username`.
-- `paid mint quote` for what npub.cash records before the wallet mints eCash.
+- `paid mint quote` for what npub.cash records before the wallet mints ecash.
 - `optional quote locking`, not `your balance is locked`.
 
 Avoid these unsupported or misleading claims:
@@ -338,7 +334,7 @@ Avoid these unsupported or misleading claims:
 - “Your funds can never be taken”
 - “Completely private” or “anonymous”
 - “Every payment is locked to your key”
-- “npub.cash stores your eCash until you return”
+- “npub.cash stores your ecash until you return”
 - “No login needed” without clarifying that no registration is needed but a signer is needed to manage funds
 
 ## Comparison with the live homepage
@@ -353,7 +349,7 @@ Avoid these unsupported or misleading claims:
 | Trust minimized | Keep only with the NUT-20/optional-locking explanation | Locking is configurable and mint-dependent, and Cashu mints remain custodial. |
 | Offline payments | Keep as `Receive while offline` | Only the recipient can be offline; the payment infrastructure remains online. |
 | Open source | Keep with the canonical repository and MIT license | The live GitHub URL now redirects to the canonical repository. |
-| Cashu-Address explanation | Keep, rewrite around the actual quote lifecycle | The live copy says the server mints and holds eCash, while the current server stores and tracks mint quotes for later wallet claiming. |
+| Cashu-Address explanation | Keep, rewrite around the actual quote lifecycle | The live copy says the server mints and holds ecash, while the current server stores and tracks mint quotes for later wallet claiming. |
 | Three-step Alice/Bob flow | Keep the three-step structure, modernize the copy | It is easy to scan, but the existing text contains errors and overstates default locking. |
 | Embedded Excalidraw diagram | Replace with a native, accessible diagram when implementing | This avoids an external runtime dependency and duplicates the written three-step explanation cleanly. |
 | External Cashu-Address docs link | Block until fixed or replaced | `docs.cashu-address.com` did not resolve during the 2026-08-05 audit. |
