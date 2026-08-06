@@ -3,7 +3,7 @@ import {
   getEnvVar,
   getPortFromEnv,
   getMintUrlFromEnv,
-  getHostnameFromEnv,
+  getAllowedHostnamesFromEnv,
   getNodeEnvFromEnv,
   getLogLevelFromEnv,
   getApiModeFromEnv,
@@ -52,12 +52,29 @@ describe("env.ts", () => {
     expect(() => getMintUrlFromEnv()).toThrow("MINTURL is required");
   });
 
-  test("getHostnameFromEnv requires HOSTNAME", () => {
-    process.env.HOSTNAME = "https://npub.cash";
-    expect(getHostnameFromEnv()).toBe("https://npub.cash");
+  test("getAllowedHostnamesFromEnv parses an optional hostname allowlist", () => {
+    delete process.env.ALLOWED_HOSTNAMES;
+    expect(getAllowedHostnamesFromEnv()).toEqual([]);
 
-    delete process.env.HOSTNAME;
-    expect(() => getHostnameFromEnv()).toThrow("HOSTNAME is required");
+    process.env.ALLOWED_HOSTNAMES = " npub.cash,EXAMPLE.COM,npub.cash ";
+    expect(getAllowedHostnamesFromEnv()).toEqual(["npub.cash", "example.com"]);
+  });
+
+  test("getAllowedHostnamesFromEnv rejects origins and wildcard entries", () => {
+    process.env.ALLOWED_HOSTNAMES = "https://npub.cash";
+    expect(() => getAllowedHostnamesFromEnv()).toThrow(
+      "ALLOWED_HOSTNAMES must contain comma-separated hostnames",
+    );
+
+    process.env.ALLOWED_HOSTNAMES = "*.npub.cash";
+    expect(() => getAllowedHostnamesFromEnv()).toThrow(
+      "ALLOWED_HOSTNAMES must contain comma-separated hostnames",
+    );
+
+    process.env.ALLOWED_HOSTNAMES = "npub.cash:443";
+    expect(() => getAllowedHostnamesFromEnv()).toThrow(
+      "ALLOWED_HOSTNAMES must contain comma-separated hostnames",
+    );
   });
 
   test("getNodeEnvFromEnv defaults to development", () => {

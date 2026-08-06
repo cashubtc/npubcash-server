@@ -11,6 +11,7 @@ import { unixToDate } from "@/utils/time";
 import { NextFunction, Request, Response } from "express";
 import { Event } from "nostr-tools";
 import { config } from "@/config/index";
+import { getPublicRequestUrl } from "@/utils/publicRequest";
 
 export async function lnurlController(
   req: Request<
@@ -35,7 +36,14 @@ export async function lnurlController(
 
     if (!amount) {
       logger.debug("Returning LNURL Reponse for " + userdata.username);
-      const lnurlResponse = createLnurlResponse(userdata.username);
+      const publicOrigin = getPublicRequestUrl(
+        req,
+        config.allowedHostnames,
+      ).origin;
+      const lnurlResponse = createLnurlResponse(
+        userdata.username,
+        publicOrigin,
+      );
       return res.json(lnurlResponse);
     }
     const parsedAmount = parseInt(amount);

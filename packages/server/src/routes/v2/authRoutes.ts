@@ -6,7 +6,7 @@ const authRouter = Router();
 
 authRouter.get(
   "/nip98",
-  isAuthMiddleware("/api/v2/auth/nip98", "GET"),
+  isAuthMiddleware(),
   getNip98AuthController,
 );
 
