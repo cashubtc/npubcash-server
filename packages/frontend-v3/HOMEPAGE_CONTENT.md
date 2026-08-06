@@ -24,7 +24,7 @@ npub.cash will not offer or link to a first-party wallet for this version of the
 - [Sovran](https://sovran.money/) — native mobile wallet
 - [CDK CLI](https://github.com/cashubtc/cdk/tree/main/crates/cdk-cli) — command-line wallet for developers and advanced users; CDK includes a dedicated `cdk-npubcash` integration
 
-This decision supersedes earlier references in the brief to an npub.cash-hosted wallet or `/wallet` route. The primary CTA is now `Choose a wallet`, targeting the compatible-wallets section on the homepage.
+This decision supersedes earlier references in the brief to an npub.cash-hosted wallet or `/wallet` route. Wallet links should lead to the compatible-wallets section on the homepage.
 
 ## Product truth from the server
 
@@ -59,9 +59,7 @@ This replaces the live page's all-caps warning with clearer, actionable language
 
 ### 2. Header and navigation
 
-**Brand:** `npub.cash`
-
-**Brand asset note:** the production header currently pairs the wordmark with a purple-to-pink outlined wallet/Cashu mark served from `/logo.png`. Preserve that recognizable idea if the visual identity remains current, but obtain the original or a vector source before implementation; the asset is not present in `frontend-v3`.
+The dark-mode-only header uses the `npub.cash` wordmark without a logo icon. It stays in the normal page flow rather than sticking during scroll.
 
 **Required links**
 
@@ -71,9 +69,7 @@ This replaces the live page's all-caps warning with clearer, actionable language
 - `Docs` — only after a working documentation URL is confirmed
 - `Source` — [cashubtc/npubcash-server](https://github.com/cashubtc/npubcash-server)
 
-**Primary header action:** `Choose a wallet`
-
-The current homepage exposes Home and a first-party Wallet. The new homepage replaces the wallet route with a compatible-wallets section and keeps the technical explanation and source easy to reach.
+Do not add a header CTA. The current homepage exposes Home and a first-party Wallet; the new homepage replaces the wallet route with a compatible-wallets section and keeps the technical explanation and source easy to reach.
 
 ### 3. Hero
 
@@ -83,22 +79,11 @@ The current homepage exposes Home and a first-party Wallet. The new homepage rep
 
 **Supporting copy**
 
-> Receive Lightning payments at your npub.cash address—even while you're offline. Any Nostr public key works immediately; choose an integrated wallet when you're ready to claim payments.
+> Receive Lightning at npub1…@npub.cash—even while offline—then claim it as ecash in an integrated wallet.
 
-**Address examples**
+Keep the hero focused: do not add an address-example card or CTA buttons beneath the supporting copy.
 
-> `npub1…@npub.cash`
-> `yourname@npub.cash`
-
-Label the second example `optional username` so visitors do not mistake it for a registration requirement.
-
-**Primary CTA:** `Choose a wallet`
-**Target:** the compatible-wallets section
-
-**Secondary CTA:** `See how it works`
-**Target:** the how-it-works section
-
-**Expectation beneath the actions**
+**Expectation beneath the supporting copy**
 
 > No separate npub.cash account. Your integrated wallet connects your Nostr signer and keeps your ecash on your device.
 
@@ -344,7 +329,7 @@ Avoid these unsupported or misleading claims:
 | Work-in-progress/no-warranty banner | Keep, rewrite as an experimental-software and custodial-mint warning | It is important financial-risk context and the v2 docs also call the API unstable. |
 | `npub.cash` brand and Nostr-native Lightning tagline | Keep and elevate to the H1 | This remains the clearest summary of the product. |
 | `<npub\|user>@npub.cash` example | Keep, split into npub and optional username examples | The two paths have different requirements and should not appear interchangeable. |
-| `Try it!` and `Claim Username` CTAs | Replace with `Choose a wallet` and `See how it works` | npub.cash does not host a wallet; visitors should choose an independent integrated wallet. |
+| `Try it!` and `Claim Username` CTAs | Remove from the hero; keep wallet links in the header and wallet section | npub.cash does not host a wallet, and the hero should stay focused on the core value proposition. |
 | No sign-up | Keep, clarify as no separate registration | Managing funds still requires a Nostr signer. |
 | Trust minimized | Keep only with the NUT-20/optional-locking explanation | Locking is configurable and mint-dependent, and Cashu mints remain custodial. |
 | Offline payments | Keep as `Receive while offline` | Only the recipient can be offline; the payment infrastructure remains online. |

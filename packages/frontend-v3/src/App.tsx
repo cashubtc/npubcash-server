@@ -13,12 +13,10 @@ import {
   LandmarkIcon,
   LockKeyholeIcon,
   MonitorSmartphoneIcon,
-  MoonStarIcon,
   RadioTowerIcon,
   SendIcon,
   ShieldCheckIcon,
   SmartphoneIcon,
-  SunIcon,
   TerminalIcon,
   TriangleAlertIcon,
   WalletCardsIcon,
@@ -34,7 +32,7 @@ import {
 } from "@/components/ui/accordion"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
-import { Button, buttonVariants } from "@/components/ui/button"
+import { buttonVariants } from "@/components/ui/button"
 import {
   Card,
   CardAction,
@@ -45,7 +43,6 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
-import { useTheme } from "@/components/theme-provider"
 import { cn } from "@/lib/utils"
 
 const SOURCE_HREF = "https://github.com/cashubtc/npubcash-server"
@@ -258,28 +255,6 @@ function Brand() {
   )
 }
 
-function ThemeToggle() {
-  const { setTheme } = useTheme()
-
-  const toggleTheme = () => {
-    const isDark = document.documentElement.classList.contains("dark")
-    setTheme(isDark ? "light" : "dark")
-  }
-
-  return (
-    <Button
-      variant="ghost"
-      size="icon"
-      onClick={toggleTheme}
-      aria-label="Toggle color theme"
-      title="Toggle color theme"
-    >
-      <MoonStarIcon data-icon="inline-start" className="dark:hidden" />
-      <SunIcon data-icon="inline-start" className="hidden dark:block" />
-    </Button>
-  )
-}
-
 function SectionHeading({
   eyebrow,
   title,
@@ -326,9 +301,15 @@ function ExperimentalNotice() {
 
 function Header() {
   return (
-    <header className="sticky top-0 z-40 border-b bg-background/85 backdrop-blur-xl">
+    <header className="border-b bg-background">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
-        <Brand />
+        <a
+          href="#top"
+          className="rounded-lg text-lg font-semibold tracking-tight outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+          aria-label="npub.cash home"
+        >
+          npub.cash
+        </a>
 
         <nav
           className="hidden items-center gap-1 md:flex"
@@ -356,18 +337,6 @@ function Header() {
             <ExternalLinkIcon data-icon="inline-end" />
           </a>
         </nav>
-
-        <div className="flex items-center gap-1.5">
-          <ThemeToggle />
-          <a
-            className={buttonVariants({ variant: "default", size: "lg" })}
-            href="#wallets"
-          >
-            <WalletCardsIcon data-icon="inline-start" />
-            <span className="hidden sm:inline">Choose a wallet</span>
-            <span className="sm:hidden">Wallets</span>
-          </a>
-        </div>
       </div>
     </header>
   )
@@ -468,49 +437,9 @@ function Hero() {
               everyone
             </h1>
             <p className="max-w-2xl text-lg leading-8 text-pretty text-muted-foreground sm:text-xl">
-              Receive Lightning payments at your npub.cash address—even while
-              you&apos;re offline. Any Nostr public key works immediately;
-              choose an integrated wallet when you&apos;re ready to claim
-              payments.
+              Receive Lightning at npub1…@npub.cash—even while offline—then
+              claim it as ecash in an integrated wallet.
             </p>
-          </div>
-
-          <div className="flex w-full max-w-2xl flex-col overflow-hidden rounded-2xl border bg-card shadow-lg shadow-primary/5 sm:flex-row">
-            <div className="flex flex-1 flex-col gap-1 p-4 sm:p-5">
-              <span className="text-xs font-medium text-muted-foreground">
-                Works immediately
-              </span>
-              <code className="truncate text-sm font-semibold sm:text-base">
-                npub1…@npub.cash
-              </code>
-            </div>
-            <Separator className="sm:hidden" />
-            <Separator className="hidden sm:block" orientation="vertical" />
-            <div className="flex flex-1 flex-col gap-1 p-4 sm:p-5">
-              <span className="text-xs font-medium text-muted-foreground">
-                Optional username
-              </span>
-              <code className="truncate text-sm font-semibold sm:text-base">
-                yourname@npub.cash
-              </code>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3">
-            <a
-              className={buttonVariants({ variant: "default", size: "lg" })}
-              href="#wallets"
-            >
-              <WalletCardsIcon data-icon="inline-start" />
-              Choose a wallet
-            </a>
-            <a
-              className={buttonVariants({ variant: "outline", size: "lg" })}
-              href="#how-it-works"
-            >
-              See how it works
-              <ArrowRightIcon data-icon="inline-end" />
-            </a>
           </div>
 
           <p className="flex items-start gap-2 text-sm leading-6 text-muted-foreground">
