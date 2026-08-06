@@ -89,7 +89,11 @@ RETURNING *`;
   ): Promise<MintQuote | undefined> {
     const res = await this.db.query<MintQuoteRow>(
       `UPDATE mint_quotes
-       SET state = ?, paid_at = CASE WHEN ? = 'PAID' THEN ? ELSE paid_at END
+       SET state = ?,
+           paid_at = CASE
+             WHEN ? IN ('PAID', 'ISSUED') THEN ?
+             ELSE paid_at
+           END
        WHERE id = ? AND state = 'UNPAID'
        RETURNING *`,
       [state, state, paidAt?.toISOString() ?? null, id],

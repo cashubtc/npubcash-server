@@ -90,7 +90,10 @@ RETURNING *`;
     const res = await this.db.query<MintQuoteRow>(
       `UPDATE mint_quotes
        SET state = $1,
-           paid_at = CASE WHEN $1 = 'PAID' THEN $2 ELSE paid_at END
+           paid_at = CASE
+             WHEN $1 IN ('PAID', 'ISSUED') THEN $2
+             ELSE paid_at
+           END
        WHERE id = $3 AND state = 'UNPAID'
        RETURNING *`,
       [state, paidAt ?? null, id],

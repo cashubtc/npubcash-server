@@ -702,6 +702,7 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
       const issued = await this.store.transitionUnpaidQuote(
         entry.quote.id,
         "ISSUED",
+        now,
       );
       await this.finishQuote(entry);
       if (issued) {

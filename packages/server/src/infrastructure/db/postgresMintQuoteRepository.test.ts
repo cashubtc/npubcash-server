@@ -57,4 +57,15 @@ describe("PostgresMintQuoteRepository monitoring adapter", () => {
     ]);
     expect(restored).toEqual(state);
   });
+
+  test("records paid_at when transitioning an unpaid quote to issued", async () => {
+    const db = new RecordingPostgresAdapter();
+    const repository = new PostgresMintQuoteRepository(db);
+    const paidAt = new Date("2026-08-03T12:02:00.000Z");
+
+    await repository.transitionUnpaidQuote(42, "ISSUED", paidAt);
+
+    expect(db.calls[0]?.sql).toContain("WHEN $1 IN ('PAID', 'ISSUED')");
+    expect(db.calls[0]?.params).toEqual(["ISSUED", paidAt, 42]);
+  });
 });

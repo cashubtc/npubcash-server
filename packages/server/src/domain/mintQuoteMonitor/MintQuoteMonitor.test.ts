@@ -670,7 +670,7 @@ describe("MintQuoteMonitor", () => {
     expect(client.calls).toHaveLength(1);
   });
 
-  test("issued is persisted and not restored", async () => {
+  test("issued is persisted with a paid timestamp and not restored", async () => {
     const now = Date.parse("2026-08-03T12:00:00.000Z");
     await createQuote("issued", "https://mint.example.com", new Date(now - 1));
     const clock = new FakeClock(now);
@@ -686,6 +686,12 @@ describe("MintQuoteMonitor", () => {
     });
     await monitor.start();
     await clock.advanceBy(0);
+
+    const history = await store.getUserHistory("pubkey");
+    expect(history.quotes).toHaveLength(1);
+    expect(history.quotes[0]?.state).toBe("ISSUED");
+    expect(history.quotes[0]?.paidAt).toEqual(new Date(now));
+
     await monitor.stop();
 
     const restartClient = new FakeMintClient((_mintUrl, quoteId) => ({
