@@ -262,8 +262,6 @@ describe("env.ts", () => {
       activePollIntervalMs: 30_000,
       activeRetryMs: [1_000, 2_000, 3_000],
       reconciliationRetryMs: [60_000, 300_000],
-      notFoundInitialMs: 3_600_000,
-      notFoundMaxMs: 86_400_000,
       jitterRatio: 0.1,
       requestTimeoutMs: 10_000,
       requestRateLimit: {

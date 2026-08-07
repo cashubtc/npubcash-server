@@ -266,20 +266,6 @@ export function getMintQuoteMonitorConfigFromEnv() {
     throw new Error("MINT_QUOTE_RETRY_JITTER_RATIO must be between 0 and 1");
   }
 
-  const notFoundInitialMs = getPositiveNumberFromEnv(
-    "MINT_QUOTE_NOT_FOUND_INITIAL_MS",
-    DEFAULT_MINT_QUOTE_MONITOR_POLICY.notFoundInitialMs,
-  );
-  const notFoundMaxMs = getPositiveNumberFromEnv(
-    "MINT_QUOTE_NOT_FOUND_MAX_MS",
-    DEFAULT_MINT_QUOTE_MONITOR_POLICY.notFoundMaxMs,
-  );
-  if (notFoundMaxMs < notFoundInitialMs) {
-    throw new Error(
-      "MINT_QUOTE_NOT_FOUND_MAX_MS must be at least MINT_QUOTE_NOT_FOUND_INITIAL_MS",
-    );
-  }
-
   return {
     activePollIntervalMs: getPositiveNumberFromEnv(
       "MINT_QUOTE_ACTIVE_POLL_MS",
@@ -293,8 +279,6 @@ export function getMintQuoteMonitorConfigFromEnv() {
       "MINT_QUOTE_RECONCILIATION_RETRY_MS",
       DEFAULT_MINT_QUOTE_MONITOR_POLICY.reconciliationRetryMs,
     ),
-    notFoundInitialMs,
-    notFoundMaxMs,
     jitterRatio,
     requestTimeoutMs: getPositiveNumberFromEnv(
       "MINT_QUOTE_REQUEST_TIMEOUT_MS",

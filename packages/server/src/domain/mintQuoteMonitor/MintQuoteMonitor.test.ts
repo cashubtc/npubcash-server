@@ -611,78 +611,79 @@ describe("MintQuoteMonitor", () => {
     expect(client.calls.map((call) => call.quoteId)).toContain("active");
   });
 
-  test("quote not found stays unresolved and is retried quietly", async () => {
+  test("an individual not-found response expires an active quote", async () => {
     const now = Date.parse("2026-08-03T12:00:00.000Z");
-    await createQuote(
+    const quote = await createQuote(
       "missing-quote",
       "https://mint.example.com",
-      new Date(now - 1),
+      new Date(now + 60_000),
     );
     const clock = new FakeClock(now);
-    let missing = true;
-    const paid: MintQuote[] = [];
-    const client = new FakeMintClient((_mintUrl, quoteId) =>
-      missing
-        ? { kind: "not_found" }
-        : { kind: "found", payload: paidPayload(quoteId) },
+    const activeTransport = new FakeActiveQuoteTransport();
+    const client = new FakeMintClient(() => ({ kind: "not_found" }));
+    const monitor = new DefaultMintQuoteMonitor({
+      store,
+      client,
+      activeTransport,
+      clock,
+      random: () => 0.5,
+    });
+
+    await monitor.start();
+    expect(activeTransport.callbacks.size).toBe(1);
+
+    await clock.advanceBy(0);
+
+    expect(client.calls).toHaveLength(1);
+    expect(activeTransport.callbacks.size).toBe(0);
+    expect(activeTransport.closeCount).toBe(1);
+    expect(
+      (await store.getRecoverableQuotes()).map(({ id }) => id),
+    ).not.toContain(quote.id);
+    const result = await db.query<{ state: string }>(
+      "SELECT state FROM mint_quotes WHERE id = ?",
+      [quote.id],
     );
+    expect(result.rows[0]?.state).toBe("EXPIRED");
+  });
+
+  test("expires a persisted not-found result without another mint request", async () => {
+    const now = Date.parse("2026-08-03T12:00:00.000Z");
+    const quote = await createQuote(
+      "active-missing",
+      "https://mint.example.com",
+      new Date(now + 7_200_000),
+    );
+    await store.saveQuoteReconciliationState({
+      mintQuoteId: quote.id,
+      lastCheckedAt: new Date(now - 1_000),
+      nextCheckAt: new Date(now + 3_600_000),
+      notFoundCount: 1,
+      lastResult: "not_found",
+    });
+    const clock = new FakeClock(now);
+    const client = new FakeMintClient((_mintUrl, quoteId) => ({
+      kind: "found",
+      payload: paidPayload(quoteId),
+    }));
     const monitor = new DefaultMintQuoteMonitor({
       store,
       client,
       activeTransport: new FakeActiveQuoteTransport(),
       clock,
       random: () => 0.5,
-      onPaid: (quote) => {
-        paid.push(quote);
-      },
     });
+
     await monitor.start();
-    await clock.advanceBy(0);
-    await clock.advanceBy(3_599_999);
-    expect(client.calls).toHaveLength(1);
 
-    missing = false;
-    await clock.advanceBy(1);
-    expect(client.calls).toHaveLength(2);
-    expect(paid).toHaveLength(1);
-  });
-
-  test("an active quote not-found deadline survives restart", async () => {
-    const now = Date.parse("2026-08-03T12:00:00.000Z");
-    await createQuote(
-      "active-missing",
-      "https://mint.example.com",
-      new Date(now + 7_200_000),
+    expect(client.batchCalls).toEqual([]);
+    expect(client.calls).toEqual([]);
+    expect(await store.getQuoteReconciliationState(quote.id)).toBeUndefined();
+    const result = await db.query<{ state: string }>(
+      "SELECT state FROM mint_quotes WHERE id = ?",
+      [quote.id],
     );
-    const clock = new FakeClock(now);
-    const monitor = new DefaultMintQuoteMonitor({
-      store,
-      client: new FakeMintClient(() => ({ kind: "not_found" })),
-      activeTransport: new FakeActiveQuoteTransport(),
-      clock,
-      random: () => 0.5,
-    });
-    await monitor.start();
-    await clock.advanceBy(0);
-    await monitor.stop();
-
-    const restartClient = new FakeMintClient((_mintUrl, quoteId) => ({
-      kind: "found",
-      payload: paidPayload(quoteId),
-    }));
-    const restarted = new DefaultMintQuoteMonitor({
-      store,
-      client: restartClient,
-      activeTransport: new FakeActiveQuoteTransport(),
-      clock,
-      random: () => 0.5,
-    });
-    await restarted.start();
-    expect(restartClient.batchCalls).toEqual([]);
-    await clock.advanceBy(3_599_999);
-    expect(restartClient.calls).toEqual([]);
-    await clock.advanceBy(1);
-    expect(restartClient.calls).toHaveLength(1);
+    expect(result.rows[0]?.state).toBe("EXPIRED");
   });
 
   test("a websocket setup failure retains the HTTP fallback", async () => {
