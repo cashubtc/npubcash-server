@@ -108,7 +108,7 @@ export class FetchMintQuoteClient implements MintQuoteClient {
               cause: new Error(`Mint returned HTTP ${response.status}`),
             };
           }
-          if (response.status === 404 || this.isQuoteNotFound(body)) {
+          if (response.status === 400 && this.isQuoteNotFound(body)) {
             return { kind: "not_found" };
           }
           if (!response.ok) {

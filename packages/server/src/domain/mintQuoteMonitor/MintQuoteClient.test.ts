@@ -264,9 +264,10 @@ describe("FetchMintQuoteClient", () => {
         }),
         { status: 200 },
       ),
-      new Response(JSON.stringify({ detail: "Quote not found" }), {
-        status: 404,
-      }),
+      new Response(
+        JSON.stringify({ detail: "Quote not found", code: 0 }),
+        { status: 400 },
+      ),
       new Response("upstream failure", { status: 503 }),
       new Response(JSON.stringify({ state: "PAID" }), { status: 200 }),
     ];
@@ -291,6 +292,18 @@ describe("FetchMintQuoteClient", () => {
     expect(
       (await client.checkQuote("https://mint.example.com", "quote-1")).kind,
     ).toBe("mint_unavailable");
+    expect(
+      (await client.checkQuote("https://mint.example.com", "quote-1")).kind,
+    ).toBe("invalid_response");
+  });
+
+  test("does not classify a bare 404 as quote not found", async () => {
+    const client = new FetchMintQuoteClient({
+      fetch: async () => new Response("Not Found", { status: 404 }),
+      timeoutMs: 1_000,
+      rateLimit: { capacity: 100 },
+    });
+
     expect(
       (await client.checkQuote("https://mint.example.com", "quote-1")).kind,
     ).toBe("invalid_response");
