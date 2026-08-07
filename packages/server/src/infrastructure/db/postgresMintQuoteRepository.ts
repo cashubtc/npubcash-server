@@ -94,7 +94,12 @@ RETURNING *`;
              WHEN $1 IN ('PAID', 'ISSUED') THEN $2
              ELSE paid_at
            END
-       WHERE id = $3 AND state = 'UNPAID'
+       WHERE id = $3
+         AND (
+           state = 'UNPAID'
+           OR (state = 'EXPIRED' AND $1 IN ('PAID', 'ISSUED'))
+           OR (state = 'PAID' AND $1 = 'ISSUED')
+         )
        RETURNING *`,
       [state, paidAt ?? null, id],
     );

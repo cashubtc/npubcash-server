@@ -76,7 +76,12 @@ interface WatchedQuote {
   unsubscribeActive?: () => void;
   notFoundCount: number;
   invalidResponseCount: number;
+  latestUpdatedAt?: number;
 }
+
+type QuoteObservationContext =
+  | { source: "http"; checkStartedAt: number }
+  | { source: "websocket" };
 
 interface MintSession {
   mintUrl: string;
@@ -208,13 +213,19 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
         );
       if (entries.length === 0) return;
 
+      const checkStartedAt = this.clock.now().getTime();
       const result = await this.client.checkQuotes(
         session.mintUrl,
         entries.map((entry) => entry.quote.quoteId),
         signal,
       );
       if (this.stopped) return;
-      await this.handleStartupBatchResult(session, entries, result);
+      await this.handleStartupBatchResult(
+        session,
+        entries,
+        result,
+        checkStartedAt,
+      );
     } catch (cause) {
       if (!this.stopped) {
         try {
@@ -238,6 +249,7 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
     session: MintSession,
     entries: WatchedQuote[],
     result: BatchQuoteCheckResult,
+    checkStartedAt: number,
   ): Promise<void> {
     if (result.kind === "unsupported") {
       this.logger?.debug(
@@ -273,10 +285,18 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
       const entry = entries[index]!;
       if (this.quotes.get(entry.quote.id) !== entry) continue;
       try {
-        await this.handleCheckResult(session, entry, {
-          kind: "found",
-          payload: result.payloads[index]!,
-        });
+        await this.handleCheckResult(
+          session,
+          entry,
+          {
+            kind: "found",
+            payload: result.payloads[index]!,
+          },
+          {
+            source: "http",
+            checkStartedAt,
+          },
+        );
       } catch (cause) {
         this.logger?.error(
           "[QuoteMonitor] Startup batch result handling failed",
@@ -485,6 +505,7 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
         entry.nextCheckAt = undefined;
 
         let result: QuoteCheckResult;
+        const checkStartedAt = this.clock.now().getTime();
         const controller = new AbortController();
         session.inFlight = { quoteId: entry.quote.id, controller };
         try {
@@ -508,6 +529,7 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
             session,
             entry,
             result,
+            { source: "http", checkStartedAt },
           );
         } catch (cause) {
           if (
@@ -557,6 +579,7 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
     session: MintSession,
     entry: WatchedQuote,
     result: QuoteCheckResult,
+    context: QuoteObservationContext,
   ): Promise<boolean> {
     if (result.kind === "mint_unavailable") {
       entry.nextCheckAt = this.clock.now().getTime();
@@ -574,7 +597,7 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
       return true;
     }
 
-    await this.processPayload(entry, result.payload);
+    await this.processPayload(entry, result.payload, context);
     return true;
   }
 
@@ -698,7 +721,7 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
   ): Promise<void> {
     const entry = this.quotes.get(quoteId);
     if (!entry || this.stopped) return;
-    await this.processPayload(entry, payload);
+    await this.processPayload(entry, payload, { source: "websocket" });
     const session = this.sessions.get(entry.mintUrl);
     if (session) this.rescheduleSession(session);
   }
@@ -706,10 +729,39 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
   private async processPayload(
     entry: WatchedQuote,
     payload: MintQuotePayload,
+    context: QuoteObservationContext,
   ): Promise<void> {
     if (payload.quote !== entry.quote.quoteId) {
       await this.deferInvalidResponse(entry);
       return;
+    }
+
+    if (payload.updated_at !== undefined) {
+      if (
+        entry.latestUpdatedAt !== undefined &&
+        payload.updated_at < entry.latestUpdatedAt
+      ) {
+        this.logger?.debug("[QuoteMonitor] Ignored stale quote observation", {
+          mintUrl: entry.mintUrl,
+          quoteId: entry.quote.quoteId,
+          updatedAt: payload.updated_at,
+          latestUpdatedAt: entry.latestUpdatedAt,
+        });
+        const delay =
+          entry.phase === "active"
+            ? this.policy.activePollIntervalMs
+            : this.policy.reconciliationRetryMs[0]!;
+        const fallbackAt = this.clock.now().getTime() + this.withJitter(delay);
+        entry.nextCheckAt = Math.min(
+          entry.nextCheckAt ?? Number.POSITIVE_INFINITY,
+          fallbackAt,
+        );
+        if (entry.phase === "reconciliation") {
+          await this.saveQuoteCheck(entry, "scheduled");
+        }
+        return;
+      }
+      entry.latestUpdatedAt = payload.updated_at;
     }
 
     const now = this.clock.now();
@@ -749,14 +801,12 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
       return;
     }
 
-    const payloadExpired =
-      payload.expiry > 0 && now.getTime() >= payload.expiry * 1_000;
-    const storedExpiryPassed = now.getTime() >= entry.quote.expiresAt.getTime();
+    const checkedAfterExpiry =
+      context.source === "http" &&
+      context.checkStartedAt >= entry.quote.expiresAt.getTime();
     if (
       payload.state === "UNPAID" &&
-      (entry.phase === "reconciliation" ||
-        storedExpiryPassed ||
-        payloadExpired)
+      checkedAfterExpiry
     ) {
       const expired = await this.store.transitionUnpaidQuote(
         entry.quote.id,
@@ -768,6 +818,19 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
           mintUrl: entry.mintUrl,
           quoteId: entry.quote.quoteId,
         });
+      }
+      return;
+    }
+
+    if (
+      payload.state === "UNPAID" &&
+      now.getTime() >= entry.quote.expiresAt.getTime()
+    ) {
+      if (entry.phase === "active") {
+        await this.enterReconciliation(entry.quote.id);
+      } else {
+        entry.nextCheckAt = now.getTime();
+        await this.saveQuoteCheck(entry, "unpaid");
       }
       return;
     }

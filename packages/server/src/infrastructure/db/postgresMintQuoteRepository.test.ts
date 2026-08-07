@@ -66,6 +66,9 @@ describe("PostgresMintQuoteRepository monitoring adapter", () => {
     await repository.transitionUnpaidQuote(42, "ISSUED", paidAt);
 
     expect(db.calls[0]?.sql).toContain("WHEN $1 IN ('PAID', 'ISSUED')");
+    expect(db.calls[0]?.sql).toContain(
+      "state = 'EXPIRED' AND $1 IN ('PAID', 'ISSUED')",
+    );
     expect(db.calls[0]?.params).toEqual(["ISSUED", paidAt, 42]);
   });
 });

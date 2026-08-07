@@ -5,6 +5,7 @@ export interface MintQuotePayload {
   request: string;
   state: MintQuotePayloadState;
   expiry: number;
+  updated_at?: number;
 }
 
 export type QuoteCheckResult =
@@ -57,6 +58,9 @@ export function isMintQuotePayload(value: unknown): value is MintQuotePayload {
     typeof payload.request === "string" &&
     typeof payload.expiry === "number" &&
     Number.isFinite(payload.expiry) &&
+    (payload.updated_at === undefined ||
+      (typeof payload.updated_at === "number" &&
+        Number.isFinite(payload.updated_at))) &&
     typeof payload.state === "string" &&
     PAYLOAD_STATES.has(payload.state as MintQuotePayloadState)
   );

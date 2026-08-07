@@ -94,9 +94,14 @@ RETURNING *`;
              WHEN ? IN ('PAID', 'ISSUED') THEN ?
              ELSE paid_at
            END
-       WHERE id = ? AND state = 'UNPAID'
+       WHERE id = ?
+         AND (
+           state = 'UNPAID'
+           OR (state = 'EXPIRED' AND ? IN ('PAID', 'ISSUED'))
+           OR (state = 'PAID' AND ? = 'ISSUED')
+         )
        RETURNING *`,
-      [state, state, paidAt?.toISOString() ?? null, id],
+      [state, state, paidAt?.toISOString() ?? null, id, state, state],
     );
     const row = res.rows[0];
     return row ? this.castRowToQuote(row) : undefined;

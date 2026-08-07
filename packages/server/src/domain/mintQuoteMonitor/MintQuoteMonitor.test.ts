@@ -798,6 +798,114 @@ describe("MintQuoteMonitor", () => {
     expect(clock.pendingCount()).toBe(0);
   });
 
+  test("rechecks a timestamp-less unpaid response that started before expiry", async () => {
+    const now = Date.parse("2026-08-03T12:00:00.000Z");
+    const quote = await createQuote(
+      "stale-unpaid",
+      "https://mint.example.com",
+      new Date(now + 1_000),
+    );
+    const clock = new FakeClock(now);
+    let resolveFirstCheck!: (result: QuoteCheckResult) => void;
+    const firstCheck = new Promise<QuoteCheckResult>((resolve) => {
+      resolveFirstCheck = resolve;
+    });
+    let checks = 0;
+    const paid: MintQuote[] = [];
+    const client = new FakeMintClient((_mintUrl, quoteId) => {
+      checks += 1;
+      return checks === 1
+        ? firstCheck
+        : { kind: "found", payload: paidPayload(quoteId) };
+    });
+    const monitor = new DefaultMintQuoteMonitor({
+      store,
+      client,
+      activeTransport: new FakeActiveQuoteTransport(),
+      clock,
+      random: () => 0.5,
+      onPaid: (model) => {
+        paid.push(model);
+      },
+    });
+    await monitor.start();
+
+    const polling = clock.advanceBy(0);
+    await Promise.resolve();
+    await clock.advanceBy(1_000);
+    resolveFirstCheck({
+      kind: "found",
+      payload: {
+        ...paidPayload(quote.quoteId),
+        state: "UNPAID",
+      },
+    });
+    await polling;
+
+    expect(client.calls).toHaveLength(2);
+    expect(paid).toHaveLength(1);
+    expect((await store.getUserHistory("pubkey")).quotes[0]?.state).toBe("PAID");
+  });
+
+  test("an in-flight paid observation corrects a racing expired transition", async () => {
+    const now = Date.parse("2026-08-03T12:00:00.000Z");
+    const quote = await createQuote(
+      "paid-beats-expired",
+      "https://mint.example.com",
+      new Date(now + 1_000),
+    );
+    const clock = new FakeClock(now);
+    const activeTransport = new FakeActiveQuoteTransport();
+    let checks = 0;
+    const client = new FakeMintClient((_mintUrl, quoteId) => {
+      checks += 1;
+      return {
+        kind: "found",
+        payload: {
+          ...paidPayload(quoteId),
+          state: "UNPAID",
+        },
+      };
+    });
+    const transition = store.transitionUnpaidQuote.bind(store);
+    let releasePaid!: () => void;
+    const paidCanPersist = new Promise<void>((resolve) => {
+      releasePaid = resolve;
+    });
+    store.transitionUnpaidQuote = async (id, state, paidAt) => {
+      if (state === "PAID") await paidCanPersist;
+      return transition(id, state, paidAt);
+    };
+    const paid: MintQuote[] = [];
+    const monitor = new DefaultMintQuoteMonitor({
+      store,
+      client,
+      activeTransport,
+      clock,
+      random: () => 0.5,
+      onPaid: (model) => {
+        paid.push(model);
+      },
+    });
+    await monitor.start();
+    await clock.advanceBy(0);
+
+    const callback = activeTransport.callbacks.get(
+      `https://mint.example.com::${quote.quoteId}`,
+    );
+    expect(callback).toBeDefined();
+    const processingPaid = callback!(paidPayload(quote.quoteId));
+    await Promise.resolve();
+
+    await clock.advanceBy(1_000);
+    releasePaid();
+    await processingPaid;
+
+    expect(checks).toBe(2);
+    expect(paid).toHaveLength(1);
+    expect((await store.getUserHistory("pubkey")).quotes[0]?.state).toBe("PAID");
+  });
+
   test("a terminal websocket observation aborts the in-flight HTTP check", async () => {
     const now = Date.parse("2026-08-03T12:00:00.000Z");
     const quote = await createQuote(
