@@ -1,7 +1,23 @@
 import { describe, expect, test } from "bun:test";
-import { FetchMintQuoteClient } from "./MintQuoteClient";
+import { FetchMintQuoteClient, isMintQuotePayload } from "./MintQuoteClient";
 
 describe("FetchMintQuoteClient", () => {
+  test("accepts numeric, null, or omitted quote expiry", () => {
+    const payload = {
+      quote: "quote-1",
+      request: "lnbc1",
+      state: "UNPAID",
+    } as const;
+
+    expect(isMintQuotePayload({ ...payload, expiry: 1_786_000_000 })).toBe(
+      true,
+    );
+    expect(isMintQuotePayload({ ...payload, expiry: null })).toBe(true);
+    expect(isMintQuotePayload(payload)).toBe(true);
+    expect(isMintQuotePayload({ ...payload, expiry: "never" })).toBe(false);
+    expect(isMintQuotePayload({ ...payload, expiry: Number.NaN })).toBe(false);
+  });
+
   test("paces every HTTP request to the same mint", async () => {
     let now = 0;
     const waits: number[] = [];
