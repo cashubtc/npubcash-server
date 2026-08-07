@@ -91,7 +91,7 @@ Unpaid quotes remain recoverable after invoice expiry until the mint returns an
 authoritative quote state. Retry deadlines are stored in the database, so a
 restart does not immediately retry every unavailable mint.
 
-The defaults can be tuned with millisecond values:
+The defaults can be tuned with the following values:
 
 ```env
 MINT_QUOTE_ACTIVE_POLL_MS=20000
@@ -101,6 +101,8 @@ MINT_QUOTE_NOT_FOUND_INITIAL_MS=3600000
 MINT_QUOTE_NOT_FOUND_MAX_MS=86400000
 MINT_QUOTE_RETRY_JITTER_RATIO=0.2
 MINT_QUOTE_REQUEST_TIMEOUT_MS=10000
+MINT_QUOTE_RATE_LIMIT_CAPACITY=1
+MINT_QUOTE_RATE_LIMIT_REFILL_PER_MINUTE=25
 MINT_QUOTE_WS_RECONNECT_MS=180000
 ```
 
@@ -115,6 +117,12 @@ subscriptions are created for surviving active quotes. Unsupported or invalid
 batch responses activate the individual-check fallback, while mint-wide
 failures retain the normal circuit backoff. Startup reconciliation runs
 independently per mint, so a slow mint does not delay subscriptions for others.
+All quote-monitor HTTP requests pass through an independent token bucket for
+each mint. `MINT_QUOTE_RATE_LIMIT_CAPACITY` controls the maximum burst size and
+`MINT_QUOTE_RATE_LIMIT_REFILL_PER_MINUTE` controls the continuous refill rate.
+The safe defaults allow one immediate request followed by 25 requests per
+minute. This applies to mint-info discovery, NUT-29 batch chunks, and individual
+fallback checks without coupling traffic to different mints.
 Run only one quote-monitoring server instance unless a database lease is added.
 
 ### Fly.io and v2-to-v3 cutover

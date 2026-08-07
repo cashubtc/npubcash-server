@@ -33,6 +33,7 @@ export function initializeAppServices(repos: Repositories): AppServices {
     store: repos.mintQuoteMonitorStore,
     client: new FetchMintQuoteClient({
       timeoutMs: config.mintQuoteMonitor.requestTimeoutMs,
+      rateLimit: config.mintQuoteMonitor.requestRateLimit,
     }),
     activeTransport: new WebSocketQuoteTransport({
       logger,

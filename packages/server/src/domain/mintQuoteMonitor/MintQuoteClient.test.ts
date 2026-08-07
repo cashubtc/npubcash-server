@@ -2,6 +2,143 @@ import { describe, expect, test } from "bun:test";
 import { FetchMintQuoteClient } from "./MintQuoteClient";
 
 describe("FetchMintQuoteClient", () => {
+  test("paces every HTTP request to the same mint", async () => {
+    let now = 0;
+    const waits: number[] = [];
+    const starts: Array<{ at: number; url: string }> = [];
+    const client = new FetchMintQuoteClient({
+      fetch: async (input, init) => {
+        const url = input.toString();
+        starts.push({ at: now, url });
+        if (url.endsWith("/v1/info")) {
+          return new Response(
+            JSON.stringify({
+              nuts: {
+                29: { max_batch_size: 2, methods: ["bolt11"] },
+              },
+            }),
+          );
+        }
+        if (init?.method === "POST") {
+          const body = JSON.parse(String(init.body)) as { quotes: string[] };
+          return new Response(
+            JSON.stringify(
+              body.quotes.map((quote) => ({
+                quote,
+                request: `lnbc-${quote}`,
+                state: "PAID",
+                expiry: 1_786_000_000,
+              })),
+            ),
+          );
+        }
+        const quote = decodeURIComponent(url.split("/").at(-1)!);
+        return new Response(
+          JSON.stringify({
+            quote,
+            request: `lnbc-${quote}`,
+            state: "PAID",
+            expiry: 1_786_000_000,
+          }),
+        );
+      },
+      timeoutMs: 1_000,
+      rateLimit: {
+        capacity: 1,
+        refillPerMinute: 60,
+        now: () => now,
+        wait: async (delayMs) => {
+          waits.push(delayMs);
+          now += delayMs;
+        },
+      },
+    });
+
+    await client.checkQuotes("https://mint.example.com/", [
+      "quote-1",
+      "quote-2",
+      "quote-3",
+    ]);
+    await client.checkQuote("https://mint.example.com", "quote-4");
+
+    expect(starts.map(({ at }) => at)).toEqual([0, 1_000, 2_000, 3_000]);
+    expect(waits).toEqual([1_000, 1_000, 1_000]);
+  });
+
+  test("maintains independent token buckets for different mints", async () => {
+    let now = 0;
+    const starts: Array<{ at: number; url: string }> = [];
+    const client = new FetchMintQuoteClient({
+      fetch: async (input) => {
+        const url = input.toString();
+        starts.push({ at: now, url });
+        const quote = decodeURIComponent(url.split("/").at(-1)!);
+        return new Response(
+          JSON.stringify({
+            quote,
+            request: `lnbc-${quote}`,
+            state: "PAID",
+            expiry: 1_786_000_000,
+          }),
+        );
+      },
+      timeoutMs: 1_000,
+      rateLimit: {
+        capacity: 1,
+        refillPerMinute: 60,
+        now: () => now,
+        wait: async (delayMs) => {
+          now += delayMs;
+        },
+      },
+    });
+
+    await client.checkQuote("https://mint-a.example.com", "quote-a-1");
+    await client.checkQuote("https://mint-b.example.com", "quote-b-1");
+    await client.checkQuote("https://mint-a.example.com", "quote-a-2");
+
+    expect(starts.map(({ at }) => at)).toEqual([0, 0, 1_000]);
+  });
+
+  test("rate limits concurrent requests to the same mint", async () => {
+    let now = 0;
+    const starts: Array<{ at: number; url: string }> = [];
+    const client = new FetchMintQuoteClient({
+      fetch: async (input) => {
+        const url = input.toString();
+        starts.push({ at: now, url });
+        const quote = decodeURIComponent(url.split("/").at(-1)!);
+        return new Response(
+          JSON.stringify({
+            quote,
+            request: `lnbc-${quote}`,
+            state: "PAID",
+            expiry: 1_786_000_000,
+          }),
+        );
+      },
+      timeoutMs: 1_000,
+      rateLimit: {
+        capacity: 1,
+        refillPerMinute: 60,
+        now: () => now,
+        wait: async (delayMs) => {
+          now += delayMs;
+        },
+      },
+    });
+
+    const first = client.checkQuote("https://mint.example.com", "quote-1");
+    const second = client.checkQuote("https://mint.example.com", "quote-2");
+
+    await Promise.all([first, second]);
+    expect(starts.map(({ at }) => at)).toEqual([0, 1_000]);
+    expect(starts.map(({ url }) => url)).toEqual([
+      "https://mint.example.com/v1/mint/quote/bolt11/quote-1",
+      "https://mint.example.com/v1/mint/quote/bolt11/quote-2",
+    ]);
+  });
+
   test("uses advertised NUT-29 batch size and preserves quote order", async () => {
     const requests: Array<{ url: string; init?: RequestInit }> = [];
     const client = new FetchMintQuoteClient({
@@ -30,6 +167,7 @@ describe("FetchMintQuoteClient", () => {
         );
       },
       timeoutMs: 1_000,
+      rateLimit: { capacity: 100 },
     });
 
     const result = await client.checkQuotes(
@@ -70,6 +208,7 @@ describe("FetchMintQuoteClient", () => {
         );
       },
       timeoutMs: 1_000,
+      rateLimit: { capacity: 100 },
     });
 
     expect(
@@ -101,6 +240,7 @@ describe("FetchMintQuoteClient", () => {
     const client = new FetchMintQuoteClient({
       fetch: async () => responses.shift()!,
       timeoutMs: 1_000,
+      rateLimit: { capacity: 100 },
     });
 
     expect(
@@ -133,6 +273,7 @@ describe("FetchMintQuoteClient", () => {
     const client = new FetchMintQuoteClient({
       fetch: async () => responses.shift()!,
       timeoutMs: 1_000,
+      rateLimit: { capacity: 100 },
     });
 
     expect(await client.checkQuote("https://mint.example.com/", "quote-1"))
@@ -161,6 +302,7 @@ describe("FetchMintQuoteClient", () => {
         throw new Error("connection refused");
       },
       timeoutMs: 1_000,
+      rateLimit: { capacity: 100 },
     });
 
     expect(
@@ -175,6 +317,7 @@ describe("FetchMintQuoteClient", () => {
           status: 503,
         }),
       timeoutMs: 1_000,
+      rateLimit: { capacity: 100 },
     });
 
     expect(
@@ -186,6 +329,7 @@ describe("FetchMintQuoteClient", () => {
     const client = new FetchMintQuoteClient({
       fetch: async () => new Response("slow down", { status: 429 }),
       timeoutMs: 1_000,
+      rateLimit: { capacity: 100 },
     });
 
     expect(
@@ -205,6 +349,7 @@ describe("FetchMintQuoteClient", () => {
         });
       },
       timeoutMs: 100,
+      rateLimit: { capacity: 100 },
     });
     const controller = new AbortController();
 
@@ -213,10 +358,64 @@ describe("FetchMintQuoteClient", () => {
       "quote-1",
       controller.signal,
     );
+    for (let turn = 0; turn < 10 && !requestSignal; turn += 1) {
+      await Promise.resolve();
+    }
     controller.abort(new Error("quote finished"));
     await Promise.resolve();
 
     expect(requestSignal?.aborted).toBe(true);
     await checking;
+  });
+
+  test("does not send a request cancelled while waiting for a token", async () => {
+    let now = 0;
+    let releaseWait!: () => void;
+    const waiting = new Promise<void>((resolve) => {
+      releaseWait = resolve;
+    });
+    const urls: string[] = [];
+    const client = new FetchMintQuoteClient({
+      fetch: async (input) => {
+        const url = input.toString();
+        urls.push(url);
+        const quote = decodeURIComponent(url.split("/").at(-1)!);
+        return new Response(
+          JSON.stringify({
+            quote,
+            request: `lnbc-${quote}`,
+            state: "PAID",
+            expiry: 1_786_000_000,
+          }),
+        );
+      },
+      timeoutMs: 1_000,
+      rateLimit: {
+        capacity: 1,
+        refillPerMinute: 60,
+        now: () => now,
+        wait: async (delayMs) => {
+          await waiting;
+          now += delayMs;
+        },
+      },
+    });
+
+    await client.checkQuote("https://mint.example.com", "quote-1");
+    const controller = new AbortController();
+    const checking = client.checkQuote(
+      "https://mint.example.com",
+      "quote-2",
+      controller.signal,
+    );
+    controller.abort(new Error("quote finished"));
+
+    expect((await checking).kind).toBe("mint_unavailable");
+    releaseWait();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(urls).toEqual([
+      "https://mint.example.com/v1/mint/quote/bolt11/quote-1",
+    ]);
   });
 });
