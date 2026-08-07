@@ -1,9 +1,13 @@
 import { config } from "../config/index";
 
-export function createLnurlResponse(username: string) {
+export function createLnurlResponse(username: string, publicOrigin: string) {
+  const callback = new URL(
+    `/.well-known/lnurlp/${username}`,
+    publicOrigin,
+  ).toString();
   if (config.nostr.nostrEnabled) {
     return {
-      callback: `${config.hostname}/.well-known/lnurlp/${username}`,
+      callback,
       maxSendable: config.lnurlLimits.max,
       minSendable: config.lnurlLimits.min,
       metadata: JSON.stringify([
@@ -15,7 +19,7 @@ export function createLnurlResponse(username: string) {
     };
   } else {
     return {
-      callback: `${config.hostname}/.well-known/lnurlp/${username}`,
+      callback,
       maxSendable: config.lnurlLimits.max,
       minSendable: config.lnurlLimits.min,
       metadata: JSON.stringify([

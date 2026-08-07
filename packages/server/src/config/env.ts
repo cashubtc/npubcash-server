@@ -166,10 +166,54 @@ export function getMintUrlFromEnv(): string {
   return url;
 }
 
-export function getHostnameFromEnv(): string {
-  const hostname = getEnvVar("HOSTNAME");
-  if (!hostname) throw new Error("HOSTNAME is required");
-  return hostname;
+export function getAllowedHostnamesFromEnv(): string[] {
+  const value = getEnvVar("ALLOWED_HOSTNAMES");
+  if (!value) return [];
+
+  const entries = value
+    .split(",")
+    .map((hostname) => hostname.trim().toLowerCase())
+    .filter(Boolean);
+
+  const hostnames = entries.map((hostname) => {
+    if (
+      hostname.includes("://") ||
+      hostname.includes("/") ||
+      hostname.includes("?") ||
+      hostname.includes("#") ||
+      hostname.includes("*")
+    ) {
+      throw new Error(
+        "ALLOWED_HOSTNAMES must contain comma-separated hostnames without schemes, ports, paths, or wildcards",
+      );
+    }
+
+    const hasPort = hostname.startsWith("[")
+      ? !hostname.endsWith("]")
+      : hostname.includes(":");
+    if (hasPort) {
+      throw new Error(
+        "ALLOWED_HOSTNAMES must contain comma-separated hostnames without schemes, ports, paths, or wildcards",
+      );
+    }
+
+    try {
+      const parsed = new URL(`http://${hostname}`);
+      if (
+        !parsed.hostname ||
+        parsed.username ||
+        parsed.password ||
+        parsed.port
+      ) {
+        throw new Error("invalid hostname");
+      }
+      return parsed.hostname.toLowerCase();
+    } catch {
+      throw new Error(`Invalid hostname in ALLOWED_HOSTNAMES: ${hostname}`);
+    }
+  });
+
+  return [...new Set(hostnames)];
 }
 
 export function getNodeEnvFromEnv(): "development" | "production" | "test" {

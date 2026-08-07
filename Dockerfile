@@ -2,9 +2,6 @@ FROM oven/bun:1-alpine AS base
 
 FROM base AS builder
 
-ARG HOSTNAME
-ENV HOSTNAME=${HOSTNAME}
-
 RUN apk add --no-cache libc6-compat
 
 WORKDIR /app

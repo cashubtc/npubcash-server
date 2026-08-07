@@ -70,9 +70,15 @@ ZAP_SECRET_KEY=
 # LNURL settings
 LNURL_MIN_AMOUNT=
 LNURL_MAX_AMOUNT=
-# The hostname your app will be reached under
-HOSTNAME=
+# Optional comma-separated allowlist. Values are hostnames without schemes,
+# ports, paths, or wildcards. When unset, request hostnames are not restricted.
+ALLOWED_HOSTNAMES=npub.cash
 ```
+
+Public URLs are derived from each request's `Host` and `X-Forwarded-Proto`
+headers. The reverse proxy must preserve the public host and set
+`X-Forwarded-Proto` to `http` or `https`. Set `ALLOWED_HOSTNAMES` in production
+unless the ingress already rejects unexpected hosts.
 
 Production startup fails when both `DATABASE_URL` and `DATABASE_TYPE` are
 missing. This prevents a missing PostgreSQL secret from silently starting the
