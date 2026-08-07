@@ -47,8 +47,11 @@ class InitializedV3PostgresAdapter implements DatabaseAdapter {
 
     if (sql.includes("SELECT id FROM _migrations")) {
       return {
-        rows: [{ id: "001_v3_baseline" }] as T[],
-        rowCount: 1,
+        rows: [
+          { id: "001_v3_baseline" },
+          { id: "002_mint_quote_monitoring" },
+        ] as T[],
+        rowCount: 2,
       };
     }
 
@@ -56,6 +59,41 @@ class InitializedV3PostgresAdapter implements DatabaseAdapter {
       throw new Error(`Tried to reapply an initialized baseline: ${params?.[0]}`);
     }
 
+    this.schemaStatements.push(sql);
+    return { rows: [], rowCount: 0 };
+  }
+
+  async close(): Promise<void> {}
+}
+
+class BaselineOnlyPostgresAdapter implements DatabaseAdapter {
+  readonly type = "postgres" as const;
+  readonly schemaStatements: string[] = [];
+  readonly applied: string[] = [];
+
+  async query<T = Record<string, unknown>>(
+    sql: string,
+    params?: unknown[],
+  ): Promise<QueryResult<T>> {
+    if (sql.includes("information_schema.tables")) {
+      return {
+        rows: [{ has_v2_migrations: false }] as T[],
+        rowCount: 1,
+      };
+    }
+    if (sql.includes("CREATE TABLE IF NOT EXISTS _migrations")) {
+      return { rows: [], rowCount: 0 };
+    }
+    if (sql.includes("SELECT id FROM _migrations")) {
+      return {
+        rows: [{ id: "001_v3_baseline" }] as T[],
+        rowCount: 1,
+      };
+    }
+    if (sql.includes("INSERT INTO _migrations")) {
+      this.applied.push(String(params?.[0]));
+      return { rows: [], rowCount: 1 };
+    }
     this.schemaStatements.push(sql);
     return { rows: [], rowCount: 0 };
   }
@@ -85,7 +123,7 @@ describe("runMigrations", () => {
     expect(adapter.queries[0]).not.toContain("zap_request");
   });
 
-  test("initializes a fresh database from one idempotent v3 baseline", async () => {
+  test("initializes a fresh database with the baseline and monitoring schema", async () => {
     const adapter = new SqliteAdapter(":memory:");
 
     try {
@@ -99,17 +137,30 @@ describe("runMigrations", () => {
         SELECT name
         FROM sqlite_master
         WHERE type = 'table'
-          AND name IN ('_migrations', 'l_users', 'mint_quotes', 'mints', 'proofs')
+          AND name IN (
+            '_migrations',
+            'l_users',
+            'mint_quotes',
+            'mints',
+            'proofs',
+            'mint_quote_mint_retries',
+            'mint_quote_reconciliation'
+          )
         ORDER BY name
       `);
       const mintQuoteColumns = await adapter.query<{ name: string }>(
         "PRAGMA table_info(mint_quotes)",
       );
 
-      expect(applied.rows).toEqual([{ id: "001_v3_baseline" }]);
+      expect(applied.rows).toEqual([
+        { id: "001_v3_baseline" },
+        { id: "002_mint_quote_monitoring" },
+      ]);
       expect(tables.rows).toEqual([
         { name: "_migrations" },
         { name: "l_users" },
+        { name: "mint_quote_mint_retries" },
+        { name: "mint_quote_reconciliation" },
         { name: "mint_quotes" },
         { name: "mints" },
         { name: "proofs" },
@@ -119,6 +170,21 @@ describe("runMigrations", () => {
       );
       expect(mintQuoteColumns.rows.map((column) => column.name)).not.toContain(
         "serialzed_zap_request",
+      );
+
+      const reconciliationForeignKeys = await adapter.query<{
+        table: string;
+        from: string;
+        to: string;
+        on_delete: string;
+      }>("PRAGMA foreign_key_list(mint_quote_reconciliation)");
+      expect(reconciliationForeignKeys.rows).toContainEqual(
+        expect.objectContaining({
+          table: "mint_quotes",
+          from: "mint_quote_id",
+          to: "id",
+          on_delete: "CASCADE",
+        }),
       );
     } finally {
       await adapter.close();
@@ -131,5 +197,22 @@ describe("runMigrations", () => {
     await runMigrations(adapter);
 
     expect(adapter.schemaStatements).toEqual([]);
+  });
+
+  test("adds durable monitoring state to a baseline PostgreSQL database", async () => {
+    const adapter = new BaselineOnlyPostgresAdapter();
+
+    await runMigrations(adapter);
+
+    expect(adapter.applied).toEqual(["002_mint_quote_monitoring"]);
+    expect(adapter.schemaStatements.join("\n")).toContain(
+      "CREATE TABLE IF NOT EXISTS mint_quote_mint_retries",
+    );
+    expect(adapter.schemaStatements.join("\n")).toContain(
+      "CREATE TABLE IF NOT EXISTS mint_quote_reconciliation",
+    );
+    expect(adapter.schemaStatements.join("\n")).toContain(
+      "REFERENCES mint_quotes(id) ON DELETE CASCADE",
+    );
   });
 });

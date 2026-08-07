@@ -77,7 +77,7 @@ export async function lnurlController(
       locked,
     });
 
-    communicatorService.createQuoteSubscription(mintQuote, logger);
+    await communicatorService.createQuoteSubscription(mintQuote, logger);
 
     res.json({
       pr: request,

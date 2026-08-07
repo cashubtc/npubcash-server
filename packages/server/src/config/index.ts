@@ -7,6 +7,7 @@ import {
   getJwtSecretFromEnv,
   getLogLevelFromEnv,
   getMintUrlFromEnv,
+  getMintQuoteMonitorConfigFromEnv,
   getNodeEnvFromEnv,
   getPortFromEnv,
   getRelaysFromEnv,
@@ -50,6 +51,7 @@ export const config = {
   nostr: createNostrConfig(),
   jwtSecret: getJwtSecretFromEnv(),
   lnurlLimits: createLnurlLimits(),
+  mintQuoteMonitor: getMintQuoteMonitorConfigFromEnv(),
 } as const;
 
 export type AppConfig = typeof config;

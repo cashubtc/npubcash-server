@@ -171,4 +171,43 @@ export const migrations: Migration[] = [
       ],
     },
   },
+  {
+    id: "002_mint_quote_monitoring",
+    sql: {
+      postgres: [
+        `CREATE TABLE IF NOT EXISTS mint_quote_mint_retries (
+           mint_url TEXT PRIMARY KEY,
+           failure_count INTEGER NOT NULL,
+           next_attempt_at TIMESTAMPTZ NOT NULL,
+           last_failure_at TIMESTAMPTZ NOT NULL,
+           last_error_category TEXT NOT NULL
+         )`,
+        `CREATE TABLE IF NOT EXISTS mint_quote_reconciliation (
+           mint_quote_id BIGINT PRIMARY KEY REFERENCES mint_quotes(id) ON DELETE CASCADE,
+           last_checked_at TIMESTAMPTZ,
+           next_check_at TIMESTAMPTZ NOT NULL,
+           not_found_count INTEGER NOT NULL DEFAULT 0,
+           last_result TEXT NOT NULL
+         )`,
+        "CREATE INDEX IF NOT EXISTS idx_mint_quote_reconciliation_due ON mint_quote_reconciliation(next_check_at)",
+      ],
+      sqlite: [
+        `CREATE TABLE IF NOT EXISTS mint_quote_mint_retries (
+           mint_url TEXT PRIMARY KEY,
+           failure_count INTEGER NOT NULL,
+           next_attempt_at TEXT NOT NULL,
+           last_failure_at TEXT NOT NULL,
+           last_error_category TEXT NOT NULL
+         )`,
+        `CREATE TABLE IF NOT EXISTS mint_quote_reconciliation (
+           mint_quote_id INTEGER PRIMARY KEY REFERENCES mint_quotes(id) ON DELETE CASCADE,
+           last_checked_at TEXT,
+           next_check_at TEXT NOT NULL,
+           not_found_count INTEGER NOT NULL DEFAULT 0,
+           last_result TEXT NOT NULL
+         )`,
+        "CREATE INDEX IF NOT EXISTS idx_mint_quote_reconciliation_due ON mint_quote_reconciliation(next_check_at)",
+      ],
+    },
+  },
 ];

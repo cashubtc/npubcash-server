@@ -29,7 +29,7 @@ async function startServer() {
     console.error(e);
     process.exit(1);
   }
-  await getCommunicatorService().setupPoller();
+  await getCommunicatorService().startQuoteMonitoring();
   const server = createServer(app);
   server.on("upgrade", websocketUpgradeController);
   server.listen(config.port, () => {
