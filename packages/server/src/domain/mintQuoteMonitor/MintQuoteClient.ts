@@ -1,3 +1,6 @@
+import { RequestRateLimiter } from "../../infrastructure/RequestRateLimiter";
+import type { RequestRateLimiterOptions } from "../../infrastructure/RequestRateLimiter";
+
 export type MintQuotePayloadState = "UNPAID" | "PAID" | "ISSUED" | "PENDING";
 
 export interface MintQuotePayload {
@@ -36,6 +39,7 @@ export interface MintQuoteClient {
 interface FetchMintQuoteClientOptions {
   fetch?: FetchLike;
   timeoutMs?: number;
+  rateLimit?: RequestRateLimiterOptions;
 }
 
 type FetchLike = (
@@ -69,10 +73,13 @@ export function isMintQuotePayload(value: unknown): value is MintQuotePayload {
 export class FetchMintQuoteClient implements MintQuoteClient {
   private readonly fetchImpl: FetchLike;
   private readonly timeoutMs: number;
+  private readonly rateLimit: RequestRateLimiterOptions;
+  private readonly requestLimiters = new Map<string, RequestRateLimiter>();
 
   constructor(options: FetchMintQuoteClientOptions = {}) {
     this.fetchImpl = options.fetch ?? fetch;
     this.timeoutMs = options.timeoutMs ?? 10_000;
+    this.rateLimit = { ...options.rateLimit };
   }
 
   async checkQuote(
@@ -81,50 +88,54 @@ export class FetchMintQuoteClient implements MintQuoteClient {
     signal?: AbortSignal,
   ): Promise<QuoteCheckResult> {
     try {
-      return await this.withRequestSignal(signal, async (requestSignal) => {
-        const response = await this.fetchImpl(
-          this.buildQuoteUrl(mintUrl, quoteId),
-          {
-            method: "GET",
-            headers: { Accept: "application/json" },
-            signal: requestSignal,
-          },
-        );
-        const body = await response.text();
+      return await this.withMintRequest(
+        mintUrl,
+        signal,
+        async (requestSignal) => {
+          const response = await this.fetchImpl(
+            this.buildQuoteUrl(mintUrl, quoteId),
+            {
+              method: "GET",
+              headers: { Accept: "application/json" },
+              signal: requestSignal,
+            },
+          );
+          const body = await response.text();
 
-        if (response.status === 429 || response.status >= 500) {
-          return {
-            kind: "mint_unavailable",
-            cause: new Error(`Mint returned HTTP ${response.status}`),
-          };
-        }
-        if (response.status === 404 || this.isQuoteNotFound(body)) {
-          return { kind: "not_found" };
-        }
-        if (!response.ok) {
-          return {
-            kind: "invalid_response",
-            cause: new Error(`Mint returned HTTP ${response.status}`),
-          };
-        }
+          if (response.status === 429 || response.status >= 500) {
+            return {
+              kind: "mint_unavailable",
+              cause: new Error(`Mint returned HTTP ${response.status}`),
+            };
+          }
+          if (response.status === 404 || this.isQuoteNotFound(body)) {
+            return { kind: "not_found" };
+          }
+          if (!response.ok) {
+            return {
+              kind: "invalid_response",
+              cause: new Error(`Mint returned HTTP ${response.status}`),
+            };
+          }
 
-        let data: unknown;
-        try {
-          data = JSON.parse(body);
-        } catch (cause) {
-          return { kind: "invalid_response", cause };
-        }
+          let data: unknown;
+          try {
+            data = JSON.parse(body);
+          } catch (cause) {
+            return { kind: "invalid_response", cause };
+          }
 
-        if (!isMintQuotePayload(data)) {
-          return {
-            kind: "invalid_response",
-            cause: new Error(
-              "Mint quote response did not match the expected shape",
-            ),
-          };
-        }
-        return { kind: "found", payload: data };
-      });
+          if (!isMintQuotePayload(data)) {
+            return {
+              kind: "invalid_response",
+              cause: new Error(
+                "Mint quote response did not match the expected shape",
+              ),
+            };
+          }
+          return { kind: "found", payload: data };
+        },
+      );
     } catch (cause) {
       return { kind: "mint_unavailable", cause };
     }
@@ -153,7 +164,8 @@ export class FetchMintQuoteClient implements MintQuoteClient {
       let response: Response;
       let body: string;
       try {
-        ({ response, body } = await this.withRequestSignal(
+        ({ response, body } = await this.withMintRequest(
+          mintUrl,
           signal,
           async (requestSignal) => {
             const response = await this.fetchImpl(
@@ -226,7 +238,8 @@ export class FetchMintQuoteClient implements MintQuoteClient {
     let response: Response;
     let body: string;
     try {
-      ({ response, body } = await this.withRequestSignal(
+      ({ response, body } = await this.withMintRequest(
+        mintUrl,
         signal,
         async (requestSignal) => {
           const response = await this.fetchImpl(this.buildMintInfoUrl(mintUrl), {
@@ -279,6 +292,23 @@ export class FetchMintQuoteClient implements MintQuoteClient {
         ? advertisedMax
         : undefined;
     return { kind: "supported", maxBatchSize };
+  }
+
+  private async withMintRequest<T>(
+    mintUrl: string,
+    signal: AbortSignal | undefined,
+    request: (signal: AbortSignal) => Promise<T>,
+  ): Promise<T> {
+    const key = this.normalizeBaseUrl(mintUrl);
+    let limiter = this.requestLimiters.get(key);
+    if (!limiter) {
+      limiter = new RequestRateLimiter(this.rateLimit);
+      this.requestLimiters.set(key, limiter);
+    }
+    return limiter.schedule(
+      () => this.withRequestSignal(signal, request),
+      signal,
+    );
   }
 
   private async withRequestSignal<T>(

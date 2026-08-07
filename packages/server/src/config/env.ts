@@ -232,6 +232,14 @@ function getPositiveNumberFromEnv(key: string, fallback: number): number {
   return value;
 }
 
+function getPositiveIntegerFromEnv(key: string, fallback: number): number {
+  const value = getPositiveNumberFromEnv(key, fallback);
+  if (!Number.isInteger(value)) {
+    throw new Error(`${key} must be a positive integer`);
+  }
+  return value;
+}
+
 function getRetryScheduleFromEnv(
   key: string,
   fallback: readonly number[],
@@ -292,6 +300,16 @@ export function getMintQuoteMonitorConfigFromEnv() {
       "MINT_QUOTE_REQUEST_TIMEOUT_MS",
       10_000,
     ),
+    requestRateLimit: {
+      capacity: getPositiveIntegerFromEnv(
+        "MINT_QUOTE_RATE_LIMIT_CAPACITY",
+        1,
+      ),
+      refillPerMinute: getPositiveNumberFromEnv(
+        "MINT_QUOTE_RATE_LIMIT_REFILL_PER_MINUTE",
+        25,
+      ),
+    },
     periodicReconnectMs: getPositiveNumberFromEnv(
       "MINT_QUOTE_WS_RECONNECT_MS",
       180_000,
