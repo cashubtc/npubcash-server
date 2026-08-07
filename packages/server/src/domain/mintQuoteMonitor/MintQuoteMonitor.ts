@@ -41,8 +41,6 @@ export interface MintQuoteMonitorPolicy {
   activePollIntervalMs: number;
   activeRetryMs: readonly number[];
   reconciliationRetryMs: readonly number[];
-  notFoundInitialMs: number;
-  notFoundMaxMs: number;
   jitterRatio: number;
 }
 
@@ -74,7 +72,6 @@ interface WatchedQuote {
   nextCheckAt?: number;
   expiryTimer?: unknown;
   unsubscribeActive?: () => void;
-  notFoundCount: number;
   invalidResponseCount: number;
   latestUpdatedAt?: number;
 }
@@ -97,8 +94,6 @@ export const DEFAULT_MINT_QUOTE_MONITOR_POLICY: MintQuoteMonitorPolicy = {
   activePollIntervalMs: 20_000,
   activeRetryMs: [5_000, 10_000, 30_000, 60_000],
   reconciliationRetryMs: [60_000, 300_000, 1_800_000, 7_200_000, 21_600_000],
-  notFoundInitialMs: 3_600_000,
-  notFoundMaxMs: 86_400_000,
   jitterRatio: 0.2,
 };
 
@@ -318,6 +313,22 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
     if (quote.state !== "UNPAID" || this.quotes.has(quote.id)) return;
 
     const mintUrl = normalizeUrl(quote.mintUrl);
+    const metadata = await this.store.getQuoteReconciliationState(quote.id);
+    if (metadata?.lastResult === "not_found") {
+      const expired = await this.store.transitionUnpaidQuote(
+        quote.id,
+        "EXPIRED",
+      );
+      await this.store.clearQuoteReconciliationState(quote.id);
+      if (expired) {
+        this.logger?.info("[QuoteMonitor] Expired previously missing quote", {
+          mintUrl,
+          quoteId: quote.quoteId,
+        });
+      }
+      return;
+    }
+
     const session = await this.getOrCreateSession(mintUrl);
     if (this.stopped || this.quotes.has(quote.id)) return;
 
@@ -327,13 +338,11 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
     if (phase === "active") {
       await this.clampCircuitForActiveQuote(session);
     }
-    const metadata = await this.store.getQuoteReconciliationState(quote.id);
     const entry: WatchedQuote = {
       quote,
       mintUrl,
       phase,
       activated: false,
-      notFoundCount: metadata?.notFoundCount ?? 0,
       invalidResponseCount: 0,
     };
     this.quotes.set(quote.id, entry);
@@ -446,7 +455,6 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
     entry.expiryTimer = undefined;
     entry.unsubscribeActive?.();
     entry.unsubscribeActive = undefined;
-    entry.notFoundCount = 0;
     entry.nextCheckAt = this.clock.now().getTime();
     try {
       await this.store.saveQuoteReconciliationState({
@@ -589,7 +597,17 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
 
     await this.markMintReachable(session);
     if (result.kind === "not_found") {
-      await this.deferNotFound(entry);
+      const expired = await this.store.transitionUnpaidQuote(
+        entry.quote.id,
+        "EXPIRED",
+      );
+      await this.finishQuote(entry);
+      if (expired) {
+        this.logger?.info("[QuoteMonitor] Quote not found; marked expired", {
+          mintUrl: entry.mintUrl,
+          quoteId: entry.quote.quoteId,
+        });
+      }
       return true;
     }
     if (result.kind === "invalid_response") {
@@ -678,22 +696,6 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
       failureCount: retry.failureCount,
       previousNextAttemptAt: retry.nextAttemptAt.toISOString(),
       nextAttemptAt: clampedRetry.nextAttemptAt.toISOString(),
-    });
-  }
-
-  private async deferNotFound(entry: WatchedQuote): Promise<void> {
-    entry.notFoundCount += 1;
-    const base = Math.min(
-      this.policy.notFoundMaxMs,
-      this.policy.notFoundInitialMs * 2 ** (entry.notFoundCount - 1),
-    );
-    entry.nextCheckAt = this.clock.now().getTime() + this.withJitter(base);
-    await this.saveQuoteCheck(entry, "not_found");
-    this.logger?.info("[QuoteMonitor] Quote not found; retry deferred", {
-      mintUrl: entry.mintUrl,
-      quoteId: entry.quote.quoteId,
-      notFoundCount: entry.notFoundCount,
-      nextCheckAt: new Date(entry.nextCheckAt).toISOString(),
     });
   }
 
@@ -835,7 +837,6 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
       return;
     }
 
-    entry.notFoundCount = 0;
     entry.invalidResponseCount = 0;
     const delay =
       entry.phase === "active"
@@ -861,7 +862,7 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
       mintQuoteId: entry.quote.id,
       lastCheckedAt: this.clock.now(),
       nextCheckAt: new Date(entry.nextCheckAt),
-      notFoundCount: entry.notFoundCount,
+      notFoundCount: 0,
       lastResult: result,
     });
   }

@@ -97,8 +97,6 @@ The defaults can be tuned with the following values:
 MINT_QUOTE_ACTIVE_POLL_MS=20000
 MINT_QUOTE_ACTIVE_RETRY_MS=5000,10000,30000,60000
 MINT_QUOTE_RECONCILIATION_RETRY_MS=60000,300000,1800000,7200000,21600000
-MINT_QUOTE_NOT_FOUND_INITIAL_MS=3600000
-MINT_QUOTE_NOT_FOUND_MAX_MS=86400000
 MINT_QUOTE_RETRY_JITTER_RATIO=0.2
 MINT_QUOTE_REQUEST_TIMEOUT_MS=10000
 MINT_QUOTE_RATE_LIMIT_CAPACITY=1
@@ -108,7 +106,7 @@ MINT_QUOTE_WS_RECONNECT_MS=180000
 
 Active retry and reconciliation retry values are comma-separated schedules;
 the final value is reused as the cap. A reachable mint that reports a missing
-quote uses the separate not-found delay instead of being treated as expired.
+quote is treated as authoritative and the local quote is marked expired.
 At startup, all due unpaid quotes are staged without timers or WebSocket
 subscriptions and grouped by mint. Mints advertising NUT-29 support for
 `bolt11` are checked through the batch endpoint, split by the advertised
