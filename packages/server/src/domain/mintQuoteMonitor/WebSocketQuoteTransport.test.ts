@@ -14,6 +14,7 @@ class FakeTransport implements RealTimeTransport {
   readonly handlers = new Map<string, Map<TransportEvent, (event: any) => void>>();
   readonly sent: Array<{ mintUrl: string; request: WsRequest }> = [];
   readonly closedMints: string[] = [];
+  readonly openMints = new Set<string>();
 
   on(
     mintUrl: string,
@@ -34,11 +35,20 @@ class FakeTransport implements RealTimeTransport {
 
   closeMint(mintUrl: string): void {
     this.closedMints.push(mintUrl);
+    this.openMints.delete(mintUrl);
   }
 
-  closeAll(): void {}
+  closeAll(): void {
+    this.openMints.clear();
+  }
+
+  isConnected(mintUrl: string): boolean {
+    return this.openMints.has(mintUrl);
+  }
 
   emit(mintUrl: string, event: TransportEvent, payload: any = {}): void {
+    if (event === "open") this.openMints.add(mintUrl);
+    if (event === "close") this.openMints.delete(mintUrl);
     this.handlers.get(mintUrl)?.get(event)?.(payload);
   }
 }
@@ -89,8 +99,30 @@ class FakeSocket implements WebSocketLike {
   }
 }
 
+function emitQuoteNotification(
+  transport: FakeTransport,
+  subId: string,
+  quoteId: string,
+): void {
+  transport.emit("https://mint.example.com", "message", {
+    data: JSON.stringify({
+      jsonrpc: "2.0",
+      method: "subscribe",
+      params: {
+        subId,
+        payload: {
+          quote: quoteId,
+          request: `lnbc-${quoteId}`,
+          state: "PAID",
+          expiry: 1_786_000_000,
+        },
+      },
+    }),
+  });
+}
+
 describe("WebSocketQuoteTransport", () => {
-  test("re-subscribes each active quote once per real reopen and closes the final quote", () => {
+  test("batches startup quotes and re-subscribes active quotes in one request", () => {
     const transport = new FakeTransport();
     let subNumber = 0;
     const quotes = new WebSocketQuoteTransport({
@@ -108,29 +140,116 @@ describe("WebSocketQuoteTransport", () => {
       "quote-2",
       () => {},
     );
-    expect(transport.sent.map((entry) => entry.request.method)).toEqual([
-      "subscribe",
-      "subscribe",
-    ]);
+    expect(transport.sent).toEqual([]);
 
     transport.emit("https://mint.example.com", "open");
-    expect(transport.sent).toHaveLength(2);
+    expect(transport.sent).toHaveLength(1);
+    expect(transport.sent[0]?.request).toMatchObject({
+      method: "subscribe",
+      params: {
+        kind: "bolt11_mint_quote",
+        filters: ["quote-1", "quote-2"],
+      },
+    });
     transport.emit("https://mint.example.com", "close");
     const unsubscribeDuringReconnect = quotes.watch(
       "https://mint.example.com",
       "quote-3",
       () => {},
     );
+    expect(transport.sent).toHaveLength(1);
     transport.emit("https://mint.example.com", "open");
-    expect(
-      transport.sent.filter((entry) => entry.request.method === "subscribe"),
-    ).toHaveLength(5);
+    expect(transport.sent).toHaveLength(2);
+    expect(transport.sent[1]?.request).toMatchObject({
+      method: "subscribe",
+      params: {
+        kind: "bolt11_mint_quote",
+        filters: ["quote-1", "quote-2", "quote-3"],
+      },
+    });
 
     unsubscribeFirst();
     expect(transport.closedMints).toEqual([]);
     unsubscribeSecond();
     expect(transport.closedMints).toEqual([]);
     unsubscribeDuringReconnect();
+    expect(transport.closedMints).toEqual(["https://mint.example.com"]);
+  });
+
+  test("routes a batched subscription by quote and keeps live additions individual", async () => {
+    const transport = new FakeTransport();
+    const received: string[] = [];
+    let subNumber = 0;
+    const quotes = new WebSocketQuoteTransport({
+      transport,
+      createSubscriptionId: () => `sub-${++subNumber}`,
+    });
+
+    const unsubscribeFirst = quotes.watch(
+      "https://mint.example.com",
+      "quote-1",
+      () => {
+        received.push("quote-1");
+      },
+    );
+    quotes.watch("https://mint.example.com", "quote-2", () => {
+      received.push("quote-2");
+    });
+    transport.emit("https://mint.example.com", "open");
+
+    const unsubscribeThird = quotes.watch(
+      "https://mint.example.com",
+      "quote-3",
+      () => {
+        received.push("quote-3");
+      },
+    );
+    expect(
+      transport.sent.map((entry) =>
+        "filters" in entry.request.params
+          ? entry.request.params.filters
+          : [],
+      ),
+    ).toEqual([["quote-1", "quote-2"], ["quote-3"]]);
+
+    unsubscribeFirst();
+    emitQuoteNotification(transport, "sub-1", "quote-1");
+    emitQuoteNotification(transport, "sub-1", "quote-2");
+    emitQuoteNotification(transport, "sub-2", "quote-3");
+    await Promise.resolve();
+
+    expect(received).toEqual(["quote-2", "quote-3"]);
+    unsubscribeThird();
+    expect(transport.sent[2]?.request).toMatchObject({
+      method: "unsubscribe",
+      params: { subId: "sub-2" },
+    });
+  });
+
+  test("keeps a batch alive until its final quote is removed", () => {
+    const transport = new FakeTransport();
+    let subNumber = 0;
+    const quotes = new WebSocketQuoteTransport({
+      transport,
+      createSubscriptionId: () => `sub-${++subNumber}`,
+    });
+    const unsubscribeFirst = quotes.watch(
+      "https://mint.example.com",
+      "quote-1",
+      () => {},
+    );
+    const unsubscribeSecond = quotes.watch(
+      "https://mint.example.com",
+      "quote-2",
+      () => {},
+    );
+    transport.emit("https://mint.example.com", "open");
+
+    unsubscribeFirst();
+    expect(transport.sent).toHaveLength(1);
+    expect(transport.closedMints).toEqual([]);
+
+    unsubscribeSecond();
     expect(transport.closedMints).toEqual(["https://mint.example.com"]);
   });
 
@@ -144,6 +263,7 @@ describe("WebSocketQuoteTransport", () => {
     quotes.watch("https://mint.example.com", "quote-1", (payload) => {
       payloads.push(payload);
     });
+    transport.emit("https://mint.example.com", "open");
 
     transport.emit("https://mint.example.com", "message", {
       data: JSON.stringify({
@@ -290,6 +410,7 @@ describe("WebSocketQuoteTransport", () => {
     sockets[0]!.beginClosing();
 
     quotes.watch("https://mint.example.com", "quote-2", () => {});
+    quotes.watch("https://mint.example.com", "quote-3", () => {});
     sockets[0]!.emit("close");
     sockets[1]!.emit("open");
 
@@ -306,6 +427,67 @@ describe("WebSocketQuoteTransport", () => {
       replacementSubscriptions.filter(
         (request) =>
           "filters" in request.params && request.params.filters[0] === "quote-2",
+      ),
+    ).toHaveLength(1);
+    expect(
+      replacementSubscriptions.filter(
+        (request) =>
+          "filters" in request.params &&
+          request.params.filters.includes("quote-3"),
+      ),
+    ).toHaveLength(1);
+
+    quotes.stop();
+  });
+
+  test("unsubscribes a queued live addition removed before replacement open", () => {
+    const sockets: FakeSocket[] = [];
+    const transport = new WsTransport(
+      () => {
+        const socket = new FakeSocket();
+        sockets.push(socket);
+        return socket;
+      },
+      undefined,
+      {
+        disableReconnect: true,
+        periodicReconnectMs: 1_000_000,
+        requestBudget: new PerMintRequestBudget({ capacity: 100 }),
+      },
+    );
+    let subNumber = 0;
+    const quotes = new WebSocketQuoteTransport({
+      transport,
+      createSubscriptionId: () => `sub-${++subNumber}`,
+    });
+
+    quotes.watch("https://mint.example.com", "quote-1", () => {});
+    sockets[0]!.emit("open");
+    sockets[0]!.beginClosing();
+
+    const unsubscribeSecond = quotes.watch(
+      "https://mint.example.com",
+      "quote-2",
+      () => {},
+    );
+    unsubscribeSecond();
+    sockets[0]!.emit("close");
+    sockets[1]!.emit("open");
+
+    const replacementRequests = sockets[1]!.sent.map(
+      (message) => JSON.parse(message) as WsRequest,
+    );
+    expect(replacementRequests.map((request) => request.method)).toEqual([
+      "subscribe",
+      "unsubscribe",
+      "subscribe",
+    ]);
+    expect(
+      replacementRequests.filter(
+        (request) =>
+          request.method === "subscribe" &&
+          "filters" in request.params &&
+          request.params.filters.includes("quote-1"),
       ),
     ).toHaveLength(1);
 

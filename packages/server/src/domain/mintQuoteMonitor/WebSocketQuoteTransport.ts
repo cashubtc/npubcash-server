@@ -13,17 +13,24 @@ import {
 } from "./MintQuoteClient";
 import type { ActiveQuoteTransport } from "./MintQuoteMonitor";
 
-interface Subscription {
-  subId: string;
+interface QuoteSubscription {
   quoteId: string;
   onPayload: (payload: MintQuotePayload) => void | Promise<void>;
+  subId?: string;
+}
+
+interface WireSubscription {
+  subId: string;
+  quoteIds: Set<string>;
+  queued: boolean;
 }
 
 interface MintSubscriptions {
   hasOpened: boolean;
+  isOpen: boolean;
   nextRequestId: number;
-  bySubId: Map<string, Subscription>;
-  needsResubscribe: Set<string>;
+  byQuoteId: Map<string, QuoteSubscription>;
+  bySubId: Map<string, WireSubscription>;
 }
 
 interface WebSocketQuoteTransportOptions {
@@ -64,37 +71,58 @@ export class WebSocketQuoteTransport implements ActiveQuoteTransport {
     onPayload: (payload: MintQuotePayload) => void | Promise<void>,
   ): () => void {
     const mint = this.ensureMint(mintUrl);
-    if (mint.hasOpened) {
-      // Sending can replace a socket that is already closing without emitting
-      // its stale close event, so replay subscriptions that predate this send.
-      for (const existingSubId of mint.bySubId.keys()) {
-        mint.needsResubscribe.add(existingSubId);
+    const subscription: QuoteSubscription = { quoteId, onPayload };
+    mint.byQuoteId.set(quoteId, subscription);
+
+    if (mint.isOpen) {
+      const wasConnected = this.transport.isConnected(mintUrl);
+      const subId = this.sendSubscribe(mintUrl, mint, [quoteId]);
+      if (!wasConnected && subId) {
+        // WsTransport can replace a socket that has entered CLOSING before its
+        // close event is delivered. The new quote is queued for that socket;
+        // subscriptions from the old socket must be replayed on its open.
+        this.retainQueuedSubscription(mint, subId);
       }
     }
-    const subId = this.createSubscriptionId();
-    mint.bySubId.set(subId, { subId, quoteId, onPayload });
-    this.sendSubscribe(mintUrl, mint, subId);
 
     let subscribed = true;
     return () => {
       if (!subscribed) return;
       subscribed = false;
       const current = this.byMint.get(mintUrl);
-      if (!current || !current.bySubId.delete(subId)) return;
-      current.needsResubscribe.delete(subId);
+      if (!current || current.byQuoteId.get(quoteId) !== subscription) return;
+      current.byQuoteId.delete(quoteId);
 
-      if (current.bySubId.size === 0) {
+      let emptiedSubscription: WireSubscription | undefined;
+      if (subscription.subId) {
+        const wireSubscription = current.bySubId.get(subscription.subId);
+        // NUT-17 cannot remove one filter from a subscription. Stop routing
+        // this quote locally and retain the wire subscription for its others.
+        wireSubscription?.quoteIds.delete(quoteId);
+        if (wireSubscription?.quoteIds.size === 0) {
+          current.bySubId.delete(subscription.subId);
+          emptiedSubscription = wireSubscription;
+        }
+      }
+
+      if (current.byQuoteId.size === 0) {
         this.byMint.delete(mintUrl);
         this.transport.closeMint(mintUrl);
         return;
       }
-      const request: WsRequest = {
-        jsonrpc: "2.0",
-        method: "unsubscribe",
-        params: { subId },
-        id: ++current.nextRequestId,
-      };
-      this.transport.send(mintUrl, request);
+      if (
+        emptiedSubscription &&
+        (emptiedSubscription.queued ||
+          (current.isOpen && this.transport.isConnected(mintUrl)))
+      ) {
+        const request: WsRequest = {
+          jsonrpc: "2.0",
+          method: "unsubscribe",
+          params: { subId: emptiedSubscription.subId },
+          id: ++current.nextRequestId,
+        };
+        this.transport.send(mintUrl, request);
+      }
     };
   }
 
@@ -109,9 +137,10 @@ export class WebSocketQuoteTransport implements ActiveQuoteTransport {
 
     const mint: MintSubscriptions = {
       hasOpened: false,
+      isOpen: false,
       nextRequestId: 0,
+      byQuoteId: new Map(),
       bySubId: new Map(),
-      needsResubscribe: new Set(),
     };
     this.byMint.set(mintUrl, mint);
     this.transport.on(mintUrl, "message", (event) => {
@@ -120,17 +149,17 @@ export class WebSocketQuoteTransport implements ActiveQuoteTransport {
     this.transport.on(mintUrl, "open", () => {
       const current = this.byMint.get(mintUrl);
       if (!current) return;
-      if (!current.hasOpened && current.needsResubscribe.size === 0) {
-        current.hasOpened = true;
-        return;
-      }
+      const reopening = current.hasOpened;
       current.hasOpened = true;
-      const pending = [...current.needsResubscribe];
-      current.needsResubscribe.clear();
-      for (const subId of pending) {
-        this.sendSubscribe(mintUrl, current, subId);
+      current.isOpen = true;
+      for (const wireSubscription of current.bySubId.values()) {
+        wireSubscription.queued = false;
       }
-      if (pending.length > 0) {
+      const pending = [...current.byQuoteId.values()]
+        .filter((subscription) => subscription.subId === undefined)
+        .map((subscription) => subscription.quoteId);
+      this.sendSubscribe(mintUrl, current, pending);
+      if (reopening && pending.length > 0) {
         this.logger?.info(
           "[QuoteMonitor] Re-subscribed quotes after WebSocket reopen",
           { mintUrl, count: pending.length },
@@ -140,7 +169,8 @@ export class WebSocketQuoteTransport implements ActiveQuoteTransport {
     this.transport.on(mintUrl, "close", () => {
       const current = this.byMint.get(mintUrl);
       if (!current) return;
-      current.needsResubscribe = new Set(current.bySubId.keys());
+      current.isOpen = false;
+      this.clearWireSubscriptions(current);
     });
     return mint;
   }
@@ -148,21 +178,58 @@ export class WebSocketQuoteTransport implements ActiveQuoteTransport {
   private sendSubscribe(
     mintUrl: string,
     mint: MintSubscriptions,
-    subId: string,
-  ): void {
-    const subscription = mint.bySubId.get(subId);
-    if (!subscription) return;
+    quoteIds: readonly string[],
+  ): string | undefined {
+    const activeQuoteIds = [...new Set(quoteIds)].filter((quoteId) =>
+      mint.byQuoteId.has(quoteId),
+    );
+    if (activeQuoteIds.length === 0) return undefined;
+
+    const subId = this.createSubscriptionId();
+    mint.bySubId.set(subId, {
+      subId,
+      quoteIds: new Set(activeQuoteIds),
+      queued: false,
+    });
+    for (const quoteId of activeQuoteIds) {
+      mint.byQuoteId.get(quoteId)!.subId = subId;
+    }
     const request: WsRequest = {
       jsonrpc: "2.0",
       method: "subscribe",
       params: {
         kind: "bolt11_mint_quote",
         subId,
-        filters: [subscription.quoteId],
+        filters: activeQuoteIds,
       },
       id: ++mint.nextRequestId,
     };
     this.transport.send(mintUrl, request);
+    return subId;
+  }
+
+  private retainQueuedSubscription(
+    mint: MintSubscriptions,
+    queuedSubId: string,
+  ): void {
+    for (const [subId, wireSubscription] of mint.bySubId) {
+      if (subId === queuedSubId) continue;
+      for (const quoteId of wireSubscription.quoteIds) {
+        const subscription = mint.byQuoteId.get(quoteId);
+        if (subscription?.subId === subId) subscription.subId = undefined;
+      }
+      mint.bySubId.delete(subId);
+    }
+    const queuedSubscription = mint.bySubId.get(queuedSubId);
+    if (queuedSubscription) queuedSubscription.queued = true;
+    mint.isOpen = false;
+  }
+
+  private clearWireSubscriptions(mint: MintSubscriptions): void {
+    for (const subscription of mint.byQuoteId.values()) {
+      subscription.subId = undefined;
+    }
+    mint.bySubId.clear();
   }
 
   private handleMessage(mintUrl: string, event: any): void {
@@ -174,16 +241,19 @@ export class WebSocketQuoteTransport implements ActiveQuoteTransport {
       if (!raw) return;
       const notification = JSON.parse(raw) as WsNotification<MintQuotePayload>;
       if (notification.method !== "subscribe") return;
-      const subscription = this.byMint
-        .get(mintUrl)
-        ?.bySubId.get(notification.params?.subId);
-      if (!subscription) return;
+      const mint = this.byMint.get(mintUrl);
+      const wireSubscription = mint?.bySubId.get(notification.params?.subId);
+      if (!mint || !wireSubscription) return;
       const payload = notification.params?.payload;
       if (!isMintQuotePayload(payload)) {
         this.logger?.warn("[QuoteMonitor] Ignored invalid WebSocket quote payload", {
           mintUrl,
-          quoteId: subscription.quoteId,
         });
+        return;
+      }
+      if (!wireSubscription.quoteIds.has(payload.quote)) return;
+      const subscription = mint.byQuoteId.get(payload.quote);
+      if (!subscription || subscription.subId !== wireSubscription.subId) {
         return;
       }
       Promise.resolve(subscription.onPayload(payload)).catch(

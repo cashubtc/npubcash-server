@@ -429,7 +429,10 @@ export class WsConnectionManager {
   }
 
   isConnected(mintUrl: string): boolean {
-    return this.isOpenByMint.get(mintUrl) === true;
+    return (
+      this.isOpenByMint.get(mintUrl) === true &&
+      this.sockets.get(mintUrl)?.readyState === 1
+    );
   }
 
   closeAll(): void {
