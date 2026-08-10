@@ -15,6 +15,10 @@ import { PerMintRequestBudget } from "./infrastructure/MintRequestBudget";
 import { config } from "./config/index";
 import { logger } from "./utils/logger";
 import { handleZapRequest } from "./utils/nostr";
+import {
+  createRecipientBlocks,
+  RecipientBlocks,
+} from "./domain/recipientBlock/RecipientBlocks";
 
 interface AppServices {
   userRepository: UserRepository;
@@ -23,13 +27,16 @@ interface AppServices {
   communicatorService: CommunicatorService;
   proofService: ProofService;
   mintService: MintService;
+  recipientBlocks: RecipientBlocks;
 }
 
 let appServices: AppServices | null = null;
 
 export const nostrPool = new SimplePool();
 
-export function initializeAppServices(repos: Repositories): AppServices {
+export async function initializeAppServices(
+  repos: Repositories,
+): Promise<AppServices> {
   const mintRequestBudget = new PerMintRequestBudget(
     config.mintQuoteMonitor.requestRateLimit,
   );
@@ -65,6 +72,9 @@ export function initializeAppServices(repos: Repositories): AppServices {
       }
     },
   });
+  const recipientBlocks = await createRecipientBlocks(
+    repos.recipientBlockRepository,
+  );
   appServices = {
     userRepository: repos.userRepository,
     mintQuoteRepository: repos.mintQuoteRepository,
@@ -72,6 +82,7 @@ export function initializeAppServices(repos: Repositories): AppServices {
     communicatorService: new CommunicatorService(mintQuoteMonitor),
     proofService: new ProofService(repos.proofRepository),
     mintService: new MintService(repos.mintRepository),
+    recipientBlocks,
   };
   return appServices;
 }
@@ -105,6 +116,10 @@ export function getProofService(): ProofService {
 
 export function getMintService(): MintService {
   return getAppServices().mintService;
+}
+
+export function getRecipientBlocks(): RecipientBlocks {
+  return getAppServices().recipientBlocks;
 }
 
 export const subManager = new QuoteSubscriptionManager();

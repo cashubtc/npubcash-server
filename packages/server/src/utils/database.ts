@@ -24,9 +24,11 @@ export async function setupDatabase() {
   });
   try {
     await runMigrations(adapter);
-    const repositories = createRepositories(adapter, { mintUrl: config.mintUrl });
+    const repositories = createRepositories(adapter, {
+      mintUrl: config.mintUrl,
+    });
+    await initializeAppServices(repositories);
     persistence = { adapter, repositories };
-    initializeAppServices(repositories);
   } catch (error) {
     await adapter.close();
     throw error;

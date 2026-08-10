@@ -1,9 +1,16 @@
 import {
   getCommunicatorService,
   getMintQuoteRepository,
+  getRecipientBlocks,
   getUserService,
 } from "@/config";
-import { BadRequestError } from "@/errors";
+import {
+  ApiError,
+  BadRequestError,
+  LnurlError,
+  LnurlServiceUnavailableError,
+  RecipientUnavailableError,
+} from "@/errors";
 import { createLnurlResponse, isValidAmount } from "@/utils/lnurl";
 import { getRequestLogger } from "@/utils/logger";
 import { decodeAndValidateZapRequest } from "@/utils/nostr";
@@ -12,6 +19,7 @@ import { NextFunction, Request, Response } from "express";
 import { Event } from "nostr-tools";
 import { config } from "@/config/index";
 import { getPublicRequestUrl } from "@/utils/publicRequest";
+import { RecipientBlockedError } from "@/domain/recipientBlock/RecipientBlocks";
 
 export async function lnurlController(
   req: Request<
@@ -26,6 +34,7 @@ export async function lnurlController(
   try {
     const communicatorService = getCommunicatorService();
     const mintQuoteRepository = getMintQuoteRepository();
+    const recipientBlocks = getRecipientBlocks();
     const userService = getUserService();
     const logger = getRequestLogger(req);
     const { amount, nostr } = req.query;
@@ -33,6 +42,7 @@ export async function lnurlController(
     let zapRequest: Event | undefined;
 
     const userdata = await userService.extractUserdataFromUserParam(userParam);
+    await recipientBlocks.assertCanReceive(userdata.pubkey);
 
     if (!amount) {
       logger.debug("Returning LNURL Reponse for " + userdata.username);
@@ -83,7 +93,16 @@ export async function lnurlController(
       pr: request,
       routes: [],
     });
-  } catch (e) {
-    next(e);
+  } catch (error) {
+    if (error instanceof RecipientBlockedError) {
+      getRequestLogger(req).warn("LNURL recipient blocked", {
+        pubkey: error.pubkey,
+      });
+      return next(new RecipientUnavailableError());
+    }
+    if (error instanceof LnurlError || error instanceof ApiError) {
+      return next(error);
+    }
+    return next(new LnurlServiceUnavailableError(error));
   }
 }

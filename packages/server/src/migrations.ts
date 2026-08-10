@@ -210,4 +210,27 @@ export const migrations: Migration[] = [
       ],
     },
   },
+  {
+    id: "003_recipient_blocks",
+    sql: {
+      postgres: [
+        `CREATE TABLE IF NOT EXISTS recipient_blocks (
+           pubkey TEXT NOT NULL PRIMARY KEY CHECK (pubkey ~ '^[0-9a-f]{64}$'),
+           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+           reason TEXT
+         )`,
+      ],
+      sqlite: [
+        `CREATE TABLE IF NOT EXISTS recipient_blocks (
+           pubkey TEXT NOT NULL PRIMARY KEY CHECK (
+             length(pubkey) = 64
+             AND pubkey = lower(pubkey)
+             AND pubkey NOT GLOB '*[^0-9a-f]*'
+           ),
+           created_at TEXT NOT NULL DEFAULT (datetime('now')),
+           reason TEXT
+         )`,
+      ],
+    },
+  },
 ];
