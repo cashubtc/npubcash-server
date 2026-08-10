@@ -4,6 +4,10 @@ import { Mint } from "./Mint";
 import { BadRequestError } from "@/errors";
 import { logger } from "@/utils/logger";
 
+export type QuoteBatchingSupport =
+  | { support: false }
+  | { support: true; limit: number };
+
 export class MintService {
   private repo: MintRepository;
 
@@ -38,6 +42,25 @@ export class MintService {
 
   async getMint(mintUrl: string) {
     return this.repo.getMint(mintUrl);
+  }
+
+  async supportsQuoteBatching(
+    mintUrl: string,
+  ): Promise<QuoteBatchingSupport> {
+    const mint = await this.checkMintUrl(mintUrl, false);
+    const nut29 = (mint.info.nuts as Record<string, unknown>)["29"];
+    if (!nut29 || typeof nut29 !== "object") {
+      return { support: false };
+    }
+
+    const advertisedLimit = (nut29 as Record<string, unknown>).max_batch_size;
+    return {
+      support: true,
+      limit:
+        typeof advertisedLimit === "number" && advertisedLimit > 0
+          ? advertisedLimit
+          : 100,
+    };
   }
 
   async ensureLatestMintInfo(mint: Mint) {
