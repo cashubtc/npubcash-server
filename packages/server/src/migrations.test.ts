@@ -50,8 +50,9 @@ class InitializedV3PostgresAdapter implements DatabaseAdapter {
         rows: [
           { id: "001_v3_baseline" },
           { id: "002_mint_quote_monitoring" },
+          { id: "003_recipient_blocks" },
         ] as T[],
-        rowCount: 2,
+        rowCount: 3,
       };
     }
 
@@ -123,7 +124,7 @@ describe("runMigrations", () => {
     expect(adapter.queries[0]).not.toContain("zap_request");
   });
 
-  test("initializes a fresh database with the baseline and monitoring schema", async () => {
+  test("initializes a fresh database with the complete v3 schema", async () => {
     const adapter = new SqliteAdapter(":memory:");
 
     try {
@@ -144,7 +145,8 @@ describe("runMigrations", () => {
             'mints',
             'proofs',
             'mint_quote_mint_retries',
-            'mint_quote_reconciliation'
+            'mint_quote_reconciliation',
+            'recipient_blocks'
           )
         ORDER BY name
       `);
@@ -155,6 +157,7 @@ describe("runMigrations", () => {
       expect(applied.rows).toEqual([
         { id: "001_v3_baseline" },
         { id: "002_mint_quote_monitoring" },
+        { id: "003_recipient_blocks" },
       ]);
       expect(tables.rows).toEqual([
         { name: "_migrations" },
@@ -164,6 +167,7 @@ describe("runMigrations", () => {
         { name: "mint_quotes" },
         { name: "mints" },
         { name: "proofs" },
+        { name: "recipient_blocks" },
       ]);
       expect(mintQuoteColumns.rows.map((column) => column.name)).toContain(
         "serialized_zap_request",
@@ -199,12 +203,15 @@ describe("runMigrations", () => {
     expect(adapter.schemaStatements).toEqual([]);
   });
 
-  test("adds durable monitoring state to a baseline PostgreSQL database", async () => {
+  test("adds later v3 features to a baseline PostgreSQL database", async () => {
     const adapter = new BaselineOnlyPostgresAdapter();
 
     await runMigrations(adapter);
 
-    expect(adapter.applied).toEqual(["002_mint_quote_monitoring"]);
+    expect(adapter.applied).toEqual([
+      "002_mint_quote_monitoring",
+      "003_recipient_blocks",
+    ]);
     expect(adapter.schemaStatements.join("\n")).toContain(
       "CREATE TABLE IF NOT EXISTS mint_quote_mint_retries",
     );
@@ -214,5 +221,60 @@ describe("runMigrations", () => {
     expect(adapter.schemaStatements.join("\n")).toContain(
       "REFERENCES mint_quotes(id) ON DELETE CASCADE",
     );
+    expect(adapter.schemaStatements.join("\n")).toContain(
+      "CREATE TABLE IF NOT EXISTS recipient_blocks",
+    );
+    expect(adapter.schemaStatements.join("\n")).toContain(
+      "pubkey ~ '^[0-9a-f]{64}$'",
+    );
+  });
+
+  test("creates a recipient block table constrained to canonical public keys", async () => {
+    const adapter = new SqliteAdapter(":memory:");
+
+    try {
+      await runMigrations(adapter);
+      const pubkey = "ab".repeat(32);
+      await adapter.query(
+        "INSERT INTO recipient_blocks (pubkey, reason) VALUES (?, ?)",
+        [pubkey, "abuse"],
+      );
+
+      const stored = await adapter.query<{
+        pubkey: string;
+        created_at: string;
+        reason: string | null;
+      }>("SELECT pubkey, created_at, reason FROM recipient_blocks");
+
+      expect(stored.rows).toEqual([
+        {
+          pubkey,
+          created_at: expect.any(String),
+          reason: "abuse",
+        },
+      ]);
+      expect(
+        adapter.query("INSERT INTO recipient_blocks (pubkey) VALUES (?)", [
+          "AB".repeat(32),
+        ]),
+      ).rejects.toThrow();
+      expect(
+        adapter.query("INSERT INTO recipient_blocks (pubkey) VALUES (?)", [
+          "g0".repeat(32),
+        ]),
+      ).rejects.toThrow();
+      expect(
+        adapter.query("INSERT INTO recipient_blocks (pubkey) VALUES (?)", [
+          "ab".repeat(31),
+        ]),
+      ).rejects.toThrow();
+      expect(
+        adapter.query("INSERT INTO recipient_blocks (pubkey) VALUES (?)", [
+          null,
+        ]),
+      ).rejects.toThrow();
+    } finally {
+      await adapter.close();
+    }
   });
 });

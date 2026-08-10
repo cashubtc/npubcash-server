@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { InvalidRecipientError } from "@/errors";
+import { InvalidRecipientError, RecipientUnavailableError } from "@/errors";
 import { nip19 } from "nostr-tools";
 import { UserWithName } from "./user";
 import type { UserRepository } from "./userRepository";
@@ -85,4 +85,12 @@ test("rejects an npub with an invalid checksum as an invalid recipient", async (
   expect(
     service.extractUserdataFromUserParam(invalidNpub),
   ).rejects.toBeInstanceOf(InvalidRecipientError);
+});
+
+test("reports an unknown username as an unavailable recipient", async () => {
+  const service = new UserService(createUserRepository());
+
+  expect(
+    service.extractUserdataFromUserParam("missing-user"),
+  ).rejects.toBeInstanceOf(RecipientUnavailableError);
 });

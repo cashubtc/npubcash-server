@@ -1,7 +1,25 @@
 import { Request, Response, NextFunction } from "express";
-import { ApiError, PaymentRequiredError } from ".";
+import { ApiError, LnurlError, PaymentRequiredError } from ".";
 import { encodeCBOR } from "@/utils/cbor";
 import { getRequestLogger } from "@/utils/logger";
+
+function loggableError(error: unknown): unknown {
+  if (!(error instanceof Error)) {
+    return error;
+  }
+  const details: {
+    name: string;
+    message: string;
+    cause?: unknown;
+  } = {
+    name: error.name,
+    message: error.message,
+  };
+  if ("cause" in error && error.cause !== undefined) {
+    details.cause = loggableError(error.cause);
+  }
+  return details;
+}
 
 export function errorHandler(
   err: any,
@@ -13,6 +31,18 @@ export function errorHandler(
     return next(err);
   }
   const logger = getRequestLogger(req);
+
+  if (err instanceof LnurlError) {
+    if (err.statusCode >= 500) {
+      logger.error("LNURL service unavailable", {
+        cause: loggableError(err.cause),
+      });
+    }
+    return res
+      .status(err.statusCode)
+      .json({ status: "ERROR", reason: err.reason });
+  }
+
   logger.error(err);
 
   if (err instanceof PaymentRequiredError) {

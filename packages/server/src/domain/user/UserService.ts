@@ -3,7 +3,7 @@ import { UserRepository } from "./userRepository";
 import {
   BadRequestError,
   InvalidRecipientError,
-  NotFoundError,
+  RecipientUnavailableError,
 } from "@/errors";
 import { User, UserWithName } from "./user";
 import { usernameRegex } from "@/constants/regex";
@@ -39,7 +39,7 @@ export class UserService {
         userParam.toLowerCase(),
       );
       if (!userObj) {
-        throw new NotFoundError("User not found.");
+        throw new RecipientUnavailableError();
       }
       return {
         username: userObj.name!,

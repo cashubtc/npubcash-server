@@ -4,6 +4,8 @@ import { MintQuoteRepository } from "@/domain/mintQuote/MintQuoteRepository";
 import { MintQuoteMonitorStore } from "@/domain/mintQuoteMonitor/MintQuoteMonitorStore";
 import { ProofRepository } from "@/domain/proof/proofRepository";
 import { UserRepository } from "@/domain/user/userRepository";
+import { RecipientBlockRepository } from "@/domain/recipientBlock/recipientBlockRepository";
+import { PostgresRecipientBlockRepository } from "./postgresRecipientBlockRepository";
 import { PostgresMintRepository } from "./postgresMintRepository";
 import { PostgresMintQuoteRepository } from "./postgresMintQuoteRepository";
 import { PostgresProofRepository } from "./postgresProofRepository";
@@ -12,6 +14,7 @@ import { SqliteMintRepository } from "./sqliteMintRepository";
 import { SqliteMintQuoteRepository } from "./sqliteMintQuoteRepository";
 import { SqliteProofRepository } from "./sqliteProofRepository";
 import { SqliteUserRepository } from "./sqliteUserRepository";
+import { SqliteRecipientBlockRepository } from "./sqliteRecipientBlockRepository";
 
 export interface Repositories {
   userRepository: UserRepository;
@@ -19,6 +22,7 @@ export interface Repositories {
   mintRepository: MintRepository;
   mintQuoteRepository: MintQuoteRepository;
   mintQuoteMonitorStore: MintQuoteMonitorStore;
+  recipientBlockRepository: RecipientBlockRepository;
 }
 
 interface RepositoryFactoryConfig {
@@ -37,6 +41,7 @@ export function createRepositories(
       mintRepository: new SqliteMintRepository(db),
       mintQuoteRepository,
       mintQuoteMonitorStore: mintQuoteRepository,
+      recipientBlockRepository: new SqliteRecipientBlockRepository(db),
     };
   }
 
@@ -47,5 +52,6 @@ export function createRepositories(
     mintRepository: new PostgresMintRepository(db),
     mintQuoteRepository,
     mintQuoteMonitorStore: mintQuoteRepository,
+    recipientBlockRepository: new PostgresRecipientBlockRepository(db),
   };
 }
