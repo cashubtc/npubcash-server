@@ -2,6 +2,9 @@ import {
   PerMintRequestBudget,
   type MintRequestBudget,
 } from "@/infrastructure/MintRequestBudget";
+import { randomBytes } from "node:crypto";
+import { request as httpRequest } from "node:http";
+import { request as httpsRequest } from "node:https";
 import type { Logger } from "winston";
 import type {
   WebSocketLike,
@@ -10,6 +13,9 @@ import type {
 } from "./types";
 
 const DEFAULT_PERIODIC_RECONNECT_MS = 180000; // 3 minutes
+const HANDSHAKE_PROBE_COOLDOWN_MS = 60_000;
+const HANDSHAKE_PROBE_TIMEOUT_MS = 5_000;
+const MAX_LOGGED_HANDSHAKE_BODY_LENGTH = 2_000;
 
 export class WsConnectionManager {
   private readonly sockets = new Map<string, WebSocketLike>();
@@ -33,6 +39,7 @@ export class WsConnectionManager {
     string,
     AbortController
   >();
+  private readonly lastHandshakeProbeAtByMint = new Map<string, number>();
   private readonly options: Required<
     Omit<WsConnectionManagerOptions, "requestBudget">
   >;
@@ -63,6 +70,88 @@ export class WsConnectionManager {
       : url.pathname;
     url.pathname = `${path}/v1/ws`;
     return url.toString();
+  }
+
+  private probeRejectedHandshake(mintUrl: string, wsUrl: string): void {
+    if (!this.logger) return;
+    const now = Date.now();
+    const lastProbeAt = this.lastHandshakeProbeAtByMint.get(mintUrl);
+    if (
+      lastProbeAt !== undefined &&
+      now - lastProbeAt < HANDSHAKE_PROBE_COOLDOWN_MS
+    ) {
+      return;
+    }
+    this.lastHandshakeProbeAtByMint.set(mintUrl, now);
+
+    const url = new URL(wsUrl);
+    const request = url.protocol === "wss:" ? httpsRequest : httpRequest;
+    url.protocol = url.protocol === "wss:" ? "https:" : "http:";
+
+    try {
+      const probe = request(url, {
+        headers: {
+          Connection: "Upgrade",
+          Upgrade: "websocket",
+          "Sec-WebSocket-Key": randomBytes(16).toString("base64"),
+          "Sec-WebSocket-Version": "13",
+        },
+      });
+      probe.setTimeout(HANDSHAKE_PROBE_TIMEOUT_MS, () => {
+        probe.destroy(new Error("WebSocket handshake diagnostic timed out"));
+      });
+      probe.on("response", (response) => {
+        let body = "";
+        let bodyLength = 0;
+        response.setEncoding("utf8");
+        response.on("data", (chunk: string) => {
+          bodyLength += chunk.length;
+          if (body.length < MAX_LOGGED_HANDSHAKE_BODY_LENGTH) {
+            body += chunk.slice(
+              0,
+              MAX_LOGGED_HANDSHAKE_BODY_LENGTH - body.length,
+            );
+          }
+        });
+        response.on("end", () => {
+          this.logger?.error("[WS] WebSocket handshake rejected", {
+            transport: "ws",
+            mintUrl,
+            statusCode: response.statusCode,
+            statusMessage: response.statusMessage,
+            retryAfter: response.headers["retry-after"],
+            contentType: response.headers["content-type"],
+            body,
+            bodyTruncated: bodyLength > body.length,
+          });
+        });
+      });
+      probe.on("upgrade", (response, socket) => {
+        socket.destroy();
+        this.logger?.info(
+          "[WS] WebSocket handshake diagnostic succeeded after connection error",
+          {
+            transport: "ws",
+            mintUrl,
+            statusCode: response.statusCode,
+          },
+        );
+      });
+      probe.on("error", (cause) => {
+        this.logger?.warn("[WS] WebSocket handshake diagnostic failed", {
+          transport: "ws",
+          mintUrl,
+          err: cause.message,
+        });
+      });
+      probe.end();
+    } catch (cause) {
+      this.logger.warn("[WS] WebSocket handshake diagnostic failed", {
+        transport: "ws",
+        mintUrl,
+        err: cause instanceof Error ? cause.message : String(cause),
+      });
+    }
   }
 
   private ensureSocket(mintUrl: string): void {
@@ -126,6 +215,7 @@ export class WsConnectionManager {
         this.reconnectTimeoutByMint.delete(mintUrl);
       }
       this.reconnectAttemptsByMint.delete(mintUrl);
+      this.lastHandshakeProbeAtByMint.delete(mintUrl);
 
       const queue = this.sendQueueByMint.get(mintUrl);
       if (queue && queue.length > 0) {
@@ -155,7 +245,18 @@ export class WsConnectionManager {
 
     const onError = (err: any) => {
       if (this.sockets.get(mintUrl) !== socket) return;
-      this.logger?.error("[WS] Connection error", { transport: "ws", mintUrl, err: err?.message || err });
+      const message = err?.message || err;
+      this.logger?.error("[WS] Connection error", {
+        transport: "ws",
+        mintUrl,
+        err: message,
+      });
+      if (
+        typeof message === "string" &&
+        message.includes("Expected 101 status code")
+      ) {
+        this.probeRejectedHandshake(mintUrl, wsUrl);
+      }
       this.emitToListeners(mintUrl, "error", err);
     };
 
@@ -342,6 +443,7 @@ export class WsConnectionManager {
     }
     this.reconnectTimeoutByMint.clear();
     this.reconnectAttemptsByMint.clear();
+    this.lastHandshakeProbeAtByMint.clear();
 
     for (const controller of this.pendingConnectionsByMint.values()) {
       controller.abort(new Error("WebSocket manager closed"));
@@ -371,6 +473,7 @@ export class WsConnectionManager {
       this.reconnectTimeoutByMint.delete(mintUrl);
     }
     this.reconnectAttemptsByMint.delete(mintUrl);
+    this.lastHandshakeProbeAtByMint.delete(mintUrl);
 
     const pendingConnection = this.pendingConnectionsByMint.get(mintUrl);
     if (pendingConnection) {
