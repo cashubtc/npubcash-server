@@ -313,6 +313,45 @@ describe("FetchMintQuoteClient", () => {
     ).toBe("invalid_response");
   });
 
+  test("preserves the response body when a quote response has an invalid shape", async () => {
+    const body = JSON.stringify({ code: 429, detail: "rate limit exceeded" });
+    const client = new FetchMintQuoteClient({
+      fetch: async () => new Response(body, { status: 200 }),
+      timeoutMs: 1_000,
+      rateLimit: { capacity: 100 },
+    });
+
+    const result = await client.checkQuote(
+      "https://mint.example.com",
+      "quote-1",
+    );
+
+    expect(result.kind).toBe("invalid_response");
+    if (result.kind !== "invalid_response") return;
+    expect((result.cause as Error).message).toContain(body);
+  });
+
+  test("preserves the response body when a mint rate limits a quote check", async () => {
+    const client = new FetchMintQuoteClient({
+      fetch: async () =>
+        new Response("rate limit exceeded", {
+          status: 429,
+          statusText: "Too Many Requests",
+        }),
+      timeoutMs: 1_000,
+      rateLimit: { capacity: 100 },
+    });
+
+    const result = await client.checkQuote(
+      "https://mint.example.com",
+      "quote-1",
+    );
+
+    expect(result.kind).toBe("mint_unavailable");
+    if (result.kind !== "mint_unavailable") return;
+    expect((result.cause as Error).message).toContain("rate limit exceeded");
+  });
+
   test("does not classify a bare 404 as quote not found", async () => {
     const client = new FetchMintQuoteClient({
       fetch: async () => new Response("Not Found", { status: 404 }),

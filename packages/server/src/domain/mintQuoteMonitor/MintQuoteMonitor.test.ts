@@ -3,11 +3,12 @@ import { SqliteAdapter } from "@/database/sqliteAdapter";
 import { MintQuote } from "@/domain/mintQuote/MintQuote";
 import { SqliteMintQuoteRepository } from "@/infrastructure/db/sqliteMintQuoteRepository";
 import { runMigrations } from "@/migrations";
-import type {
-  BatchQuoteCheckResult,
-  MintQuoteClient,
-  MintQuotePayload,
-  QuoteCheckResult,
+import {
+  FetchMintQuoteClient,
+  type BatchQuoteCheckResult,
+  type MintQuoteClient,
+  type MintQuotePayload,
+  type QuoteCheckResult,
 } from "./MintQuoteClient";
 import {
   DefaultMintQuoteMonitor,
@@ -135,6 +136,32 @@ class FakeActiveQuoteTransport implements ActiveQuoteTransport {
     payload: MintQuotePayload,
   ): Promise<void> {
     await this.callbacks.get(`${mintUrl}::${quoteId}`)?.(payload);
+  }
+}
+
+interface LogEntry {
+  level: "debug" | "info" | "warn" | "error";
+  message: string;
+  meta?: Record<string, unknown>;
+}
+
+class RecordingLogger {
+  readonly entries: LogEntry[] = [];
+
+  debug(message: string, meta?: Record<string, unknown>): void {
+    this.entries.push({ level: "debug", message, meta });
+  }
+
+  info(message: string, meta?: Record<string, unknown>): void {
+    this.entries.push({ level: "info", message, meta });
+  }
+
+  warn(message: string, meta?: Record<string, unknown>): void {
+    this.entries.push({ level: "warn", message, meta });
+  }
+
+  error(message: string, meta?: Record<string, unknown>): void {
+    this.entries.push({ level: "error", message, meta });
   }
 }
 
@@ -698,6 +725,7 @@ describe("MintQuoteMonitor", () => {
       kind: "found",
       payload: paidPayload(quoteId),
     }));
+    const logger = new RecordingLogger();
     const monitor = new DefaultMintQuoteMonitor({
       store,
       client,
@@ -708,6 +736,7 @@ describe("MintQuoteMonitor", () => {
         stop: () => {},
       },
       clock,
+      logger,
       random: () => 0.5,
     });
 
@@ -715,6 +744,94 @@ describe("MintQuoteMonitor", () => {
     await clock.advanceBy(0);
 
     expect(client.calls).toHaveLength(1);
+    expect(
+      logger.entries.find(
+        (entry) =>
+          entry.message ===
+          "[QuoteMonitor] WebSocket watch failed; HTTP fallback remains active",
+      )?.meta?.cause,
+    ).toEqual({ name: "Error", message: "websocket unavailable" });
+  });
+
+  test("logs the cause of an invalid quote response", async () => {
+    const now = Date.parse("2026-08-03T12:00:00.000Z");
+    await createQuote(
+      "invalid-response",
+      "https://mint.example.com",
+      new Date(now + 60_000),
+    );
+    const clock = new FakeClock(now);
+    const logger = new RecordingLogger();
+    const monitor = new DefaultMintQuoteMonitor({
+      store,
+      client: new FetchMintQuoteClient({
+        fetch: async (input) =>
+          input.toString().endsWith("/v1/info")
+            ? new Response("{}")
+            : new Response('{"detail":"rate limit exceeded"}'),
+        rateLimit: { capacity: 100 },
+      }),
+      activeTransport: new FakeActiveQuoteTransport(),
+      clock,
+      logger,
+      random: () => 0.5,
+    });
+
+    await monitor.start();
+    await clock.advanceBy(0);
+
+    expect(
+      logger.entries.find(
+        (entry) =>
+          entry.message ===
+          "[QuoteMonitor] Invalid quote response; retry deferred",
+      )?.meta?.cause,
+    ).toEqual({
+      name: "Error",
+      message:
+        'Mint quote response did not match the expected shape; HTTP 200; response body: {"detail":"rate limit exceeded"}',
+    });
+  });
+
+  test("logs the cause when a rate-limited mint opens the circuit", async () => {
+    const now = Date.parse("2026-08-03T12:00:00.000Z");
+    await createQuote(
+      "rate-limited",
+      "https://mint.example.com",
+      new Date(now + 60_000),
+    );
+    const clock = new FakeClock(now);
+    const logger = new RecordingLogger();
+    const monitor = new DefaultMintQuoteMonitor({
+      store,
+      client: new FetchMintQuoteClient({
+        fetch: async (input) =>
+          input.toString().endsWith("/v1/info")
+            ? new Response("{}")
+            : new Response("rate limit exceeded", {
+                status: 429,
+                statusText: "Too Many Requests",
+              }),
+        rateLimit: { capacity: 100 },
+      }),
+      activeTransport: new FakeActiveQuoteTransport(),
+      clock,
+      logger,
+      random: () => 0.5,
+    });
+
+    await monitor.start();
+    await clock.advanceBy(0);
+
+    expect(
+      logger.entries.find(
+        (entry) => entry.message === "[QuoteMonitor] Mint circuit opened",
+      )?.meta?.cause,
+    ).toEqual({
+      name: "Error",
+      message:
+        "Mint request failed; HTTP 429 Too Many Requests; response body: rate limit exceeded",
+    });
   });
 
   test("issued is persisted with a paid timestamp and not restored", async () => {
