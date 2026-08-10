@@ -43,6 +43,7 @@ export interface RealTimeTransport {
   send(mintUrl: string, req: WsRequest): void;
   closeAll(): void;
   closeMint(mintUrl: string): void;
+  isConnected(mintUrl: string): boolean;
 }
 
 export interface WsConnectionManagerOptions {
