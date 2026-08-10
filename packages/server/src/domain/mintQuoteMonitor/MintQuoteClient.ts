@@ -1,5 +1,8 @@
-import { RequestRateLimiter } from "../../infrastructure/RequestRateLimiter";
 import type { RequestRateLimiterOptions } from "../../infrastructure/RequestRateLimiter";
+import {
+  PerMintRequestBudget,
+  type MintRequestBudget,
+} from "../../infrastructure/MintRequestBudget";
 
 export type MintQuotePayloadState = "UNPAID" | "PAID" | "ISSUED" | "PENDING";
 
@@ -40,6 +43,7 @@ interface FetchMintQuoteClientOptions {
   fetch?: FetchLike;
   timeoutMs?: number;
   rateLimit?: RequestRateLimiterOptions;
+  requestBudget?: MintRequestBudget;
 }
 
 type FetchLike = (
@@ -75,13 +79,13 @@ export function isMintQuotePayload(value: unknown): value is MintQuotePayload {
 export class FetchMintQuoteClient implements MintQuoteClient {
   private readonly fetchImpl: FetchLike;
   private readonly timeoutMs: number;
-  private readonly rateLimit: RequestRateLimiterOptions;
-  private readonly requestLimiters = new Map<string, RequestRateLimiter>();
+  private readonly requestBudget: MintRequestBudget;
 
   constructor(options: FetchMintQuoteClientOptions = {}) {
     this.fetchImpl = options.fetch ?? fetch;
     this.timeoutMs = options.timeoutMs ?? 10_000;
-    this.rateLimit = { ...options.rateLimit };
+    this.requestBudget =
+      options.requestBudget ?? new PerMintRequestBudget(options.rateLimit);
   }
 
   async checkQuote(
@@ -301,13 +305,8 @@ export class FetchMintQuoteClient implements MintQuoteClient {
     signal: AbortSignal | undefined,
     request: (signal: AbortSignal) => Promise<T>,
   ): Promise<T> {
-    const key = this.normalizeBaseUrl(mintUrl);
-    let limiter = this.requestLimiters.get(key);
-    if (!limiter) {
-      limiter = new RequestRateLimiter(this.rateLimit);
-      this.requestLimiters.set(key, limiter);
-    }
-    return limiter.schedule(
+    return this.requestBudget.schedule(
+      mintUrl,
       () => this.withRequestSignal(signal, request),
       signal,
     );

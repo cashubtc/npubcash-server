@@ -37,7 +37,7 @@ export class RequestRateLimiter {
     );
     this.refillPerMinute = this.requirePositiveNumber(
       "refillPerMinute",
-      options.refillPerMinute ?? 25,
+      options.refillPerMinute ?? 20,
     );
     this.now = options.now ?? Date.now;
     this.wait = options.wait ?? waitForDelay;

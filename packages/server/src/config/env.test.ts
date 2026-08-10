@@ -249,7 +249,7 @@ describe("env.ts", () => {
     expect(defaults.activePollIntervalMs).toBe(20_000);
     expect(defaults.requestRateLimit).toEqual({
       capacity: 1,
-      refillPerMinute: 25,
+      refillPerMinute: 20,
     });
 
     process.env.MINT_QUOTE_ACTIVE_POLL_MS = "30000";

@@ -11,6 +11,7 @@ import { MintQuoteRepository } from "./domain/mintQuote/MintQuoteRepository";
 import { DefaultMintQuoteMonitor } from "./domain/mintQuoteMonitor/MintQuoteMonitor";
 import { FetchMintQuoteClient } from "./domain/mintQuoteMonitor/MintQuoteClient";
 import { WebSocketQuoteTransport } from "./domain/mintQuoteMonitor/WebSocketQuoteTransport";
+import { PerMintRequestBudget } from "./infrastructure/MintRequestBudget";
 import { config } from "./config/index";
 import { logger } from "./utils/logger";
 import { handleZapRequest } from "./utils/nostr";
@@ -29,15 +30,19 @@ let appServices: AppServices | null = null;
 export const nostrPool = new SimplePool();
 
 export function initializeAppServices(repos: Repositories): AppServices {
+  const mintRequestBudget = new PerMintRequestBudget(
+    config.mintQuoteMonitor.requestRateLimit,
+  );
   const mintQuoteMonitor = new DefaultMintQuoteMonitor({
     store: repos.mintQuoteMonitorStore,
     client: new FetchMintQuoteClient({
       timeoutMs: config.mintQuoteMonitor.requestTimeoutMs,
-      rateLimit: config.mintQuoteMonitor.requestRateLimit,
+      requestBudget: mintRequestBudget,
     }),
     activeTransport: new WebSocketQuoteTransport({
       logger,
       periodicReconnectMs: config.mintQuoteMonitor.periodicReconnectMs,
+      requestBudget: mintRequestBudget,
     }),
     policy: config.mintQuoteMonitor,
     logger,

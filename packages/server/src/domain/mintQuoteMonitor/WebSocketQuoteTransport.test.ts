@@ -6,6 +6,8 @@ import type {
   WsRequest,
 } from "@/domain/communicator/infra/types";
 import { WsTransport } from "@/domain/communicator/infra/WsTransport";
+import { PerMintRequestBudget } from "@/infrastructure/MintRequestBudget";
+import { FetchMintQuoteClient } from "./MintQuoteClient";
 import { WebSocketQuoteTransport } from "./WebSocketQuoteTransport";
 
 class FakeTransport implements RealTimeTransport {
@@ -158,6 +160,110 @@ describe("WebSocketQuoteTransport", () => {
     expect(payloads).toEqual([]);
   });
 
+  test("shares one mint request budget between HTTP and WebSocket opens", async () => {
+    let now = 0;
+    const socketStarts: number[] = [];
+    const requestBudget = new PerMintRequestBudget({
+      capacity: 1,
+      refillPerMinute: 60,
+      now: () => now,
+      wait: async (delayMs) => {
+        now += delayMs;
+      },
+    });
+    const client = new FetchMintQuoteClient({
+      fetch: async () =>
+        new Response(
+          JSON.stringify({
+            quote: "quote-1",
+            request: "lnbc-quote-1",
+            state: "UNPAID",
+            expiry: 1_786_000_000,
+          }),
+        ),
+      requestBudget,
+    });
+    await client.checkQuote("https://mint.example.com", "quote-1");
+
+    const sockets: FakeSocket[] = [];
+    const transport = new WsTransport(
+      () => {
+        socketStarts.push(now);
+        const socket = new FakeSocket();
+        sockets.push(socket);
+        return socket;
+      },
+      undefined,
+      {
+        disableReconnect: true,
+        periodicReconnectMs: 1_000_000,
+        requestBudget,
+      },
+    );
+    transport.on("https://mint.example.com/", "open", () => {});
+    for (let turn = 0; turn < 10 && sockets.length < 1; turn += 1) {
+      await Promise.resolve();
+    }
+
+    sockets[0]!.beginClosing();
+    transport.send("https://mint.example.com/", {
+      jsonrpc: "2.0",
+      method: "subscribe",
+      params: {
+        kind: "bolt11_mint_quote",
+        subId: "sub-1",
+        filters: ["quote-1"],
+      },
+      id: 1,
+    });
+    for (let turn = 0; turn < 10 && sockets.length < 2; turn += 1) {
+      await Promise.resolve();
+    }
+
+    expect(socketStarts).toEqual([1_000, 2_000]);
+    transport.closeAll();
+  });
+
+  test("cancels a WebSocket open waiting for a token when the mint closes", async () => {
+    let now = 0;
+    let releaseWait!: () => void;
+    const waiting = new Promise<void>((resolve) => {
+      releaseWait = resolve;
+    });
+    const requestBudget = new PerMintRequestBudget({
+      capacity: 1,
+      refillPerMinute: 60,
+      now: () => now,
+      wait: async (delayMs) => {
+        await waiting;
+        now += delayMs;
+      },
+    });
+    await requestBudget.schedule("https://mint.example.com", () => undefined);
+
+    const sockets: FakeSocket[] = [];
+    const transport = new WsTransport(
+      () => {
+        const socket = new FakeSocket();
+        sockets.push(socket);
+        return socket;
+      },
+      undefined,
+      {
+        disableReconnect: true,
+        periodicReconnectMs: 1_000_000,
+        requestBudget,
+      },
+    );
+    transport.on("https://mint.example.com", "open", () => {});
+    transport.closeMint("https://mint.example.com");
+    releaseWait();
+    for (let turn = 0; turn < 5; turn += 1) await Promise.resolve();
+
+    expect(sockets).toEqual([]);
+    transport.closeAll();
+  });
+
   test("re-subscribes existing quotes when adding one replaces a closing socket", () => {
     const sockets: FakeSocket[] = [];
     const transport = new WsTransport(
@@ -167,7 +273,11 @@ describe("WebSocketQuoteTransport", () => {
         return socket;
       },
       undefined,
-      { disableReconnect: true, periodicReconnectMs: 1_000_000 },
+      {
+        disableReconnect: true,
+        periodicReconnectMs: 1_000_000,
+        requestBudget: new PerMintRequestBudget({ capacity: 100 }),
+      },
     );
     let subNumber = 0;
     const quotes = new WebSocketQuoteTransport({

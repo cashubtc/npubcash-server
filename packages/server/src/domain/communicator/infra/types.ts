@@ -1,3 +1,5 @@
+import type { MintRequestBudget } from "@/infrastructure/MintRequestBudget";
+
 export type JsonRpcId = number;
 
 export type WsRequestMethod = "subscribe" | "unsubscribe";
@@ -46,6 +48,7 @@ export interface RealTimeTransport {
 export interface WsConnectionManagerOptions {
   disableReconnect?: boolean;
   periodicReconnectMs?: number;
+  requestBudget?: MintRequestBudget;
 }
 
 export interface WebSocketLike {
