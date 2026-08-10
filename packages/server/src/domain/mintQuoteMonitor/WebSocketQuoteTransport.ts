@@ -13,6 +13,8 @@ import {
 } from "./MintQuoteClient";
 import type { ActiveQuoteTransport } from "./MintQuoteMonitor";
 
+const MAX_FILTERS_PER_SUBSCRIPTION = 50;
+
 interface QuoteSubscription {
   quoteId: string;
   onPayload: (payload: MintQuotePayload) => void | Promise<void>;
@@ -158,7 +160,7 @@ export class WebSocketQuoteTransport implements ActiveQuoteTransport {
       const pending = [...current.byQuoteId.values()]
         .filter((subscription) => subscription.subId === undefined)
         .map((subscription) => subscription.quoteId);
-      this.sendSubscribe(mintUrl, current, pending);
+      this.sendSubscribeBatches(mintUrl, current, pending);
       if (reopening && pending.length > 0) {
         this.logger?.info(
           "[QuoteMonitor] Re-subscribed quotes after WebSocket reopen",
@@ -173,6 +175,24 @@ export class WebSocketQuoteTransport implements ActiveQuoteTransport {
       this.clearWireSubscriptions(current);
     });
     return mint;
+  }
+
+  private sendSubscribeBatches(
+    mintUrl: string,
+    mint: MintSubscriptions,
+    quoteIds: readonly string[],
+  ): void {
+    for (
+      let offset = 0;
+      offset < quoteIds.length;
+      offset += MAX_FILTERS_PER_SUBSCRIPTION
+    ) {
+      this.sendSubscribe(
+        mintUrl,
+        mint,
+        quoteIds.slice(offset, offset + MAX_FILTERS_PER_SUBSCRIPTION),
+      );
+    }
   }
 
   private sendSubscribe(

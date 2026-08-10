@@ -176,6 +176,46 @@ describe("WebSocketQuoteTransport", () => {
     expect(transport.closedMints).toEqual(["https://mint.example.com"]);
   });
 
+  test("limits startup and resubscription batches to 50 quotes", async () => {
+    const transport = new FakeTransport();
+    const received: string[] = [];
+    let subNumber = 0;
+    const quotes = new WebSocketQuoteTransport({
+      transport,
+      createSubscriptionId: () => `sub-${++subNumber}`,
+    });
+    const quoteIds = Array.from({ length: 101 }, (_, index) => `quote-${index}`);
+
+    for (const quoteId of quoteIds) {
+      quotes.watch("https://mint.example.com", quoteId, () => {
+        received.push(quoteId);
+      });
+    }
+
+    transport.emit("https://mint.example.com", "open");
+    const startupFilters = transport.sent.map((entry) =>
+      "filters" in entry.request.params ? entry.request.params.filters : [],
+    );
+    expect(startupFilters.map((filters) => filters.length)).toEqual([50, 50, 1]);
+    expect(startupFilters.flat()).toEqual(quoteIds);
+
+    emitQuoteNotification(transport, "sub-1", "quote-49");
+    emitQuoteNotification(transport, "sub-2", "quote-50");
+    emitQuoteNotification(transport, "sub-3", "quote-100");
+    await Promise.resolve();
+    expect(received).toEqual(["quote-49", "quote-50", "quote-100"]);
+
+    transport.emit("https://mint.example.com", "close");
+    transport.emit("https://mint.example.com", "open");
+    const resubscriptionFilters = transport.sent.slice(3).map((entry) =>
+      "filters" in entry.request.params ? entry.request.params.filters : [],
+    );
+    expect(resubscriptionFilters.map((filters) => filters.length)).toEqual([
+      50, 50, 1,
+    ]);
+    expect(resubscriptionFilters.flat()).toEqual(quoteIds);
+  });
+
   test("routes a batched subscription by quote and keeps live additions individual", async () => {
     const transport = new FakeTransport();
     const received: string[] = [];
