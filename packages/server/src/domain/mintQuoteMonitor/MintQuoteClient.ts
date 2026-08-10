@@ -58,6 +58,36 @@ const PAYLOAD_STATES = new Set<MintQuotePayloadState>([
   "PENDING",
 ]);
 
+const MAX_LOGGED_RESPONSE_BODY_LENGTH = 2_000;
+
+function mintResponseError(
+  message: string,
+  response: Response,
+  body: string,
+  cause?: unknown,
+): Error {
+  const truncated = body.length > MAX_LOGGED_RESPONSE_BODY_LENGTH;
+  const bodyPreview = truncated
+    ? `${body.slice(0, MAX_LOGGED_RESPONSE_BODY_LENGTH)}…`
+    : body;
+  const status = response.statusText
+    ? `${response.status} ${response.statusText}`
+    : String(response.status);
+  const causeMessage =
+    cause instanceof Error
+      ? `; cause: ${cause.message}`
+      : cause === undefined
+        ? ""
+        : `; cause: ${String(cause)}`;
+  const truncationNotice = truncated
+    ? ` (truncated from ${body.length} characters)`
+    : "";
+
+  return new Error(
+    `${message}; HTTP ${status}; response body: ${bodyPreview}${truncationNotice}${causeMessage}`,
+  );
+}
+
 export function isMintQuotePayload(value: unknown): value is MintQuotePayload {
   if (!value || typeof value !== "object") return false;
   const payload = value as Record<string, unknown>;
@@ -111,7 +141,7 @@ export class FetchMintQuoteClient implements MintQuoteClient {
           if (response.status === 429 || response.status >= 500) {
             return {
               kind: "mint_unavailable",
-              cause: new Error(`Mint returned HTTP ${response.status}`),
+              cause: mintResponseError("Mint request failed", response, body),
             };
           }
           if (response.status === 400 && this.isQuoteNotFound(body)) {
@@ -120,7 +150,7 @@ export class FetchMintQuoteClient implements MintQuoteClient {
           if (!response.ok) {
             return {
               kind: "invalid_response",
-              cause: new Error(`Mint returned HTTP ${response.status}`),
+              cause: mintResponseError("Mint request failed", response, body),
             };
           }
 
@@ -128,14 +158,24 @@ export class FetchMintQuoteClient implements MintQuoteClient {
           try {
             data = JSON.parse(body);
           } catch (cause) {
-            return { kind: "invalid_response", cause };
+            return {
+              kind: "invalid_response",
+              cause: mintResponseError(
+                "Mint quote response was not valid JSON",
+                response,
+                body,
+                cause,
+              ),
+            };
           }
 
           if (!isMintQuotePayload(data)) {
             return {
               kind: "invalid_response",
-              cause: new Error(
+              cause: mintResponseError(
                 "Mint quote response did not match the expected shape",
+                response,
+                body,
               ),
             };
           }
@@ -196,13 +236,13 @@ export class FetchMintQuoteClient implements MintQuoteClient {
       if (response.status === 429 || response.status >= 500) {
         return {
           kind: "mint_unavailable",
-          cause: new Error(`Mint returned HTTP ${response.status}`),
+          cause: mintResponseError("Mint batch request failed", response, body),
         };
       }
       if (!response.ok) {
         return {
           kind: "invalid_response",
-          cause: new Error(`Mint returned HTTP ${response.status}`),
+          cause: mintResponseError("Mint batch request failed", response, body),
         };
       }
 
@@ -210,12 +250,24 @@ export class FetchMintQuoteClient implements MintQuoteClient {
       try {
         data = JSON.parse(body);
       } catch (cause) {
-        return { kind: "invalid_response", cause };
+        return {
+          kind: "invalid_response",
+          cause: mintResponseError(
+            "Mint batch response was not valid JSON",
+            response,
+            body,
+            cause,
+          ),
+        };
       }
       if (!Array.isArray(data) || data.length !== batch.length) {
         return {
           kind: "invalid_response",
-          cause: new Error("Mint batch quote response length did not match request"),
+          cause: mintResponseError(
+            "Mint batch quote response length did not match request",
+            response,
+            body,
+          ),
         };
       }
       for (let index = 0; index < data.length; index += 1) {
@@ -223,8 +275,10 @@ export class FetchMintQuoteClient implements MintQuoteClient {
         if (!isMintQuotePayload(payload) || payload.quote !== batch[index]) {
           return {
             kind: "invalid_response",
-            cause: new Error(
+            cause: mintResponseError(
               "Mint batch quote response did not match the requested order",
+              response,
+              body,
             ),
           };
         }
@@ -263,7 +317,7 @@ export class FetchMintQuoteClient implements MintQuoteClient {
     if (response.status === 429 || response.status >= 500) {
       return {
         kind: "mint_unavailable",
-        cause: new Error(`Mint returned HTTP ${response.status}`),
+        cause: mintResponseError("Mint info request failed", response, body),
       };
     }
     if (!response.ok) return { kind: "unsupported" };
@@ -272,7 +326,15 @@ export class FetchMintQuoteClient implements MintQuoteClient {
     try {
       data = JSON.parse(body);
     } catch (cause) {
-      return { kind: "invalid_response", cause };
+      return {
+        kind: "invalid_response",
+        cause: mintResponseError(
+          "Mint info response was not valid JSON",
+          response,
+          body,
+          cause,
+        ),
+      };
     }
     if (!data || typeof data !== "object") return { kind: "unsupported" };
     const nuts = (data as Record<string, unknown>).nuts;

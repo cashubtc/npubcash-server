@@ -51,6 +51,11 @@ interface MonitorLogger {
   error(message: string, meta?: Record<string, unknown>): unknown;
 }
 
+function loggableCause(cause: unknown): unknown {
+  if (!(cause instanceof Error)) return cause;
+  return { name: cause.name, message: cause.message };
+}
+
 interface DefaultMintQuoteMonitorOptions {
   store: MintQuoteMonitorStore;
   client: MintQuoteClient;
@@ -224,7 +229,7 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
     } catch (cause) {
       if (!this.stopped) {
         try {
-          await this.openCircuit(session, "mint_unavailable");
+          await this.openCircuit(session, "mint_unavailable", cause);
         } catch (persistCause) {
           this.logger?.error(
             "[QuoteMonitor] Unexpected startup check failure",
@@ -256,13 +261,17 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
     if (result.kind === "invalid_response") {
       this.logger?.warn(
         "[QuoteMonitor] NUT-29 startup check failed; using individual checks",
-        { mintUrl: session.mintUrl, count: entries.length, cause: result.cause },
+        {
+          mintUrl: session.mintUrl,
+          count: entries.length,
+          cause: loggableCause(result.cause),
+        },
       );
       return;
     }
     if (result.kind === "mint_unavailable") {
       try {
-        await this.openCircuit(session, "mint_unavailable");
+        await this.openCircuit(session, "mint_unavailable", result.cause);
       } catch (cause) {
         this.logger?.error(
           "[QuoteMonitor] Failed to persist startup batch retry",
@@ -395,7 +404,7 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
         {
           mintUrl: entry.mintUrl,
           quoteId: entry.quote.quoteId,
-          cause,
+          cause: loggableCause(cause),
         },
       );
     }
@@ -591,7 +600,7 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
   ): Promise<boolean> {
     if (result.kind === "mint_unavailable") {
       entry.nextCheckAt = this.clock.now().getTime();
-      await this.openCircuit(session, "mint_unavailable");
+      await this.openCircuit(session, "mint_unavailable", result.cause);
       return false;
     }
 
@@ -611,7 +620,7 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
       return true;
     }
     if (result.kind === "invalid_response") {
-      await this.deferInvalidResponse(entry);
+      await this.deferInvalidResponse(entry, result.cause);
       return true;
     }
 
@@ -622,6 +631,7 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
   private async openCircuit(
     session: MintSession,
     category: MintRetryErrorCategory,
+    cause?: unknown,
   ): Promise<void> {
     const now = this.clock.now();
     const failureCount = (session.retry?.failureCount ?? 0) + 1;
@@ -646,6 +656,7 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
       failureCount,
       nextAttemptAt: retry.nextAttemptAt.toISOString(),
       category,
+      ...(cause === undefined ? {} : { cause: loggableCause(cause) }),
     });
   }
 
@@ -699,7 +710,10 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
     });
   }
 
-  private async deferInvalidResponse(entry: WatchedQuote): Promise<void> {
+  private async deferInvalidResponse(
+    entry: WatchedQuote,
+    cause?: unknown,
+  ): Promise<void> {
     entry.invalidResponseCount += 1;
     const schedule =
       entry.phase === "active"
@@ -714,6 +728,7 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
       mintUrl: entry.mintUrl,
       quoteId: entry.quote.quoteId,
       nextCheckAt: new Date(entry.nextCheckAt).toISOString(),
+      ...(cause === undefined ? {} : { cause: loggableCause(cause) }),
     });
   }
 
