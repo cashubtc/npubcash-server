@@ -266,7 +266,7 @@ describe("env.ts", () => {
     expect(() => getSecretKeyFromEnv()).toThrow("Could not find MNEMONIC");
   });
 
-  test("getMintQuoteMonitorConfigFromEnv parses retry policy overrides", () => {
+  test("getMintQuoteMonitorConfigFromEnv retains deprecated retry settings for rollback", () => {
     delete process.env.MINT_QUOTE_ACTIVE_POLL_MS;
     delete process.env.MINT_QUOTE_RATE_LIMIT_CAPACITY;
     delete process.env.MINT_QUOTE_RATE_LIMIT_REFILL_PER_MINUTE;

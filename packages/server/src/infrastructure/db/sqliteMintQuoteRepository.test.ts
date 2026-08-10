@@ -59,34 +59,107 @@ describe("SqliteMintQuoteRepository", () => {
     expect(await repository.getActiveUnpaidQuotes(at)).toEqual([active]);
   });
 
-  test("returns expired unpaid quotes as recoverable", async () => {
-    const expired = await repository.create({
+  test("claims due unpaid quotes oldest-first and advances their polling timestamp", async () => {
+    const expiresAt = new Date("2026-08-10T13:00:00.000Z");
+    const nullTimestamp = await repository.create({
       mintUrl: "https://mint.example.com",
-      paymentRequest: "lnbc-expired",
+      paymentRequest: "lnbc-null",
       unit: "sat",
-      quoteId: "expired-quote",
-      expiresAt: new Date(Date.now() - 60_000),
+      quoteId: "null-timestamp",
+      expiresAt,
       amount: 1,
       pubkey: "pubkey",
       locked: false,
     });
-    await repository.create({
+    const oldestLowId = await repository.create({
       mintUrl: "https://mint.example.com",
-      paymentRequest: "lnbc-future",
+      paymentRequest: "lnbc-oldest-low",
       unit: "sat",
-      quoteId: "future-quote",
-      expiresAt: new Date(Date.now() + 60_000),
+      quoteId: "oldest-low",
+      expiresAt,
       amount: 1,
       pubkey: "pubkey",
       locked: false,
     });
+    const oldestHighId = await repository.create({
+      mintUrl: "https://mint.example.com",
+      paymentRequest: "lnbc-oldest-high",
+      unit: "sat",
+      quoteId: "oldest-high",
+      expiresAt,
+      amount: 1,
+      pubkey: "pubkey",
+      locked: false,
+    });
+    const recent = await repository.create({
+      mintUrl: "https://mint.example.com",
+      paymentRequest: "lnbc-recent",
+      unit: "sat",
+      quoteId: "recent",
+      expiresAt,
+      amount: 1,
+      pubkey: "pubkey",
+      locked: false,
+    });
+    const paid = await repository.create({
+      mintUrl: "https://mint.example.com",
+      paymentRequest: "lnbc-paid",
+      unit: "sat",
+      quoteId: "paid",
+      expiresAt,
+      amount: 1,
+      pubkey: "pubkey",
+      locked: false,
+    });
+    await adapter.query(
+      "UPDATE mint_quotes SET last_polled_at = ? WHERE id IN (?, ?)",
+      ["2026-08-10T11:00:00.000Z", oldestLowId.id, oldestHighId.id],
+    );
+    await adapter.query(
+      "UPDATE mint_quotes SET last_polled_at = ? WHERE id = ?",
+      ["2026-08-10T11:59:59.000Z", recent.id],
+    );
+    await repository.transitionState({
+      id: paid.id,
+      from: ["UNPAID"],
+      to: "PAID",
+      paidAt: new Date("2026-08-10T11:30:00.000Z"),
+    });
 
-    const recoverableQuotes = await repository.getRecoverableQuotes();
+    const claimedAt = new Date("2026-08-10T12:00:00.000Z");
+    const claimed = await repository.takeDueForPolling({
+      dueBefore: new Date("2026-08-10T11:30:00.000Z"),
+      polledAt: claimedAt,
+      limit: 3,
+    });
 
-    expect(recoverableQuotes.map((quote) => quote.id)).toContain(expired.id);
+    expect(claimed.map((quote) => quote.id)).toEqual([
+      nullTimestamp.id,
+      oldestLowId.id,
+      oldestHighId.id,
+    ]);
+    const rows = await adapter.query<{
+      id: number;
+      last_polled_at: string | null;
+    }>("SELECT id, last_polled_at FROM mint_quotes ORDER BY id");
+    expect(
+      rows.rows
+        .filter((row) => claimed.some((quote) => quote.id === row.id))
+        .map((row) => row.last_polled_at),
+    ).toEqual([
+      claimedAt.toISOString(),
+      claimedAt.toISOString(),
+      claimedAt.toISOString(),
+    ]);
+    expect(rows.rows.find((row) => row.id === recent.id)?.last_polled_at).toBe(
+      "2026-08-10T11:59:59.000Z",
+    );
+    expect(
+      rows.rows.find((row) => row.id === paid.id)?.last_polled_at,
+    ).toBeNull();
   });
 
-  test("persists monitoring deadlines and conditional financial transitions", async () => {
+  test("persists polling order and conditional financial transitions", async () => {
     const quote = await repository.create({
       mintUrl: "HTTPS://MINT.EXAMPLE.COM/",
       paymentRequest: "lnbc1",
@@ -98,38 +171,21 @@ describe("SqliteMintQuoteRepository", () => {
       locked: false,
     });
 
-    await repository.saveMintRetryState({
-      mintUrl: "https://mint.example.com",
-      failureCount: 2,
-      nextAttemptAt: new Date("2026-08-03T12:05:00.000Z"),
-      lastFailureAt: new Date("2026-08-03T12:04:00.000Z"),
-      lastErrorCategory: "mint_unavailable",
-    });
-    await repository.saveQuoteReconciliationState({
-      mintQuoteId: quote.id,
-      lastCheckedAt: new Date("2026-08-03T12:01:00.000Z"),
-      nextCheckAt: new Date("2026-08-03T13:01:00.000Z"),
-      notFoundCount: 1,
-      lastResult: "not_found",
-    });
-
     const recreated = new SqliteMintQuoteRepository(adapter);
     expect(
-      await recreated.getMintRetryState("https://mint.example.com"),
-    ).toEqual({
-      mintUrl: "https://mint.example.com",
-      failureCount: 2,
-      nextAttemptAt: new Date("2026-08-03T12:05:00.000Z"),
-      lastFailureAt: new Date("2026-08-03T12:04:00.000Z"),
-      lastErrorCategory: "mint_unavailable",
-    });
-    expect(await recreated.getQuoteReconciliationState(quote.id)).toEqual({
-      mintQuoteId: quote.id,
-      lastCheckedAt: new Date("2026-08-03T12:01:00.000Z"),
-      nextCheckAt: new Date("2026-08-03T13:01:00.000Z"),
-      notFoundCount: 1,
-      lastResult: "not_found",
-    });
+      await recreated.takeDueForPolling({
+        dueBefore: new Date("2026-08-03T11:00:00.000Z"),
+        polledAt: new Date("2026-08-03T12:00:00.000Z"),
+        limit: 1,
+      }),
+    ).toEqual([quote]);
+    expect(
+      await recreated.takeDueForPolling({
+        dueBefore: new Date("2026-08-03T11:59:59.999Z"),
+        polledAt: new Date("2026-08-03T12:00:01.000Z"),
+        limit: 1,
+      }),
+    ).toEqual([]);
 
     const paidAt = new Date("2026-08-03T12:02:00.000Z");
     const expired = await recreated.transitionState({
@@ -153,6 +209,5 @@ describe("SqliteMintQuoteRepository", () => {
     expect(paid?.state).toBe("PAID");
     expect(paid?.paidAt).toEqual(paidAt);
     expect(raced).toBeUndefined();
-    expect(await recreated.getRecoverableQuotes()).toEqual([]);
   });
 });

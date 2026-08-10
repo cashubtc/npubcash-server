@@ -122,7 +122,6 @@ test("keeps an unregistered and unblocked npub available for discovery", async (
 test("publishes a persisted quote and returns despite a failing event listener", async () => {
   const communicator = getCommunicatorService();
   const originalCreateMintQuote = communicator.createMintQuote;
-  const originalCreateQuoteSubscription = communicator.createQuoteSubscription;
   const quoteId = "created-quote";
   let eventQuoteId: number | undefined;
   let persistedBeforePolling = false;
@@ -154,10 +153,6 @@ test("publishes a persisted quote and returns despite a failing event listener",
     amount: 1,
     locked: false,
   });
-  communicator.createQuoteSubscription = async (mintQuote) => {
-    expect(eventQuoteId).toBe(mintQuote.id);
-  };
-
   try {
     const result = await invokeController(
       "1000",
@@ -168,9 +163,9 @@ test("publishes a persisted quote and returns despite a failing event listener",
     expect(result.error).toBeUndefined();
     expect(result.payload).toEqual({ pr: "lnbc-created", routes: [] });
     expect(persistedBeforePolling).toBe(true);
+    expect(eventQuoteId).toBeNumber();
   } finally {
     communicator.createMintQuote = originalCreateMintQuote;
-    communicator.createQuoteSubscription = originalCreateQuoteSubscription;
     unsubscribeFailure();
     unsubscribeObservation();
   }

@@ -233,4 +233,29 @@ export const migrations: Migration[] = [
       ],
     },
   },
+  {
+    id: "004_mint_quote_polling_queue",
+    sql: {
+      postgres: [
+        "ALTER TABLE mint_quotes ADD COLUMN IF NOT EXISTS last_polled_at TIMESTAMPTZ",
+        "CREATE INDEX IF NOT EXISTS idx_mint_quotes_polling_queue ON mint_quotes(state, last_polled_at, id)",
+      ],
+      sqlite: [],
+    },
+    execFn: async (db) => {
+      if (db.type !== "sqlite") return;
+
+      const columns = await db.query<{ name: string }>(
+        "PRAGMA table_info(mint_quotes)",
+      );
+      if (!columns.rows.some((column) => column.name === "last_polled_at")) {
+        await db.query(
+          "ALTER TABLE mint_quotes ADD COLUMN last_polled_at TEXT",
+        );
+      }
+      await db.query(
+        "CREATE INDEX IF NOT EXISTS idx_mint_quotes_polling_queue ON mint_quotes(state, last_polled_at, id)",
+      );
+    },
+  },
 ];

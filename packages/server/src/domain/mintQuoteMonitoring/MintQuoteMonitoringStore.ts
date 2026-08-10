@@ -10,8 +10,15 @@ export interface MintQuoteStateTransition {
   paidAt?: Date;
 }
 
+export interface TakeDueForPollingInput {
+  dueBefore: Date;
+  polledAt: Date;
+  limit: number;
+}
+
 export interface MintQuoteMonitoringStore {
   getActiveUnpaidQuotes(now: Date): Promise<MintQuote[]>;
+  takeDueForPolling(input: TakeDueForPollingInput): Promise<MintQuote[]>;
   getById(id: number): Promise<MintQuote | undefined>;
   transitionState(
     transition: MintQuoteStateTransition,

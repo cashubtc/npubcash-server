@@ -1,6 +1,6 @@
 # Mint quote monitoring vertical-slice roadmap
 
-Status: Slices 1–2 implemented; Slices 3–4 planned.
+Status: Slices 1–3 implemented; Slice 4 gated on production soak.
 
 This roadmap delivers the [mint quote monitoring implementation map](mint-quote-monitoring-implementation-map.md) and [ADR 0001](adr/0001-centralize-mint-quote-observations.md) as independently deployable vertical slices. Each slice crosses transport, domain, persistence, events, application wiring, and tests as needed to put a real production path through the new design.
 
@@ -20,7 +20,7 @@ This roadmap delivers the [mint quote monitoring implementation map](mint-quote-
 | --- | --- | --- | --- |
 | 1. One observation decision path (implemented) | Existing transports reconcile state through the centralized handler and emit post-commit events | None | Large |
 | 2. Standalone WebSocket path (implemented) | Mint WebSocket lifecycle and observations no longer belong to the monitor | Slice 1 | Medium |
-| 3. Oldest-first polling path | Database-backed polling replaces the remaining monitor and removes it | Slice 2 | Large |
+| 3. Oldest-first polling path (implemented) | Database-backed polling replaces the remaining monitor and removes it | Slice 2 | Large |
 | 4. Retire legacy operations | Obsolete retry storage and configuration are removed after the new paths soak | Slice 3 plus production validation | Small |
 
 ```mermaid

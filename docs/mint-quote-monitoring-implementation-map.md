@@ -1,6 +1,6 @@
 # Mint quote monitoring implementation map
 
-Status: implementation in progress; roadmap Slices 1–2 complete.
+Status: implementation in progress; roadmap Slices 1–3 complete and Slice 4 awaits production soak.
 
 This map implements [ADR 0001](adr/0001-centralize-mint-quote-observations.md). It replaces the monolithic `DefaultMintQuoteMonitor` with separate polling and WebSocket modules feeding one Quote Observation handler. The database remains the source of truth; process-local events notify reactions only after a committed state change.
 
@@ -293,7 +293,7 @@ The transport files may move under `mintQuoteMonitoring/` after behavior is stab
 - `packages/server/src/domain/communicator/CommunicatorService.ts`: remove the monitor dependency and monitoring lifecycle forwarding.
 - `packages/server/src/config.ts`: construct the handler and both transport modules, register reactions, and expose application lifecycle methods.
 - `packages/server/src/index.ts`: start monitoring directly through application lifecycle rather than through `CommunicatorService`.
-- `packages/server/src/config/env.ts`, `packages/server/src/config/env.test.ts`, `packages/server/src/config/index.ts`, and `example.env`: keep poll interval, request timeout, request budget, and WebSocket reconnect settings; remove retry schedules and jitter settings.
+- `packages/server/src/config/env.ts`, `packages/server/src/config/env.test.ts`, `packages/server/src/config/index.ts`, and `example.env`: keep poll interval, request timeout, request budget, and WebSocket reconnect settings; the old retry schedules and jitter are deprecated during the Slice 3 rollback window and removed in Slice 4.
 - `docs/deploy.md`: replace the existing circuit/reconciliation description with the queue, WebSocket fallback, and single-instance event semantics.
 
 ### Remove after cutover

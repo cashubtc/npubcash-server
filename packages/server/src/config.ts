@@ -8,10 +8,13 @@ import { eventBus } from "./events";
 import { Repositories } from "./infrastructure/db/repositoryFactory";
 import { UserRepository } from "./domain/user/userRepository";
 import { MintQuoteRepository } from "./domain/mintQuote/MintQuoteRepository";
-import { DefaultMintQuoteMonitor } from "./domain/mintQuoteMonitor/MintQuoteMonitor";
 import { FetchMintQuoteClient } from "./domain/mintQuoteMonitor/MintQuoteClient";
 import { PerMintRequestBudget } from "./infrastructure/MintRequestBudget";
 import { DefaultQuoteObservationHandler } from "./domain/mintQuoteMonitoring/QuoteObservationHandler";
+import {
+  DefaultQuotePollingService,
+  type QuotePollingService,
+} from "./domain/mintQuoteMonitoring/QuotePollingService";
 import {
   DefaultQuoteWebSocketService,
   type QuoteWebSocketService,
@@ -33,6 +36,7 @@ interface AppServices {
   proofService: ProofService;
   mintService: MintService;
   recipientBlocks: RecipientBlocks;
+  quotePollingService: QuotePollingService;
   quoteWebSocketService: QuoteWebSocketService;
 }
 
@@ -61,16 +65,15 @@ export async function initializeAppServices(
     events: eventBus,
     logger,
   });
-  const mintQuoteMonitor = new DefaultMintQuoteMonitor({
-    store: repos.mintQuoteMonitorStore,
+  const quotePollingService = new DefaultQuotePollingService({
+    store: repos.mintQuoteMonitoringStore,
     client: new FetchMintQuoteClient({
       timeoutMs: config.mintQuoteMonitor.requestTimeoutMs,
       requestBudget: mintRequestBudget,
     }),
-    events: eventBus,
-    policy: config.mintQuoteMonitor,
+    handler: quoteObservationHandler,
+    pollIntervalMs: config.mintQuoteMonitor.activePollIntervalMs,
     logger,
-    observationHandler: quoteObservationHandler,
   });
   const recipientBlocks = await createRecipientBlocks(
     repos.recipientBlockRepository,
@@ -79,10 +82,11 @@ export async function initializeAppServices(
     userRepository: repos.userRepository,
     mintQuoteRepository: repos.mintQuoteRepository,
     userService: new UserService(repos.userRepository),
-    communicatorService: new CommunicatorService(mintQuoteMonitor),
+    communicatorService: new CommunicatorService(),
     proofService: new ProofService(repos.proofRepository),
     mintService: new MintService(repos.mintRepository),
     recipientBlocks,
+    quotePollingService,
     quoteWebSocketService,
   };
   return appServices;
@@ -127,7 +131,7 @@ export async function startMintQuoteMonitoring(): Promise<void> {
   const services = getAppServices();
   await services.quoteWebSocketService.start();
   try {
-    await services.communicatorService.startQuoteMonitoring();
+    await services.quotePollingService.start();
   } catch (cause) {
     await services.quoteWebSocketService.stop();
     throw cause;
@@ -137,7 +141,7 @@ export async function startMintQuoteMonitoring(): Promise<void> {
 export async function stopMintQuoteMonitoring(): Promise<void> {
   const services = getAppServices();
   try {
-    await services.communicatorService.shutdown();
+    await services.quotePollingService.stop();
   } finally {
     await services.quoteWebSocketService.stop();
   }

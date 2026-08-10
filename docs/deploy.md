@@ -87,34 +87,34 @@ types must agree.
 
 ### Mint quote monitoring
 
-Unpaid quotes remain recoverable after invoice expiry until the mint returns an
-authoritative quote state. Retry deadlines are stored in the database, so a
-restart does not immediately retry every unavailable mint.
+The server keeps mint WebSocket subscriptions for active quotes and also polls
+due `UNPAID` quotes from a persistent database queue. Polling selects rows by
+oldest `last_polled_at` (never-polled rows first), marks a bounded batch before
+making requests, and includes expired unpaid quotes until the mint returns an
+authoritative state. A restart resumes from those persisted polling timestamps.
 
-The defaults can be tuned with the following values:
+The active controls are:
 
 ```env
 MINT_QUOTE_ACTIVE_POLL_MS=20000
-MINT_QUOTE_ACTIVE_RETRY_MS=5000,10000,30000,60000
-MINT_QUOTE_RECONCILIATION_RETRY_MS=60000,300000,1800000,7200000,21600000
-MINT_QUOTE_RETRY_JITTER_RATIO=0.2
 MINT_QUOTE_REQUEST_TIMEOUT_MS=10000
 MINT_QUOTE_RATE_LIMIT_CAPACITY=1
 MINT_QUOTE_RATE_LIMIT_REFILL_PER_MINUTE=20
 MINT_QUOTE_WS_RECONNECT_MS=180000
 ```
 
-Active retry and reconciliation retry values are comma-separated schedules;
-the final value is reused as the cap. A reachable mint that reports a missing
-quote is treated as authoritative and the local quote is marked expired.
-At startup, all due unpaid quotes are staged without timers or WebSocket
-subscriptions and grouped by mint. Mints advertising NUT-29 support for
-`bolt11` are checked through the batch endpoint, split by the advertised
-`max_batch_size` when present. Terminal results are persisted before WebSocket
-subscriptions are created for surviving active quotes. Unsupported or invalid
-batch responses activate the individual-check fallback, while mint-wide
-failures retain the normal circuit backoff. Startup reconciliation runs
-independently per mint, so a slow mint does not delay subscriptions for others.
+`MINT_QUOTE_ACTIVE_RETRY_MS`, `MINT_QUOTE_RECONCILIATION_RETRY_MS`, and
+`MINT_QUOTE_RETRY_JITTER_RATIO` are deprecated and ignored by the runtime. They
+are parsed temporarily so a Slice 3 deployment can be rolled back to the
+previous monitor without changing its environment. They will be removed after
+the production soak.
+
+WebSocket recovery starts before an immediate polling round. Polling groups the
+claimed rows by mint, and mints run independently so one slow mint does not
+delay another. Mints advertising NUT-29 support for `bolt11` are checked through
+the batch endpoint, split by the advertised `max_batch_size` when present.
+Unsupported or invalid batch responses use individual checks. A reachable mint
+that reports a missing quote is authoritative and expires the local quote.
 All quote-monitor HTTP requests and WebSocket connection attempts pass through
 an independent token bucket for each mint. `MINT_QUOTE_RATE_LIMIT_CAPACITY`
 controls the maximum burst size and `MINT_QUOTE_RATE_LIMIT_REFILL_PER_MINUTE`
@@ -123,7 +123,10 @@ The safe defaults allow one immediate request followed by 20 requests per
 minute. This applies to mint-info discovery, NUT-29 batch chunks, and individual
 fallback checks and WebSocket connection attempts without coupling traffic to
 different mints.
-Run only one quote-monitoring server instance unless a database lease is added.
+
+Run only one application instance. The database is the source of truth for
+quote state, while `mintQuote.created` and `mintQuote.stateChanged` are
+best-effort, process-local events and are not delivered across instances.
 
 ### Fly.io and v2-to-v3 cutover
 

@@ -9,13 +9,9 @@ import {
 } from "@/domain/mintQuote/MintQuoteRepository";
 import { DatabaseAdapter } from "@/database/adapter";
 import {
-  MintQuoteMonitorStore,
-  MintRetryState,
-  QuoteReconciliationState,
-} from "@/domain/mintQuoteMonitor/MintQuoteMonitorStore";
-import {
   MintQuoteMonitoringStore,
   MintQuoteStateTransition,
+  TakeDueForPollingInput,
 } from "@/domain/mintQuoteMonitoring/MintQuoteMonitoringStore";
 
 type MintQuoteRow = {
@@ -32,29 +28,11 @@ type MintQuoteRow = {
   paid_at: string | null;
   serialized_zap_request: string | null;
   locked: number;
-};
-
-type MintRetryRow = {
-  mint_url: string;
-  failure_count: number;
-  next_attempt_at: string;
-  last_failure_at: string;
-  last_error_category: MintRetryState["lastErrorCategory"];
-};
-
-type QuoteReconciliationRow = {
-  mint_quote_id: number;
-  last_checked_at: string | null;
-  next_check_at: string;
-  not_found_count: number;
-  last_result: QuoteReconciliationState["lastResult"];
+  polling_order?: number;
 };
 
 export class SqliteMintQuoteRepository
-  implements
-    MintQuoteRepository,
-    MintQuoteMonitorStore,
-    MintQuoteMonitoringStore
+  implements MintQuoteRepository, MintQuoteMonitoringStore
 {
   constructor(private readonly db: DatabaseAdapter) {}
 
@@ -81,14 +59,6 @@ RETURNING *`;
     return this.castRowToQuote(res.rows[0]);
   }
 
-  async getRecoverableQuotes(): Promise<MintQuote[]> {
-    const res = await this.db.query<MintQuoteRow>(
-      `SELECT * FROM mint_quotes WHERE state = 'UNPAID'`,
-      []
-    );
-    return res.rows.map((r) => this.castRowToQuote(r));
-  }
-
   async getById(id: number): Promise<MintQuote | undefined> {
     const res = await this.db.query<MintQuoteRow>(
       "SELECT * FROM mint_quotes WHERE id = ?",
@@ -106,6 +76,40 @@ RETURNING *`;
       [now.toISOString()],
     );
     return res.rows.map((row) => this.castRowToQuote(row));
+  }
+
+  async takeDueForPolling(
+    input: TakeDueForPollingInput,
+  ): Promise<MintQuote[]> {
+    if (!Number.isInteger(input.limit) || input.limit <= 0) return [];
+
+    const res = await this.db.query<MintQuoteRow>(
+      `WITH due AS (
+         SELECT id,
+                row_number() OVER (
+                  ORDER BY last_polled_at IS NOT NULL, last_polled_at, id
+                ) AS polling_order
+         FROM mint_quotes
+         WHERE state = 'UNPAID'
+           AND (last_polled_at IS NULL OR last_polled_at <= ?)
+         ORDER BY last_polled_at IS NOT NULL, last_polled_at, id
+         LIMIT ?
+       )
+       UPDATE mint_quotes
+       SET last_polled_at = ?
+       WHERE id IN (SELECT id FROM due)
+       RETURNING *,
+         (SELECT polling_order FROM due WHERE due.id = mint_quotes.id) AS polling_order`,
+      [
+        input.dueBefore.toISOString(),
+        input.limit,
+        input.polledAt.toISOString(),
+      ],
+    );
+
+    return res.rows
+      .sort((a, b) => Number(a.polling_order) - Number(b.polling_order))
+      .map((row) => this.castRowToQuote(row));
   }
 
   async transitionState(
@@ -133,102 +137,6 @@ RETURNING *`;
     );
     const row = res.rows[0];
     return row ? this.castRowToQuote(row) : undefined;
-  }
-
-  async getMintRetryState(
-    mintUrl: string,
-  ): Promise<MintRetryState | undefined> {
-    const res = await this.db.query<MintRetryRow>(
-      "SELECT * FROM mint_quote_mint_retries WHERE mint_url = ?",
-      [mintUrl],
-    );
-    const row = res.rows[0];
-    return row
-      ? {
-          mintUrl: row.mint_url,
-          failureCount: row.failure_count,
-          nextAttemptAt: new Date(row.next_attempt_at),
-          lastFailureAt: new Date(row.last_failure_at),
-          lastErrorCategory: row.last_error_category,
-        }
-      : undefined;
-  }
-
-  async saveMintRetryState(state: MintRetryState): Promise<void> {
-    await this.db.query(
-      `INSERT INTO mint_quote_mint_retries
-         (mint_url, failure_count, next_attempt_at, last_failure_at, last_error_category)
-       VALUES (?, ?, ?, ?, ?)
-       ON CONFLICT(mint_url) DO UPDATE SET
-         failure_count = excluded.failure_count,
-         next_attempt_at = excluded.next_attempt_at,
-         last_failure_at = excluded.last_failure_at,
-         last_error_category = excluded.last_error_category`,
-      [
-        state.mintUrl,
-        state.failureCount,
-        state.nextAttemptAt.toISOString(),
-        state.lastFailureAt.toISOString(),
-        state.lastErrorCategory,
-      ],
-    );
-  }
-
-  async clearMintRetryState(mintUrl: string): Promise<void> {
-    await this.db.query(
-      "DELETE FROM mint_quote_mint_retries WHERE mint_url = ?",
-      [mintUrl],
-    );
-  }
-
-  async getQuoteReconciliationState(
-    mintQuoteId: number,
-  ): Promise<QuoteReconciliationState | undefined> {
-    const res = await this.db.query<QuoteReconciliationRow>(
-      "SELECT * FROM mint_quote_reconciliation WHERE mint_quote_id = ?",
-      [mintQuoteId],
-    );
-    const row = res.rows[0];
-    return row
-      ? {
-          mintQuoteId: row.mint_quote_id,
-          lastCheckedAt: row.last_checked_at
-            ? new Date(row.last_checked_at)
-            : undefined,
-          nextCheckAt: new Date(row.next_check_at),
-          notFoundCount: row.not_found_count,
-          lastResult: row.last_result,
-        }
-      : undefined;
-  }
-
-  async saveQuoteReconciliationState(
-    state: QuoteReconciliationState,
-  ): Promise<void> {
-    await this.db.query(
-      `INSERT INTO mint_quote_reconciliation
-         (mint_quote_id, last_checked_at, next_check_at, not_found_count, last_result)
-       VALUES (?, ?, ?, ?, ?)
-       ON CONFLICT(mint_quote_id) DO UPDATE SET
-         last_checked_at = excluded.last_checked_at,
-         next_check_at = excluded.next_check_at,
-         not_found_count = excluded.not_found_count,
-         last_result = excluded.last_result`,
-      [
-        state.mintQuoteId,
-        state.lastCheckedAt?.toISOString() ?? null,
-        state.nextCheckAt.toISOString(),
-        state.notFoundCount,
-        state.lastResult,
-      ],
-    );
-  }
-
-  async clearQuoteReconciliationState(mintQuoteId: number): Promise<void> {
-    await this.db.query(
-      "DELETE FROM mint_quote_reconciliation WHERE mint_quote_id = ?",
-      [mintQuoteId],
-    );
   }
 
   async getUserHistory(

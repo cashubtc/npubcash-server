@@ -89,7 +89,6 @@ export async function lnurlController(
     });
 
     eventBus.emit("mintQuote.created", mintQuote);
-    await communicatorService.createQuoteSubscription(mintQuote, logger);
 
     res.json({
       pr: request,
