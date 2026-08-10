@@ -1,6 +1,10 @@
 import { nip19 } from "nostr-tools";
 import { UserRepository } from "./userRepository";
-import { BadRequestError, NotFoundError } from "@/errors";
+import {
+  BadRequestError,
+  InvalidRecipientError,
+  NotFoundError,
+} from "@/errors";
 import { User, UserWithName } from "./user";
 import { usernameRegex } from "@/constants/regex";
 import { config } from "@/config/index";
@@ -15,8 +19,13 @@ export class UserService {
     mintUrl: string;
     lockQuote: boolean;
   }> {
-    if (userParam.startsWith("npub")) {
-      const decoded = nip19.decode(userParam as `npub1${string}`);
+    if (/^npub1/i.test(userParam)) {
+      let decoded: ReturnType<typeof nip19.decode>;
+      try {
+        decoded = nip19.decode(userParam as `npub1${string}`);
+      } catch {
+        throw new InvalidRecipientError();
+      }
       const userObj = await this.userRepo.getUserByPubkey(decoded.data);
       return {
         username: userParam,

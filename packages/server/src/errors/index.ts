@@ -30,6 +30,12 @@ export class BadRequestError extends ApiError {
   }
 }
 
+export class InvalidRecipientError extends ApiError {
+  constructor(message = "Invalid recipient.") {
+    super(400, message);
+  }
+}
+
 export class InternalError extends ApiError {
   constructor(message = "Internal Server Error") {
     super(500, message);
