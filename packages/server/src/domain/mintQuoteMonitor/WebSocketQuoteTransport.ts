@@ -6,6 +6,7 @@ import type {
 } from "@/domain/communicator/infra/types";
 import WebSocket from "ws";
 import type { Logger } from "winston";
+import type { MintRequestBudget } from "@/infrastructure/MintRequestBudget";
 import {
   isMintQuotePayload,
   type MintQuotePayload,
@@ -30,6 +31,7 @@ interface WebSocketQuoteTransportOptions {
   logger?: Logger;
   createSubscriptionId?: () => string;
   periodicReconnectMs?: number;
+  requestBudget?: MintRequestBudget;
 }
 
 export class WebSocketQuoteTransport implements ActiveQuoteTransport {
@@ -51,6 +53,7 @@ export class WebSocketQuoteTransport implements ActiveQuoteTransport {
         {
           disableReconnect: false,
           periodicReconnectMs: options.periodicReconnectMs ?? 180_000,
+          requestBudget: options.requestBudget,
         },
       );
   }

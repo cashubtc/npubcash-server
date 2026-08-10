@@ -307,7 +307,7 @@ export function getMintQuoteMonitorConfigFromEnv() {
       ),
       refillPerMinute: getPositiveNumberFromEnv(
         "MINT_QUOTE_RATE_LIMIT_REFILL_PER_MINUTE",
-        25,
+        20,
       ),
     },
     periodicReconnectMs: getPositiveNumberFromEnv(

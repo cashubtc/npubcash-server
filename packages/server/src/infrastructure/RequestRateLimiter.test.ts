@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { RequestRateLimiter } from "./RequestRateLimiter";
 
 describe("RequestRateLimiter", () => {
-  test("defaults to one-token capacity and 25 refills per minute", async () => {
+  test("defaults to one-token capacity and 20 refills per minute", async () => {
     let now = 0;
     const starts: number[] = [];
     const limiter = new RequestRateLimiter({
@@ -20,7 +20,7 @@ describe("RequestRateLimiter", () => {
     );
 
     expect(await Promise.all(requests)).toEqual([1, 2]);
-    expect(starts).toEqual([0, 2_400]);
+    expect(starts).toEqual([0, 3_000]);
   });
 
   test("starts with a full bucket and refills queued work FIFO", async () => {
