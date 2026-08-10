@@ -11,11 +11,12 @@ import type {
 } from "./MintQuoteClient";
 import {
   DefaultMintQuoteMonitor,
-  type ActiveQuoteTransport,
   type MonitorClock,
 } from "./MintQuoteMonitor";
 import { DefaultQuoteObservationHandler } from "@/domain/mintQuoteMonitoring/QuoteObservationHandler";
 import type { QuoteStateChange } from "@/domain/mintQuoteMonitoring/QuoteObservation";
+import { DefaultQuoteWebSocketService } from "@/domain/mintQuoteMonitoring/QuoteWebSocketService";
+import { EventEmitter, type Events } from "@/events";
 
 class FakeClock implements MonitorClock {
   private nextId = 1;
@@ -107,39 +108,6 @@ class FakeMintClient implements MintQuoteClient {
   }
 }
 
-class FakeActiveQuoteTransport implements ActiveQuoteTransport {
-  readonly callbacks = new Map<
-    string,
-    (payload: MintQuotePayload) => void | Promise<void>
-  >();
-  closeCount = 0;
-
-  watch(
-    mintUrl: string,
-    quoteId: string,
-    onPayload: (payload: MintQuotePayload) => void | Promise<void>,
-  ): () => void {
-    const key = `${mintUrl}::${quoteId}`;
-    this.callbacks.set(key, onPayload);
-    return () => {
-      this.callbacks.delete(key);
-      this.closeCount += 1;
-    };
-  }
-
-  stop(): void {
-    this.callbacks.clear();
-  }
-
-  async emit(
-    mintUrl: string,
-    quoteId: string,
-    payload: MintQuotePayload,
-  ): Promise<void> {
-    await this.callbacks.get(`${mintUrl}::${quoteId}`)?.(payload);
-  }
-}
-
 const paidPayload = (quoteId: string): MintQuotePayload => ({
   quote: quoteId,
   request: "lnbc1",
@@ -149,11 +117,13 @@ const paidPayload = (quoteId: string): MintQuotePayload => ({
 
 let db: SqliteAdapter;
 let store: SqliteMintQuoteRepository;
+let events: EventEmitter<Events>;
 
 beforeEach(async () => {
   db = new SqliteAdapter(":memory:");
   await runMigrations(db);
   store = new SqliteMintQuoteRepository(db);
+  events = new EventEmitter<Events>();
 });
 
 afterEach(async () => {
@@ -180,21 +150,26 @@ async function createQuote(
 type MonitorOptions = ConstructorParameters<
   typeof DefaultMintQuoteMonitor
 >[0];
-type TestMonitorOptions = Omit<MonitorOptions, "observationHandler"> & {
+type TestMonitorOptions = Omit<
+  MonitorOptions,
+  "events" | "observationHandler"
+> & {
   emittedChanges?: QuoteStateChange[];
 };
 
 function createMonitor(options: TestMonitorOptions): DefaultMintQuoteMonitor {
   const { emittedChanges, ...monitorOptions } = options;
+  if (emittedChanges) {
+    events.on("mintQuote.stateChanged", (change) => {
+      emittedChanges.push(change);
+    });
+  }
   return new DefaultMintQuoteMonitor({
     ...monitorOptions,
+    events,
     observationHandler: new DefaultQuoteObservationHandler({
       store,
-      events: {
-        emit: (_event, change) => {
-          emittedChanges?.push(change);
-        },
-      },
+      events,
       now: () => monitorOptions.clock?.now() ?? new Date(),
     }),
   });
@@ -220,11 +195,9 @@ describe("MintQuoteMonitor", () => {
     );
     const clock = new FakeClock(now);
     const emittedChanges: QuoteStateChange[] = [];
-    const activeTransport = new FakeActiveQuoteTransport();
     const client = new FakeMintClient(
       (_mintUrl, quoteId) => ({ kind: "found", payload: paidPayload(quoteId) }),
       (_mintUrl, quoteIds) => {
-        expect(activeTransport.callbacks.size).toBe(0);
         return {
           kind: "found",
           payloads: quoteIds.map((quoteId) =>
@@ -242,7 +215,6 @@ describe("MintQuoteMonitor", () => {
     const monitor = createMonitor({
       store,
       client,
-      activeTransport,
       clock,
       random: () => 0.5,
       emittedChanges,
@@ -262,12 +234,9 @@ describe("MintQuoteMonitor", () => {
       "expired-paid",
       "active-paid",
     ]);
-    expect([...activeTransport.callbacks.keys()]).toEqual([
-      "https://mint.example.com::active-unpaid",
-    ]);
   });
 
-  test("unsupported NUT-29 activates subscriptions and individual checks", async () => {
+  test("unsupported NUT-29 falls back to individual checks", async () => {
     const now = Date.parse("2026-08-03T12:00:00.000Z");
     await createQuote(
       "single-1",
@@ -280,7 +249,6 @@ describe("MintQuoteMonitor", () => {
       new Date(now + 60_000),
     );
     const clock = new FakeClock(now);
-    const activeTransport = new FakeActiveQuoteTransport();
     const client = new FakeMintClient((_mintUrl, quoteId) => ({
       kind: "found",
       payload: paidPayload(quoteId),
@@ -288,7 +256,6 @@ describe("MintQuoteMonitor", () => {
     const monitor = createMonitor({
       store,
       client,
-      activeTransport,
       clock,
       random: () => 0.5,
     });
@@ -297,17 +264,15 @@ describe("MintQuoteMonitor", () => {
 
     expect(client.batchCalls).toHaveLength(1);
     expect(client.calls).toEqual([]);
-    expect(activeTransport.callbacks.size).toBe(2);
 
     await clock.advanceBy(0);
     expect(client.calls.map((call) => call.quoteId).sort()).toEqual([
       "single-1",
       "single-2",
     ]);
-    expect(activeTransport.callbacks.size).toBe(0);
   });
 
-  test("a failed startup batch activates WebSockets but avoids HTTP fan-out", async () => {
+  test("a failed startup batch defers HTTP fallback until retry", async () => {
     const now = Date.parse("2026-08-03T12:00:00.000Z");
     await createQuote(
       "offline-1",
@@ -320,7 +285,6 @@ describe("MintQuoteMonitor", () => {
       new Date(now + 120_000),
     );
     const clock = new FakeClock(now);
-    const activeTransport = new FakeActiveQuoteTransport();
     const client = new FakeMintClient(
       (_mintUrl, quoteId) => ({ kind: "found", payload: paidPayload(quoteId) }),
       () => ({ kind: "mint_unavailable", cause: new Error("offline") }),
@@ -328,7 +292,6 @@ describe("MintQuoteMonitor", () => {
     const monitor = createMonitor({
       store,
       client,
-      activeTransport,
       clock,
       random: () => 0.5,
       policy: { activeRetryMs: [60_000] },
@@ -339,64 +302,52 @@ describe("MintQuoteMonitor", () => {
 
     expect(client.batchCalls).toHaveLength(1);
     expect(client.calls).toEqual([]);
-    expect(activeTransport.callbacks.size).toBe(2);
     await clock.advanceBy(1);
     expect(client.calls).toHaveLength(2);
-    expect(activeTransport.callbacks.size).toBe(0);
   });
 
-  test("a slow startup batch does not block subscriptions for another mint", async () => {
+  test("a WebSocket setup failure does not affect HTTP fallback", async () => {
     const now = Date.parse("2026-08-03T12:00:00.000Z");
     await createQuote(
-      "slow-quote",
-      "https://slow.example.com",
-      new Date(now + 60_000),
-    );
-    await createQuote(
-      "fast-quote",
-      "https://fast.example.com",
+      "http-fallback",
+      "https://mint.example.com",
       new Date(now + 60_000),
     );
     const clock = new FakeClock(now);
-    const activeTransport = new FakeActiveQuoteTransport();
-    let resolveSlow!: (result: BatchQuoteCheckResult) => void;
-    const slowResult = new Promise<BatchQuoteCheckResult>((resolve) => {
-      resolveSlow = resolve;
+    const handler = new DefaultQuoteObservationHandler({
+      store,
+      events,
+      now: () => clock.now(),
     });
-    const client = new FakeMintClient(
-      (_mintUrl, quoteId) => ({ kind: "found", payload: paidPayload(quoteId) }),
-      (mintUrl) =>
-        mintUrl.includes("slow") ? slowResult : { kind: "unsupported" },
-    );
+    const webSockets = new DefaultQuoteWebSocketService({
+      store,
+      handler,
+      transport: {
+        watch: () => {
+          throw new Error("websocket unavailable");
+        },
+        stop: () => {},
+      },
+      events,
+      now: () => clock.now(),
+    });
+    const client = new FakeMintClient((_mintUrl, quoteId) => ({
+      kind: "found",
+      payload: paidPayload(quoteId),
+    }));
     const monitor = createMonitor({
       store,
       client,
-      activeTransport,
       clock,
       random: () => 0.5,
     });
 
-    const starting = monitor.start();
-    for (
-      let turn = 0;
-      turn < 20 && activeTransport.callbacks.size === 0;
-      turn += 1
-    ) {
-      await Promise.resolve();
-    }
+    await webSockets.start();
+    await monitor.start();
+    await clock.advanceBy(0);
 
-    expect(client.batchCalls).toHaveLength(2);
-    expect([...activeTransport.callbacks.keys()]).toEqual([
-      "https://fast.example.com::fast-quote",
-    ]);
-
-    resolveSlow({ kind: "unsupported" });
-    await starting;
-
-    expect([...activeTransport.callbacks.keys()].sort()).toEqual([
-      "https://fast.example.com::fast-quote",
-      "https://slow.example.com::slow-quote",
-    ]);
+    expect(client.calls).toHaveLength(1);
+    await webSockets.stop();
   });
 
   test("polls a restored expired quote through the handler and cleans it up", async () => {
@@ -411,12 +362,10 @@ describe("MintQuoteMonitor", () => {
       kind: "found",
       payload: paidPayload(quoteId),
     }));
-    const activeTransport = new FakeActiveQuoteTransport();
     const emittedChanges: QuoteStateChange[] = [];
     const monitor = createMonitor({
       store,
       client,
-      activeTransport,
       clock,
       random: () => 0.5,
       emittedChanges,
@@ -433,7 +382,6 @@ describe("MintQuoteMonitor", () => {
         changedQuote.state === "PAID"
       ),
     ).toHaveLength(1);
-    expect(activeTransport.callbacks.size).toBe(0);
   });
 
   test("expires only after an authoritative unpaid reconciliation", async () => {
@@ -454,7 +402,6 @@ describe("MintQuoteMonitor", () => {
           expiry: Math.floor((now - 1_000) / 1_000),
         },
       })),
-      activeTransport: new FakeActiveQuoteTransport(),
       clock,
       random: () => 0.5,
     });
@@ -470,7 +417,6 @@ describe("MintQuoteMonitor", () => {
     const restarted = createMonitor({
       store,
       client: restartClient,
-      activeTransport: new FakeActiveQuoteTransport(),
       clock,
       random: () => 0.5,
     });
@@ -504,7 +450,6 @@ describe("MintQuoteMonitor", () => {
             }
           : { kind: "mint_unavailable", cause: new Error("offline") };
       }),
-      activeTransport: new FakeActiveQuoteTransport(),
       clock,
       random: () => 0.5,
       policy: { reconciliationRetryMs: [60_000] },
@@ -522,7 +467,6 @@ describe("MintQuoteMonitor", () => {
     const restarted = createMonitor({
       store,
       client: restartClient,
-      activeTransport: new FakeActiveQuoteTransport(),
       clock,
       random: () => 0.5,
       emittedChanges,
@@ -551,7 +495,6 @@ describe("MintQuoteMonitor", () => {
     const monitor = createMonitor({
       store,
       client,
-      activeTransport: new FakeActiveQuoteTransport(),
       clock,
       random: () => 0.5,
       policy: { reconciliationRetryMs: [60_000] },
@@ -570,7 +513,6 @@ describe("MintQuoteMonitor", () => {
     const restarted = createMonitor({
       store,
       client: restartClient,
-      activeTransport: new FakeActiveQuoteTransport(),
       clock,
       random: () => 0.5,
     });
@@ -600,7 +542,6 @@ describe("MintQuoteMonitor", () => {
     const monitor = createMonitor({
       store,
       client,
-      activeTransport: new FakeActiveQuoteTransport(),
       clock,
       random: () => 0.5,
       policy: {
@@ -640,24 +581,22 @@ describe("MintQuoteMonitor", () => {
       new Date(now + 60_000),
     );
     const clock = new FakeClock(now);
-    const activeTransport = new FakeActiveQuoteTransport();
+    const emittedChanges: QuoteStateChange[] = [];
     const client = new FakeMintClient(() => ({ kind: "not_found" }));
     const monitor = createMonitor({
       store,
       client,
-      activeTransport,
       clock,
       random: () => 0.5,
+      emittedChanges,
     });
 
     await monitor.start();
-    expect(activeTransport.callbacks.size).toBe(1);
-
     await clock.advanceBy(0);
 
     expect(client.calls).toHaveLength(1);
-    expect(activeTransport.callbacks.size).toBe(0);
-    expect(activeTransport.closeCount).toBe(1);
+    expect(emittedChanges).toHaveLength(1);
+    expect(clock.pendingCount()).toBe(0);
   });
 
   test("clears a persisted not-found result without another mint request", async () => {
@@ -682,7 +621,6 @@ describe("MintQuoteMonitor", () => {
     const monitor = createMonitor({
       store,
       client,
-      activeTransport: new FakeActiveQuoteTransport(),
       clock,
       random: () => 0.5,
     });
@@ -692,77 +630,6 @@ describe("MintQuoteMonitor", () => {
     expect(client.batchCalls).toEqual([]);
     expect(client.calls).toEqual([]);
     expect(await store.getQuoteReconciliationState(quote.id)).toBeUndefined();
-  });
-
-  test("a websocket setup failure retains the HTTP fallback", async () => {
-    const now = Date.parse("2026-08-03T12:00:00.000Z");
-    await createQuote(
-      "http-fallback",
-      "https://mint.example.com",
-      new Date(now + 60_000),
-    );
-    const clock = new FakeClock(now);
-    const client = new FakeMintClient((_mintUrl, quoteId) => ({
-      kind: "found",
-      payload: paidPayload(quoteId),
-    }));
-    const monitor = createMonitor({
-      store,
-      client,
-      activeTransport: {
-        watch: () => {
-          throw new Error("websocket unavailable");
-        },
-        stop: () => {},
-      },
-      clock,
-      random: () => 0.5,
-    });
-
-    await monitor.start();
-    await clock.advanceBy(0);
-
-    expect(client.calls).toHaveLength(1);
-  });
-
-  test("racing websocket and HTTP paid observations emit once and clean up", async () => {
-    const now = Date.parse("2026-08-03T12:00:00.000Z");
-    const quote = await createQuote(
-      "raced",
-      "https://mint.example.com",
-      new Date(now + 60_000),
-    );
-    const clock = new FakeClock(now);
-    let resolveHttp!: (result: QuoteCheckResult) => void;
-    const httpResult = new Promise<QuoteCheckResult>((resolve) => {
-      resolveHttp = resolve;
-    });
-    const activeTransport = new FakeActiveQuoteTransport();
-    const emittedChanges: QuoteStateChange[] = [];
-    const monitor = createMonitor({
-      store,
-      client: new FakeMintClient(() => httpResult),
-      activeTransport,
-      clock,
-      random: () => 0.5,
-      emittedChanges,
-    });
-    await monitor.start();
-
-    const polling = clock.advanceBy(0);
-    await Promise.resolve();
-    await activeTransport.emit(
-      "https://mint.example.com",
-      quote.quoteId,
-      paidPayload(quote.quoteId),
-    );
-    resolveHttp({ kind: "found", payload: paidPayload(quote.quoteId) });
-    await polling;
-
-    expect(emittedChanges).toHaveLength(1);
-    expect(activeTransport.closeCount).toBe(1);
-    expect(activeTransport.callbacks.size).toBe(0);
-    expect(clock.pendingCount()).toBe(0);
   });
 
   test("rechecks a timestamp-less unpaid response that started before expiry", async () => {
@@ -788,7 +655,6 @@ describe("MintQuoteMonitor", () => {
     const monitor = createMonitor({
       store,
       client,
-      activeTransport: new FakeActiveQuoteTransport(),
       clock,
       random: () => 0.5,
       emittedChanges,
@@ -811,7 +677,7 @@ describe("MintQuoteMonitor", () => {
     expect(emittedChanges).toHaveLength(1);
   });
 
-  test("a terminal websocket observation aborts the in-flight HTTP check", async () => {
+  test("a terminal state-change event aborts the in-flight HTTP check", async () => {
     const now = Date.parse("2026-08-03T12:00:00.000Z");
     const quote = await createQuote(
       "abort-http",
@@ -823,12 +689,10 @@ describe("MintQuoteMonitor", () => {
     const httpResult = new Promise<QuoteCheckResult>((resolve) => {
       resolveHttp = resolve;
     });
-    const activeTransport = new FakeActiveQuoteTransport();
     const client = new FakeMintClient(() => httpResult);
     const monitor = createMonitor({
       store,
       client,
-      activeTransport,
       clock,
       random: () => 0.5,
     });
@@ -836,11 +700,14 @@ describe("MintQuoteMonitor", () => {
 
     const polling = clock.advanceBy(0);
     await Promise.resolve();
-    await activeTransport.emit(
-      "https://mint.example.com",
-      quote.quoteId,
-      paidPayload(quote.quoteId),
-    );
+    events.emit("mintQuote.stateChanged", {
+      quote: new MintQuote({
+        ...quote,
+        state: "PAID",
+        paidAt: new Date(now),
+      }),
+      source: "websocket",
+    });
 
     expect(client.signals[0]?.aborted).toBe(true);
 
@@ -864,7 +731,6 @@ describe("MintQuoteMonitor", () => {
     const monitor = createMonitor({
       store,
       client,
-      activeTransport: new FakeActiveQuoteTransport(),
       clock,
       random: () => 0.5,
     });

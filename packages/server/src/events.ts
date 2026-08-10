@@ -1,7 +1,9 @@
 import type { QuoteStateChange } from "./domain/mintQuoteMonitoring/QuoteObservation";
+import type { MintQuote } from "./domain/mintQuote/MintQuote";
 import { logger } from "./utils/logger";
 
 export type Events = {
+  "mintQuote.created": MintQuote;
   "mintQuote.stateChanged": QuoteStateChange;
 };
 

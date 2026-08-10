@@ -1,12 +1,15 @@
 import app from "./app";
-import { setupDatabase } from "./utils/database";
+import { getAdapter, setupDatabase } from "./utils/database";
 import ws from "ws";
 import { useWebSocketImplementation } from "nostr-tools/pool";
 import { logger } from "./utils/logger";
 import { config } from "./config/index";
 import { createServer } from "http";
 import { websocketUpgradeController } from "./websocket/controller";
-import { getCommunicatorService } from "./config";
+import {
+  startMintQuoteMonitoring,
+  stopMintQuoteMonitoring,
+} from "./config";
 useWebSocketImplementation(ws);
 logger.info("+++ Loaded App Config +++");
 logger.info(`Log Level: ${config.logLevel}`);
@@ -29,12 +32,36 @@ async function startServer() {
     console.error(e);
     process.exit(1);
   }
-  await getCommunicatorService().startQuoteMonitoring();
+  await startMintQuoteMonitoring();
   const server = createServer(app);
   server.on("upgrade", websocketUpgradeController);
   server.listen(config.port, () => {
     logger.info(`npubcash-server has started and is listening on port ${config.port}`);
   });
+
+  let shuttingDown = false;
+  const shutdown = async (signal: NodeJS.Signals) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    logger.info(`Received ${signal}; shutting down`);
+    const serverClosed = new Promise<void>((resolve, reject) => {
+      server.close((cause) => {
+        if (cause) reject(cause);
+        else resolve();
+      });
+    });
+    try {
+      await stopMintQuoteMonitoring();
+      await serverClosed;
+      await getAdapter().close();
+      process.exit(0);
+    } catch (cause) {
+      logger.error("Graceful shutdown failed", { cause });
+      process.exit(1);
+    }
+  };
+  process.once("SIGINT", () => void shutdown("SIGINT"));
+  process.once("SIGTERM", () => void shutdown("SIGTERM"));
 }
 
 startServer();

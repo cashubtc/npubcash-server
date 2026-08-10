@@ -10,7 +10,8 @@ const { runMigrations } = await import("@/migrations");
 const { createRepositories } = await import(
   "@/infrastructure/db/repositoryFactory"
 );
-const { initializeAppServices } = await import("@/config");
+const { getCommunicatorService, initializeAppServices } = await import("@/config");
+const { eventBus } = await import("@/events");
 const { RecipientUnavailableError } = await import("@/errors");
 const { lnurlController } = await import("./lnurlController");
 
@@ -116,4 +117,61 @@ test("keeps an unregistered and unblocked npub available for discovery", async (
       callback: expect.stringContaining("/.well-known/lnurlp/npub1"),
     }),
   );
+});
+
+test("publishes a persisted quote and returns despite a failing event listener", async () => {
+  const communicator = getCommunicatorService();
+  const originalCreateMintQuote = communicator.createMintQuote;
+  const originalCreateQuoteSubscription = communicator.createQuoteSubscription;
+  const quoteId = "created-quote";
+  let eventQuoteId: number | undefined;
+  let persistedBeforePolling = false;
+  let finishPersistenceCheck!: () => void;
+  const persistenceChecked = new Promise<void>((resolve) => {
+    finishPersistenceCheck = resolve;
+  });
+  const unsubscribeFailure = eventBus.on("mintQuote.created", async () => {
+    throw new Error("listener failed");
+  });
+  const unsubscribeObservation = eventBus.on(
+    "mintQuote.created",
+    async (mintQuote) => {
+      eventQuoteId = mintQuote.id;
+      const persisted = await adapter.query<{ id: number }>(
+        "SELECT id FROM mint_quotes WHERE id = ?",
+        [mintQuote.id],
+      );
+      persistedBeforePolling = persisted.rowCount === 1;
+      finishPersistenceCheck();
+    },
+  );
+  communicator.createMintQuote = async () => ({
+    expiry: Math.floor(Date.now() / 1_000) + 60,
+    quote: quoteId,
+    request: "lnbc-created",
+    state: "UNPAID",
+    unit: "sat",
+    amount: 1,
+    locked: false,
+  });
+  communicator.createQuoteSubscription = async (mintQuote) => {
+    expect(eventQuoteId).toBe(mintQuote.id);
+  };
+
+  try {
+    const result = await invokeController(
+      "1000",
+      nip19.npubEncode("89".repeat(32)),
+    );
+    await persistenceChecked;
+
+    expect(result.error).toBeUndefined();
+    expect(result.payload).toEqual({ pr: "lnbc-created", routes: [] });
+    expect(persistedBeforePolling).toBe(true);
+  } finally {
+    communicator.createMintQuote = originalCreateMintQuote;
+    communicator.createQuoteSubscription = originalCreateQuoteSubscription;
+    unsubscribeFailure();
+    unsubscribeObservation();
+  }
 });

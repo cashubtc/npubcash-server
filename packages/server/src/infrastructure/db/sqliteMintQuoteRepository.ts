@@ -98,6 +98,16 @@ RETURNING *`;
     return row ? this.castRowToQuote(row) : undefined;
   }
 
+  async getActiveUnpaidQuotes(now: Date): Promise<MintQuote[]> {
+    const res = await this.db.query<MintQuoteRow>(
+      `SELECT * FROM mint_quotes
+       WHERE state = 'UNPAID' AND expires_at > ?
+       ORDER BY id`,
+      [now.toISOString()],
+    );
+    return res.rows.map((row) => this.castRowToQuote(row));
+  }
+
   async transitionState(
     transition: MintQuoteStateTransition,
   ): Promise<MintQuote | undefined> {

@@ -10,9 +10,12 @@ import { UserRepository } from "./domain/user/userRepository";
 import { MintQuoteRepository } from "./domain/mintQuote/MintQuoteRepository";
 import { DefaultMintQuoteMonitor } from "./domain/mintQuoteMonitor/MintQuoteMonitor";
 import { FetchMintQuoteClient } from "./domain/mintQuoteMonitor/MintQuoteClient";
-import { WebSocketQuoteTransport } from "./domain/mintQuoteMonitor/WebSocketQuoteTransport";
 import { PerMintRequestBudget } from "./infrastructure/MintRequestBudget";
 import { DefaultQuoteObservationHandler } from "./domain/mintQuoteMonitoring/QuoteObservationHandler";
+import {
+  DefaultQuoteWebSocketService,
+  type QuoteWebSocketService,
+} from "./domain/mintQuoteMonitoring/QuoteWebSocketService";
 import { config } from "./config/index";
 import { logger } from "./utils/logger";
 import { handleZapRequest } from "./utils/nostr";
@@ -30,6 +33,7 @@ interface AppServices {
   proofService: ProofService;
   mintService: MintService;
   recipientBlocks: RecipientBlocks;
+  quoteWebSocketService: QuoteWebSocketService;
 }
 
 let appServices: AppServices | null = null;
@@ -46,17 +50,24 @@ export async function initializeAppServices(
     store: repos.mintQuoteMonitoringStore,
     events: eventBus,
   });
+  const quoteWebSocketService = new DefaultQuoteWebSocketService({
+    store: repos.mintQuoteMonitoringStore,
+    handler: quoteObservationHandler,
+    transportOptions: {
+      logger,
+      periodicReconnectMs: config.mintQuoteMonitor.periodicReconnectMs,
+      requestBudget: mintRequestBudget,
+    },
+    events: eventBus,
+    logger,
+  });
   const mintQuoteMonitor = new DefaultMintQuoteMonitor({
     store: repos.mintQuoteMonitorStore,
     client: new FetchMintQuoteClient({
       timeoutMs: config.mintQuoteMonitor.requestTimeoutMs,
       requestBudget: mintRequestBudget,
     }),
-    activeTransport: new WebSocketQuoteTransport({
-      logger,
-      periodicReconnectMs: config.mintQuoteMonitor.periodicReconnectMs,
-      requestBudget: mintRequestBudget,
-    }),
+    events: eventBus,
     policy: config.mintQuoteMonitor,
     logger,
     observationHandler: quoteObservationHandler,
@@ -72,6 +83,7 @@ export async function initializeAppServices(
     proofService: new ProofService(repos.proofRepository),
     mintService: new MintService(repos.mintRepository),
     recipientBlocks,
+    quoteWebSocketService,
   };
   return appServices;
 }
@@ -109,6 +121,26 @@ export function getMintService(): MintService {
 
 export function getRecipientBlocks(): RecipientBlocks {
   return getAppServices().recipientBlocks;
+}
+
+export async function startMintQuoteMonitoring(): Promise<void> {
+  const services = getAppServices();
+  await services.quoteWebSocketService.start();
+  try {
+    await services.communicatorService.startQuoteMonitoring();
+  } catch (cause) {
+    await services.quoteWebSocketService.stop();
+    throw cause;
+  }
+}
+
+export async function stopMintQuoteMonitoring(): Promise<void> {
+  const services = getAppServices();
+  try {
+    await services.communicatorService.shutdown();
+  } finally {
+    await services.quoteWebSocketService.stop();
+  }
 }
 
 export const subManager = new QuoteSubscriptionManager();

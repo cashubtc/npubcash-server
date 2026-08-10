@@ -13,20 +13,12 @@ import type {
   QuoteCheckCategory,
 } from "./MintQuoteMonitorStore";
 import type { QuoteObservationHandler } from "@/domain/mintQuoteMonitoring/QuoteObservationHandler";
+import type { EventEmitter, Events } from "@/events";
 
 export interface MintQuoteMonitor {
   start(): Promise<void>;
   watch(quote: MintQuote): Promise<void>;
   stop(): Promise<void>;
-}
-
-export interface ActiveQuoteTransport {
-  watch(
-    mintUrl: string,
-    quoteId: string,
-    onPayload: (payload: MintQuotePayload) => void | Promise<void>,
-  ): () => void;
-  stop(): void;
 }
 
 export interface MonitorClock {
@@ -60,7 +52,7 @@ function loggableCause(cause: unknown): unknown {
 interface DefaultMintQuoteMonitorOptions {
   store: MintQuoteMonitorStore;
   client: MintQuoteClient;
-  activeTransport: ActiveQuoteTransport;
+  events: Pick<EventEmitter<Events>, "on">;
   clock?: MonitorClock;
   policy?: Partial<MintQuoteMonitorPolicy>;
   random?: () => number;
@@ -77,13 +69,12 @@ interface WatchedQuote {
   activated: boolean;
   nextCheckAt?: number;
   expiryTimer?: unknown;
-  unsubscribeActive?: () => void;
   invalidResponseCount: number;
 }
 
-type QuoteObservationContext =
-  | { source: "http"; checkStartedAt: number }
-  | { source: "websocket" };
+interface QuoteObservationContext {
+  checkStartedAt: number;
+}
 
 interface MintSession {
   mintUrl: string;
@@ -114,7 +105,7 @@ const systemClock: MonitorClock = {
 export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
   private readonly store: MintQuoteMonitorStore;
   private readonly client: MintQuoteClient;
-  private readonly activeTransport: ActiveQuoteTransport;
+  private readonly events: Pick<EventEmitter<Events>, "on">;
   private readonly clock: MonitorClock;
   private readonly policy: MintQuoteMonitorPolicy;
   private readonly random: () => number;
@@ -123,6 +114,7 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
   private readonly quotes = new Map<number, WatchedQuote>();
   private readonly sessions = new Map<string, MintSession>();
   private readonly sessionLoads = new Map<string, Promise<MintSession>>();
+  private unsubscribeStateChanged?: () => void;
   private started = false;
   private stopped = false;
   private restoring = false;
@@ -131,7 +123,7 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
   constructor(options: DefaultMintQuoteMonitorOptions) {
     this.store = options.store;
     this.client = options.client;
-    this.activeTransport = options.activeTransport;
+    this.events = options.events;
     this.clock = options.clock ?? systemClock;
     this.policy = {
       ...DEFAULT_MINT_QUOTE_MONITOR_POLICY,
@@ -146,6 +138,10 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
     if (this.started) return;
     if (this.stopped) throw new Error("MintQuoteMonitor has been stopped");
     this.started = true;
+    this.unsubscribeStateChanged = this.events.on(
+      "mintQuote.stateChanged",
+      ({ quote }) => this.finishQuoteById(quote.id),
+    );
 
     const recoverable = await this.store.getRecoverableQuotes();
     this.restoring = true;
@@ -297,7 +293,6 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
             payload: result.payloads[index]!,
           },
           {
-            source: "http",
             checkStartedAt,
           },
         );
@@ -394,22 +389,6 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
       await this.enterReconciliation(entry.quote.id);
       return;
     }
-    try {
-      entry.unsubscribeActive = this.activeTransport.watch(
-        entry.mintUrl,
-        entry.quote.quoteId,
-        (payload) => this.handlePayload(entry.quote.id, payload),
-      );
-    } catch (cause) {
-      this.logger?.warn(
-        "[QuoteMonitor] WebSocket watch failed; HTTP fallback remains active",
-        {
-          mintUrl: entry.mintUrl,
-          quoteId: entry.quote.quoteId,
-          cause: loggableCause(cause),
-        },
-      );
-    }
     entry.expiryTimer = this.clock.schedule(
       () => this.enterReconciliation(entry.quote.id),
       entry.quote.expiresAt.getTime() - now,
@@ -423,7 +402,6 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
       if (entry.expiryTimer !== undefined) {
         this.clock.cancel(entry.expiryTimer);
       }
-      entry.unsubscribeActive?.();
     }
     for (const session of this.sessions.values()) {
       if (session.timer !== undefined) this.clock.cancel(session.timer);
@@ -433,7 +411,8 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
     this.quotes.clear();
     this.sessions.clear();
     this.sessionLoads.clear();
-    this.activeTransport.stop();
+    this.unsubscribeStateChanged?.();
+    this.unsubscribeStateChanged = undefined;
   }
 
   private async getOrCreateSession(mintUrl: string): Promise<MintSession> {
@@ -464,8 +443,6 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
 
     entry.phase = "reconciliation";
     entry.expiryTimer = undefined;
-    entry.unsubscribeActive?.();
-    entry.unsubscribeActive = undefined;
     entry.nextCheckAt = this.clock.now().getTime();
     try {
       await this.store.saveQuoteReconciliationState({
@@ -548,7 +525,7 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
             session,
             entry,
             result,
-            { source: "http", checkStartedAt },
+            { checkStartedAt },
           );
         } catch (cause) {
           if (
@@ -598,7 +575,7 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
     session: MintSession,
     entry: WatchedQuote,
     result: QuoteCheckResult,
-    context: Extract<QuoteObservationContext, { source: "http" }>,
+    context: QuoteObservationContext,
   ): Promise<boolean> {
     if (result.kind === "mint_unavailable") {
       entry.nextCheckAt = this.clock.now().getTime();
@@ -736,17 +713,6 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
     });
   }
 
-  private async handlePayload(
-    quoteId: number,
-    payload: MintQuotePayload,
-  ): Promise<void> {
-    const entry = this.quotes.get(quoteId);
-    if (!entry || this.stopped) return;
-    await this.processPayload(entry, payload, { source: "websocket" });
-    const session = this.sessions.get(entry.mintUrl);
-    if (session) this.rescheduleSession(session);
-  }
-
   private async processPayload(
     entry: WatchedQuote,
     payload: MintQuotePayload,
@@ -758,20 +724,12 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
     }
 
     const now = this.clock.now();
-    const change = await this.observationHandler.handle(
-      context.source === "http"
-        ? {
-            source: "polling",
-            mintQuoteId: entry.quote.id,
-            requestStartedAt: new Date(context.checkStartedAt),
-            result: { kind: "found", payload },
-          }
-        : {
-            source: "websocket",
-            mintQuoteId: entry.quote.id,
-            payload,
-          },
-    );
+    const change = await this.observationHandler.handle({
+      source: "polling",
+      mintQuoteId: entry.quote.id,
+      requestStartedAt: new Date(context.checkStartedAt),
+      result: { kind: "found", payload },
+    });
 
     if (change) {
       await this.finishQuote(entry);
@@ -795,7 +753,6 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
     }
 
     const checkedAfterExpiry =
-      context.source === "http" &&
       context.checkStartedAt >= entry.quote.expiresAt.getTime();
     if (
       payload.state === "UNPAID" &&
@@ -856,7 +813,6 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
       session.inFlight.controller.abort();
     }
     if (entry.expiryTimer !== undefined) this.clock.cancel(entry.expiryTimer);
-    entry.unsubscribeActive?.();
     try {
       await this.store.clearQuoteReconciliationState(entry.quote.id);
     } catch (cause) {
@@ -873,6 +829,12 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
       if (session.timer !== undefined) this.clock.cancel(session.timer);
       this.sessions.delete(entry.mintUrl);
     }
+  }
+
+  private async finishQuoteById(quoteId: number): Promise<void> {
+    const entry = this.quotes.get(quoteId);
+    if (!entry) return;
+    await this.finishQuote(entry);
   }
 
   private withJitter(delayMs: number): number {

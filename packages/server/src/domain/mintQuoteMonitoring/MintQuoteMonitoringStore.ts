@@ -11,6 +11,7 @@ export interface MintQuoteStateTransition {
 }
 
 export interface MintQuoteMonitoringStore {
+  getActiveUnpaidQuotes(now: Date): Promise<MintQuote[]>;
   getById(id: number): Promise<MintQuote | undefined>;
   transitionState(
     transition: MintQuoteStateTransition,

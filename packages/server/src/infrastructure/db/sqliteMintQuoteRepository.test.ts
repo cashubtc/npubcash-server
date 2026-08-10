@@ -17,6 +17,48 @@ afterEach(async () => {
 });
 
 describe("SqliteMintQuoteRepository", () => {
+  test("returns only unexpired unpaid quotes for WebSocket recovery", async () => {
+    const at = new Date("2026-08-10T12:00:00.000Z");
+    await repository.create({
+      mintUrl: "https://mint.example.com",
+      paymentRequest: "lnbc-expired",
+      unit: "sat",
+      quoteId: "expired",
+      expiresAt: at,
+      amount: 1,
+      pubkey: "pubkey",
+      locked: false,
+    });
+    const active = await repository.create({
+      mintUrl: "https://mint.example.com",
+      paymentRequest: "lnbc-active",
+      unit: "sat",
+      quoteId: "active",
+      expiresAt: new Date(at.getTime() + 60_000),
+      amount: 1,
+      pubkey: "pubkey",
+      locked: false,
+    });
+    const paid = await repository.create({
+      mintUrl: "https://mint.example.com",
+      paymentRequest: "lnbc-paid",
+      unit: "sat",
+      quoteId: "paid",
+      expiresAt: new Date(at.getTime() + 60_000),
+      amount: 1,
+      pubkey: "pubkey",
+      locked: false,
+    });
+    await repository.transitionState({
+      id: paid.id,
+      from: ["UNPAID"],
+      to: "PAID",
+      paidAt: at,
+    });
+
+    expect(await repository.getActiveUnpaidQuotes(at)).toEqual([active]);
+  });
+
   test("returns expired unpaid quotes as recoverable", async () => {
     const expired = await repository.create({
       mintUrl: "https://mint.example.com",

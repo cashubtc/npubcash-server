@@ -1,6 +1,6 @@
 # Mint quote monitoring implementation map
 
-Status: implementation in progress; roadmap Slice 1 complete.
+Status: implementation in progress; roadmap Slices 1–2 complete.
 
 This map implements [ADR 0001](adr/0001-centralize-mint-quote-observations.md). It replaces the monolithic `DefaultMintQuoteMonitor` with separate polling and WebSocket modules feeding one Quote Observation handler. The database remains the source of truth; process-local events notify reactions only after a committed state change.
 

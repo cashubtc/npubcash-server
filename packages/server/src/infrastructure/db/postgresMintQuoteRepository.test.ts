@@ -32,6 +32,20 @@ class RecordingPostgresAdapter implements DatabaseAdapter {
 }
 
 describe("PostgresMintQuoteRepository monitoring adapter", () => {
+  test("queries only active unpaid quotes for WebSocket recovery", async () => {
+    const db = new RecordingPostgresAdapter();
+    const repository = new PostgresMintQuoteRepository(db);
+    const now = new Date("2026-08-10T12:00:00.000Z");
+
+    await repository.getActiveUnpaidQuotes(now);
+
+    expect(db.calls[0]?.sql).toContain(
+      "state = 'UNPAID' AND expires_at > $1",
+    );
+    expect(db.calls[0]?.sql).toContain("ORDER BY id");
+    expect(db.calls[0]?.params).toEqual([now]);
+  });
+
   test("round-trips a mint circuit deadline with PostgreSQL parameters", async () => {
     const db = new RecordingPostgresAdapter();
     const repository = new PostgresMintQuoteRepository(db);
