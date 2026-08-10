@@ -25,3 +25,19 @@ _Avoid_: npub, username
 
 **npub**:
 A human-readable encoding of a Public Key. It represents an identity but is not itself the canonical identity.
+
+**Mint Quote**:
+The server's persisted representation of a Cashu mint quote created for a Recipient's payment request.
+_Avoid_: Invoice, payment
+
+**Pollable Mint Quote**:
+A Mint Quote whose local state is `UNPAID` and which remains eligible for authoritative reconciliation with its mint.
+_Avoid_: Pending quote, active subscription
+
+**Quote Observation**:
+A report from a mint about the current condition of a Mint Quote. It is untrusted until reconciled with the persisted Mint Quote.
+_Avoid_: Quote update, event
+
+**Quote State Change**:
+A persisted transition of a Mint Quote's local business state. A Quote State Change may result from a Quote Observation, but duplicate or non-authoritative observations do not create one.
+_Avoid_: Quote Observation, notification

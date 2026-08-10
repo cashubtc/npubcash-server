@@ -13,6 +13,10 @@ import {
   MintRetryState,
   QuoteReconciliationState,
 } from "@/domain/mintQuoteMonitor/MintQuoteMonitorStore";
+import {
+  MintQuoteMonitoringStore,
+  MintQuoteStateTransition,
+} from "@/domain/mintQuoteMonitoring/MintQuoteMonitoringStore";
 
 type MintQuoteRow = {
   id: number;
@@ -47,7 +51,10 @@ type QuoteReconciliationRow = {
 };
 
 export class PostgresMintQuoteRepository
-  implements MintQuoteRepository, MintQuoteMonitorStore
+  implements
+    MintQuoteRepository,
+    MintQuoteMonitorStore,
+    MintQuoteMonitoringStore
 {
   constructor(private readonly db: DatabaseAdapter) {}
 
@@ -82,26 +89,38 @@ RETURNING *`;
     return res.rows.map((r) => this.castRowToQuote(r));
   }
 
-  async transitionUnpaidQuote(
-    id: number,
-    state: "PAID" | "ISSUED" | "EXPIRED",
-    paidAt?: Date,
+  async getById(id: number): Promise<MintQuote | undefined> {
+    const res = await this.db.query<MintQuoteRow>(
+      "SELECT * FROM mint_quotes WHERE id = $1",
+      [id],
+    );
+    const row = res.rows[0];
+    return row ? this.castRowToQuote(row) : undefined;
+  }
+
+  async transitionState(
+    transition: MintQuoteStateTransition,
   ): Promise<MintQuote | undefined> {
+    if (transition.from.length === 0) return undefined;
+    const statePlaceholders = transition.from
+      .map((_, index) => `$${index + 4}`)
+      .join(", ");
     const res = await this.db.query<MintQuoteRow>(
       `UPDATE mint_quotes
        SET state = $1,
            paid_at = CASE
-             WHEN $1 IN ('PAID', 'ISSUED') THEN $2
+             WHEN $1 IN ('PAID', 'ISSUED') THEN COALESCE(paid_at, $2)
              ELSE paid_at
            END
        WHERE id = $3
-         AND (
-           state = 'UNPAID'
-           OR (state = 'EXPIRED' AND $1 IN ('PAID', 'ISSUED'))
-           OR (state = 'PAID' AND $1 = 'ISSUED')
-         )
+         AND state IN (${statePlaceholders})
        RETURNING *`,
-      [state, paidAt ?? null, id],
+      [
+        transition.to,
+        transition.paidAt ?? null,
+        transition.id,
+        ...transition.from,
+      ],
     );
     const row = res.rows[0];
     return row ? this.castRowToQuote(row) : undefined;

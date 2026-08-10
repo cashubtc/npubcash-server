@@ -13,6 +13,10 @@ import {
   MintRetryState,
   QuoteReconciliationState,
 } from "@/domain/mintQuoteMonitor/MintQuoteMonitorStore";
+import {
+  MintQuoteMonitoringStore,
+  MintQuoteStateTransition,
+} from "@/domain/mintQuoteMonitoring/MintQuoteMonitoringStore";
 
 type MintQuoteRow = {
   id: number;
@@ -47,7 +51,10 @@ type QuoteReconciliationRow = {
 };
 
 export class SqliteMintQuoteRepository
-  implements MintQuoteRepository, MintQuoteMonitorStore
+  implements
+    MintQuoteRepository,
+    MintQuoteMonitorStore,
+    MintQuoteMonitoringStore
 {
   constructor(private readonly db: DatabaseAdapter) {}
 
@@ -82,26 +89,37 @@ RETURNING *`;
     return res.rows.map((r) => this.castRowToQuote(r));
   }
 
-  async transitionUnpaidQuote(
-    id: number,
-    state: "PAID" | "ISSUED" | "EXPIRED",
-    paidAt?: Date,
+  async getById(id: number): Promise<MintQuote | undefined> {
+    const res = await this.db.query<MintQuoteRow>(
+      "SELECT * FROM mint_quotes WHERE id = ?",
+      [id],
+    );
+    const row = res.rows[0];
+    return row ? this.castRowToQuote(row) : undefined;
+  }
+
+  async transitionState(
+    transition: MintQuoteStateTransition,
   ): Promise<MintQuote | undefined> {
+    if (transition.from.length === 0) return undefined;
+    const statePlaceholders = transition.from.map(() => "?").join(", ");
     const res = await this.db.query<MintQuoteRow>(
       `UPDATE mint_quotes
        SET state = ?,
            paid_at = CASE
-             WHEN ? IN ('PAID', 'ISSUED') THEN ?
+             WHEN ? IN ('PAID', 'ISSUED') THEN COALESCE(paid_at, ?)
              ELSE paid_at
            END
        WHERE id = ?
-         AND (
-           state = 'UNPAID'
-           OR (state = 'EXPIRED' AND ? IN ('PAID', 'ISSUED'))
-           OR (state = 'PAID' AND ? = 'ISSUED')
-         )
+         AND state IN (${statePlaceholders})
        RETURNING *`,
-      [state, state, paidAt?.toISOString() ?? null, id, state, state],
+      [
+        transition.to,
+        transition.to,
+        transition.paidAt?.toISOString() ?? null,
+        transition.id,
+        ...transition.from,
+      ],
     );
     const row = res.rows[0];
     return row ? this.castRowToQuote(row) : undefined;

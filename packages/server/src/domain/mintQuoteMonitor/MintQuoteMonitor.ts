@@ -12,6 +12,7 @@ import type {
   MintRetryState,
   QuoteCheckCategory,
 } from "./MintQuoteMonitorStore";
+import type { QuoteObservationHandler } from "@/domain/mintQuoteMonitoring/QuoteObservationHandler";
 
 export interface MintQuoteMonitor {
   start(): Promise<void>;
@@ -64,7 +65,7 @@ interface DefaultMintQuoteMonitorOptions {
   policy?: Partial<MintQuoteMonitorPolicy>;
   random?: () => number;
   logger?: MonitorLogger;
-  onPaid?: (quote: MintQuote) => void | Promise<void>;
+  observationHandler: QuoteObservationHandler;
 }
 
 type QuotePhase = "active" | "reconciliation";
@@ -78,7 +79,6 @@ interface WatchedQuote {
   expiryTimer?: unknown;
   unsubscribeActive?: () => void;
   invalidResponseCount: number;
-  latestUpdatedAt?: number;
 }
 
 type QuoteObservationContext =
@@ -119,7 +119,7 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
   private readonly policy: MintQuoteMonitorPolicy;
   private readonly random: () => number;
   private readonly logger?: MonitorLogger;
-  private readonly onPaid?: (quote: MintQuote) => void | Promise<void>;
+  private readonly observationHandler: QuoteObservationHandler;
   private readonly quotes = new Map<number, WatchedQuote>();
   private readonly sessions = new Map<string, MintSession>();
   private readonly sessionLoads = new Map<string, Promise<MintSession>>();
@@ -139,7 +139,7 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
     };
     this.random = options.random ?? Math.random;
     this.logger = options.logger;
-    this.onPaid = options.onPaid;
+    this.observationHandler = options.observationHandler;
   }
 
   async start(): Promise<void> {
@@ -324,12 +324,14 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
     const mintUrl = normalizeUrl(quote.mintUrl);
     const metadata = await this.store.getQuoteReconciliationState(quote.id);
     if (metadata?.lastResult === "not_found") {
-      const expired = await this.store.transitionUnpaidQuote(
-        quote.id,
-        "EXPIRED",
-      );
+      const change = await this.observationHandler.handle({
+        source: "polling",
+        mintQuoteId: quote.id,
+        requestStartedAt: this.clock.now(),
+        result: { kind: "not_found" },
+      });
       await this.store.clearQuoteReconciliationState(quote.id);
-      if (expired) {
+      if (change) {
         this.logger?.info("[QuoteMonitor] Expired previously missing quote", {
           mintUrl,
           quoteId: quote.quoteId,
@@ -596,7 +598,7 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
     session: MintSession,
     entry: WatchedQuote,
     result: QuoteCheckResult,
-    context: QuoteObservationContext,
+    context: Extract<QuoteObservationContext, { source: "http" }>,
   ): Promise<boolean> {
     if (result.kind === "mint_unavailable") {
       entry.nextCheckAt = this.clock.now().getTime();
@@ -606,12 +608,14 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
 
     await this.markMintReachable(session);
     if (result.kind === "not_found") {
-      const expired = await this.store.transitionUnpaidQuote(
-        entry.quote.id,
-        "EXPIRED",
-      );
+      const change = await this.observationHandler.handle({
+        source: "polling",
+        mintQuoteId: entry.quote.id,
+        requestStartedAt: new Date(context.checkStartedAt),
+        result: { kind: "not_found" },
+      });
       await this.finishQuote(entry);
-      if (expired) {
+      if (change) {
         this.logger?.info("[QuoteMonitor] Quote not found; marked expired", {
           mintUrl: entry.mintUrl,
           quoteId: entry.quote.quoteId,
@@ -753,68 +757,40 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
       return;
     }
 
-    if (payload.updated_at !== undefined) {
-      if (
-        entry.latestUpdatedAt !== undefined &&
-        payload.updated_at < entry.latestUpdatedAt
-      ) {
-        this.logger?.debug("[QuoteMonitor] Ignored stale quote observation", {
-          mintUrl: entry.mintUrl,
-          quoteId: entry.quote.quoteId,
-          updatedAt: payload.updated_at,
-          latestUpdatedAt: entry.latestUpdatedAt,
-        });
-        const delay =
-          entry.phase === "active"
-            ? this.policy.activePollIntervalMs
-            : this.policy.reconciliationRetryMs[0]!;
-        const fallbackAt = this.clock.now().getTime() + this.withJitter(delay);
-        entry.nextCheckAt = Math.min(
-          entry.nextCheckAt ?? Number.POSITIVE_INFINITY,
-          fallbackAt,
-        );
-        if (entry.phase === "reconciliation") {
-          await this.saveQuoteCheck(entry, "scheduled");
-        }
-        return;
-      }
-      entry.latestUpdatedAt = payload.updated_at;
-    }
-
     const now = this.clock.now();
-    if (payload.state === "PAID") {
-      const paid = await this.store.transitionUnpaidQuote(
-        entry.quote.id,
-        "PAID",
-        now,
-      );
-      await this.finishQuote(entry);
-      if (paid && this.onPaid) {
-        try {
-          await this.onPaid(paid);
-        } catch (cause) {
-          this.logger?.error("[QuoteMonitor] Paid quote callback failed", {
-            quoteId: paid.quoteId,
-            cause,
-          });
-        }
-      }
-      return;
-    }
+    const change = await this.observationHandler.handle(
+      context.source === "http"
+        ? {
+            source: "polling",
+            mintQuoteId: entry.quote.id,
+            requestStartedAt: new Date(context.checkStartedAt),
+            result: { kind: "found", payload },
+          }
+        : {
+            source: "websocket",
+            mintQuoteId: entry.quote.id,
+            payload,
+          },
+    );
 
-    if (payload.state === "ISSUED") {
-      const issued = await this.store.transitionUnpaidQuote(
-        entry.quote.id,
-        "ISSUED",
-        now,
-      );
+    if (change) {
       await this.finishQuote(entry);
-      if (issued) {
+      if (change.quote.state === "ISSUED") {
         this.logger?.info("[QuoteMonitor] Quote reconciled as issued", {
           mintUrl: entry.mintUrl,
           quoteId: entry.quote.quoteId,
         });
+      } else if (change.quote.state === "EXPIRED") {
+        this.logger?.info("[QuoteMonitor] Quote reconciled as expired", {
+          mintUrl: entry.mintUrl,
+          quoteId: entry.quote.quoteId,
+        });
       }
+      return;
+    }
+
+    if (payload.state === "PAID" || payload.state === "ISSUED") {
+      await this.finishQuote(entry);
       return;
     }
 
@@ -825,17 +801,7 @@ export class DefaultMintQuoteMonitor implements MintQuoteMonitor {
       payload.state === "UNPAID" &&
       checkedAfterExpiry
     ) {
-      const expired = await this.store.transitionUnpaidQuote(
-        entry.quote.id,
-        "EXPIRED",
-      );
       await this.finishQuote(entry);
-      if (expired) {
-        this.logger?.info("[QuoteMonitor] Quote reconciled as expired", {
-          mintUrl: entry.mintUrl,
-          quoteId: entry.quote.quoteId,
-        });
-      }
       return;
     }
 

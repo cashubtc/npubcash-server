@@ -12,6 +12,7 @@ import { DefaultMintQuoteMonitor } from "./domain/mintQuoteMonitor/MintQuoteMoni
 import { FetchMintQuoteClient } from "./domain/mintQuoteMonitor/MintQuoteClient";
 import { WebSocketQuoteTransport } from "./domain/mintQuoteMonitor/WebSocketQuoteTransport";
 import { PerMintRequestBudget } from "./infrastructure/MintRequestBudget";
+import { DefaultQuoteObservationHandler } from "./domain/mintQuoteMonitoring/QuoteObservationHandler";
 import { config } from "./config/index";
 import { logger } from "./utils/logger";
 import { handleZapRequest } from "./utils/nostr";
@@ -41,6 +42,10 @@ export async function initializeAppServices(
   const mintRequestBudget = new PerMintRequestBudget(
     config.mintQuoteMonitor.requestRateLimit,
   );
+  const quoteObservationHandler = new DefaultQuoteObservationHandler({
+    store: repos.mintQuoteMonitoringStore,
+    events: eventBus,
+  });
   const mintQuoteMonitor = new DefaultMintQuoteMonitor({
     store: repos.mintQuoteMonitorStore,
     client: new FetchMintQuoteClient({
@@ -54,24 +59,7 @@ export async function initializeAppServices(
     }),
     policy: config.mintQuoteMonitor,
     logger,
-    onPaid: async (quote) => {
-      eventBus.emit("quotePaid", quote);
-      if (!quote.serializedZapRequest || !config.nostr.nostrEnabled) return;
-      try {
-        const zapRequest = decodeZapRequestParameter(quote.serializedZapRequest);
-        await handleZapRequest(
-          quote.quoteId,
-          zapRequest,
-          quote.paymentRequest,
-          logger,
-        );
-      } catch (cause) {
-        logger.error("[QuoteMonitor] Failed to handle zap request", {
-          quoteId: quote.quoteId,
-          cause,
-        });
-      }
-    },
+    observationHandler: quoteObservationHandler,
   });
   const recipientBlocks = await createRecipientBlocks(
     repos.recipientBlockRepository,
@@ -124,6 +112,31 @@ export function getRecipientBlocks(): RecipientBlocks {
 }
 
 export const subManager = new QuoteSubscriptionManager();
-eventBus.on("quotePaid", (quote) => {
+eventBus.on("mintQuote.stateChanged", ({ quote }) => {
+  if (quote.state !== "PAID") return;
   subManager.update(quote.pubkey, quote);
+});
+
+eventBus.on("mintQuote.stateChanged", async ({ quote }) => {
+  if (
+    quote.state !== "PAID" ||
+    !quote.serializedZapRequest ||
+    !config.nostr.nostrEnabled
+  ) {
+    return;
+  }
+  try {
+    const zapRequest = decodeZapRequestParameter(quote.serializedZapRequest);
+    await handleZapRequest(
+      quote.quoteId,
+      zapRequest,
+      quote.paymentRequest,
+      logger,
+    );
+  } catch (cause) {
+    logger.error("[QuoteObservationHandler] Failed to handle zap request", {
+      quoteId: quote.quoteId,
+      cause,
+    });
+  }
 });

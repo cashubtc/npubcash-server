@@ -90,19 +90,22 @@ describe("SqliteMintQuoteRepository", () => {
     });
 
     const paidAt = new Date("2026-08-03T12:02:00.000Z");
-    const expired = await recreated.transitionUnpaidQuote(
-      quote.id,
-      "EXPIRED",
-    );
-    const paid = await recreated.transitionUnpaidQuote(
-      quote.id,
-      "PAID",
+    const expired = await recreated.transitionState({
+      id: quote.id,
+      from: ["UNPAID"],
+      to: "EXPIRED",
+    });
+    const paid = await recreated.transitionState({
+      id: quote.id,
+      from: ["UNPAID", "EXPIRED"],
+      to: "PAID",
       paidAt,
-    );
-    const raced = await recreated.transitionUnpaidQuote(
-      quote.id,
-      "EXPIRED",
-    );
+    });
+    const raced = await recreated.transitionState({
+      id: quote.id,
+      from: ["UNPAID"],
+      to: "EXPIRED",
+    });
 
     expect(expired?.state).toBe("EXPIRED");
     expect(paid?.state).toBe("PAID");

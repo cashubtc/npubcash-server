@@ -58,17 +58,29 @@ describe("PostgresMintQuoteRepository monitoring adapter", () => {
     expect(restored).toEqual(state);
   });
 
-  test("records paid_at when transitioning an unpaid quote to issued", async () => {
+  test("records paid_at when conditionally transitioning a quote to issued", async () => {
     const db = new RecordingPostgresAdapter();
     const repository = new PostgresMintQuoteRepository(db);
     const paidAt = new Date("2026-08-03T12:02:00.000Z");
 
-    await repository.transitionUnpaidQuote(42, "ISSUED", paidAt);
+    await repository.transitionState({
+      id: 42,
+      from: ["UNPAID", "EXPIRED", "PAID"],
+      to: "ISSUED",
+      paidAt,
+    });
 
-    expect(db.calls[0]?.sql).toContain("WHEN $1 IN ('PAID', 'ISSUED')");
     expect(db.calls[0]?.sql).toContain(
-      "state = 'EXPIRED' AND $1 IN ('PAID', 'ISSUED')",
+      "WHEN $1 IN ('PAID', 'ISSUED') THEN COALESCE(paid_at, $2)",
     );
-    expect(db.calls[0]?.params).toEqual(["ISSUED", paidAt, 42]);
+    expect(db.calls[0]?.sql).toContain("state IN ($4, $5, $6)");
+    expect(db.calls[0]?.params).toEqual([
+      "ISSUED",
+      paidAt,
+      42,
+      "UNPAID",
+      "EXPIRED",
+      "PAID",
+    ]);
   });
 });

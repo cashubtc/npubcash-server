@@ -1,4 +1,4 @@
-import { MintQuote, MintQuoteState } from "@/domain/mintQuote/MintQuote";
+import { MintQuote } from "@/domain/mintQuote/MintQuote";
 
 export type MintRetryErrorCategory = "mint_unavailable";
 
@@ -28,11 +28,6 @@ export interface QuoteReconciliationState {
 /** Internal persistence seam owned by MintQuoteMonitor. */
 export interface MintQuoteMonitorStore {
   getRecoverableQuotes(): Promise<MintQuote[]>;
-  transitionUnpaidQuote(
-    id: number,
-    state: Extract<MintQuoteState, "PAID" | "ISSUED" | "EXPIRED">,
-    paidAt?: Date,
-  ): Promise<MintQuote | undefined>;
   getMintRetryState(mintUrl: string): Promise<MintRetryState | undefined>;
   saveMintRetryState(state: MintRetryState): Promise<void>;
   clearMintRetryState(mintUrl: string): Promise<void>;
