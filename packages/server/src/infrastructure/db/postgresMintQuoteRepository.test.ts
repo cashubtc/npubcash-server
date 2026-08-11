@@ -48,27 +48,52 @@ describe("PostgresMintQuoteRepository monitoring adapter", () => {
 
     await repository.getActiveUnpaidQuotes(now);
 
-    expect(db.calls[0]?.sql).toContain(
-      "state = 'UNPAID' AND expires_at > $1",
-    );
+    expect(db.calls[0]?.sql).toContain("state = 'UNPAID' AND expires_at > $1");
     expect(db.calls[0]?.sql).toContain("ORDER BY id");
     expect(db.calls[0]?.params).toEqual([now]);
   });
 
-  test("claims due unpaid quotes atomically in persistent polling order", async () => {
+  test("discovers due mint queues for normalization and fair ordering", async () => {
+    const db = new RecordingPostgresAdapter();
+    const repository = new PostgresMintQuoteRepository(db);
+    const dueBefore = new Date("2026-08-10T11:59:40.000Z");
+
+    await repository.listDueMintQueues({
+      dueBefore,
+      limit: 100,
+      excludedMintUrls: [],
+    });
+
+    expect(db.calls[0]?.sql).toContain("state = 'UNPAID'");
+    expect(db.calls[0]?.sql).toContain("GROUP BY mint_url");
+    expect(db.calls[0]?.params).toEqual([dueBefore]);
+  });
+
+  test("claims one mint lane atomically in persistent polling order", async () => {
     const db = new RecordingPostgresAdapter();
     const repository = new PostgresMintQuoteRepository(db);
     const dueBefore = new Date("2026-08-10T11:59:40.000Z");
     const polledAt = new Date("2026-08-10T12:00:00.000Z");
 
-    await repository.takeDueForPolling({ dueBefore, polledAt, limit: 100 });
+    await repository.takeDueForMintPolling({
+      mintUrlAliases: ["HTTPS://MINT.EXAMPLE.COM/", "https://mint.example.com"],
+      dueBefore,
+      polledAt,
+      limit: 100,
+    });
 
     expect(db.calls[0]?.sql).toContain("state = 'UNPAID'");
+    expect(db.calls[0]?.sql).toContain("mint_url = ANY($2::text[])");
     expect(db.calls[0]?.sql).toContain("last_polled_at NULLS FIRST, id");
     expect(db.calls[0]?.sql).toContain("FOR UPDATE SKIP LOCKED");
-    expect(db.calls[0]?.sql).toContain("SET last_polled_at = $3");
+    expect(db.calls[0]?.sql).toContain("SET last_polled_at = $4");
     expect(db.calls[0]?.sql).toContain("ORDER BY due.polling_order");
-    expect(db.calls[0]?.params).toEqual([dueBefore, 100, polledAt]);
+    expect(db.calls[0]?.params).toEqual([
+      dueBefore,
+      ["HTTPS://MINT.EXAMPLE.COM/", "https://mint.example.com"],
+      100,
+      polledAt,
+    ]);
   });
 
   test("records paid_at when conditionally transitioning a quote to issued", async () => {
@@ -154,9 +179,12 @@ postgresTest(
       "quote_polling",
       async ({ firstAdapter, first, second }) => {
         const expiresAt = new Date("2026-08-10T13:00:00.000Z");
-        const createQuote = (quoteId: string) =>
+        const createQuote = (
+          quoteId: string,
+          mintUrl = "https://mint.example.com",
+        ) =>
           first.create({
-            mintUrl: "https://mint.example.com",
+            mintUrl,
             paymentRequest: `lnbc-${quoteId}`,
             unit: "sat",
             quoteId,
@@ -165,7 +193,10 @@ postgresTest(
             pubkey: "pubkey",
             locked: false,
           });
-        const neverPolled = await createQuote("never-polled");
+        const neverPolled = await createQuote(
+          "never-polled",
+          "HTTPS://MINT.EXAMPLE.COM/",
+        );
         const oldestLowId = await createQuote("oldest-low");
         const oldestHighId = await createQuote("oldest-high");
         const recent = await createQuote("recent");
@@ -190,7 +221,27 @@ postgresTest(
         });
 
         const claimedAt = new Date("2026-08-10T12:00:00.000Z");
-        const claimed = await first.takeDueForPolling({
+        expect(
+          await first.listDueMintQueues({
+            dueBefore: new Date("2026-08-10T11:30:00.000Z"),
+            limit: 10,
+            excludedMintUrls: [],
+          }),
+        ).toEqual([
+          {
+            mintUrl: "https://mint.example.com",
+            mintUrlAliases: [
+              "HTTPS://MINT.EXAMPLE.COM/",
+              "https://mint.example.com",
+            ],
+            oldestDueAt: null,
+          },
+        ]);
+        const claimed = await first.takeDueForMintPolling({
+          mintUrlAliases: [
+            "HTTPS://MINT.EXAMPLE.COM/",
+            "https://mint.example.com",
+          ],
           dueBefore: new Date("2026-08-10T11:30:00.000Z"),
           polledAt: claimedAt,
           limit: 3,
@@ -225,12 +276,14 @@ postgresTest(
           createQuote("concurrent-4"),
         ]);
         const claims = await Promise.all([
-          first.takeDueForPolling({
+          first.takeDueForMintPolling({
+            mintUrlAliases: ["https://mint.example.com"],
             dueBefore: new Date("2026-08-10T11:30:00.000Z"),
             polledAt: new Date("2026-08-10T12:01:00.000Z"),
             limit: 2,
           }),
-          second.takeDueForPolling({
+          second.takeDueForMintPolling({
+            mintUrlAliases: ["https://mint.example.com"],
             dueBefore: new Date("2026-08-10T11:30:00.000Z"),
             polledAt: new Date("2026-08-10T12:01:00.000Z"),
             limit: 2,

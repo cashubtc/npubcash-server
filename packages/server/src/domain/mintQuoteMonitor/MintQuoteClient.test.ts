@@ -345,6 +345,32 @@ describe("FetchMintQuoteClient", () => {
     ).toBe("invalid_response");
   });
 
+  test("classifies batch 400 as invalid and batch 429 or 5xx as unavailable", async () => {
+    const responses = [
+      new Response("bad request", { status: 400 }),
+      new Response("slow down", { status: 429 }),
+      new Response("upstream failure", { status: 503 }),
+    ];
+    const client = new FetchMintQuoteClient({
+      fetch: async () => responses.shift()!,
+      timeoutMs: 1_000,
+      rateLimit: { capacity: 100 },
+    });
+
+    expect(
+      (await client.checkQuotes("https://mint.example.com", ["quote-1"], 1))
+        .kind,
+    ).toBe("invalid_response");
+    expect(
+      (await client.checkQuotes("https://mint.example.com", ["quote-1"], 1))
+        .kind,
+    ).toBe("mint_unavailable");
+    expect(
+      (await client.checkQuotes("https://mint.example.com", ["quote-1"], 1))
+        .kind,
+    ).toBe("mint_unavailable");
+  });
+
   test("classifies quote responses without throwing", async () => {
     const requestStartedAt = new Date("2026-08-11T12:00:00.000Z");
     const responses = [

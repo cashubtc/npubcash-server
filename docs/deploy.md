@@ -89,9 +89,10 @@ types must agree.
 
 The server keeps mint WebSocket subscriptions for active quotes and also polls
 due `UNPAID` quotes from a persistent database queue. Polling selects rows by
-oldest `last_polled_at` (never-polled rows first), marks a bounded batch before
-making requests, and includes expired unpaid quotes until the mint returns an
-authoritative state. A restart resumes from those persisted polling timestamps.
+oldest `last_polled_at` (never-polled rows first), discovers mint lanes before
+claiming, and marks each per-mint claim before making requests. Expired unpaid
+quotes remain pollable until the mint returns an authoritative state. A restart
+resumes from the persisted polling timestamps.
 
 The active controls are:
 
@@ -109,14 +110,25 @@ are parsed temporarily so a Slice 3 deployment can be rolled back to the
 previous monitor without changing its environment. They will be removed after
 the production soak.
 
-WebSocket recovery starts before an immediate polling round. Polling groups the
-claimed rows by mint, and mints run independently so one slow mint does not
-delay another. Mints advertising NUT-29 support for `bolt11` are checked through
-the batch endpoint, split by the advertised `max_batch_size` when present.
-Batch support comes from the persisted mint-info cache and is refreshed after
-the cache's one-hour lifetime rather than fetched during every polling round.
-Unsupported or invalid batch responses use individual checks. A reachable mint
-that reports a missing quote is authoritative and expires the local quote.
+WebSocket recovery starts before immediate polling. Polling discovers normalized
+mint queues in oldest-due order, checks cached NUT-29 capability, and only then
+atomically claims rows for that mint. Different mint lanes run concurrently
+under a global bound of 5,000 resident quotes. Capacity remains available for
+discovered lanes that are still checking capabilities, and each lane drains
+sequentially, so one slow request does not prevent responsive lanes from
+claiming their next batch. An existing due
+backlog is drained before the scheduler waits for the next interval. A batching
+mint gets one request containing up to its advertised `max_batch_size` and the
+remaining global capacity. Batch support comes from the persisted
+mint-info cache and is refreshed after the cache's one-hour lifetime rather than
+fetched during every polling turn.
+
+Unsupported mints claim and individually check at most 10 quotes per turn. A
+batch HTTP 400 or invalid response falls back to individual checks for only the
+10 oldest quotes in that claim. Rate limiting, server errors, timeouts, aborts,
+and transport failures do not trigger individual fallback. Every atomic claim
+advances `last_polled_at`, even when its request fails. A reachable mint that
+reports a missing quote is authoritative and expires the local quote.
 All quote-monitor HTTP requests and WebSocket connection attempts pass through
 an independent token bucket for each mint. `MINT_QUOTE_RATE_LIMIT_CAPACITY`
 controls the maximum burst size and `MINT_QUOTE_RATE_LIMIT_REFILL_PER_MINUTE`

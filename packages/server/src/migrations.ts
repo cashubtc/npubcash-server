@@ -258,4 +258,15 @@ export const migrations: Migration[] = [
       );
     },
   },
+  {
+    id: "005_per_mint_quote_polling_queue",
+    sql: {
+      postgres: [
+        "CREATE INDEX IF NOT EXISTS idx_mint_quotes_mint_polling_queue ON mint_quotes(state, mint_url, last_polled_at, id)",
+      ],
+      sqlite: [
+        "CREATE INDEX IF NOT EXISTS idx_mint_quotes_mint_polling_queue ON mint_quotes(state, mint_url, last_polled_at, id)",
+      ],
+    },
+  },
 ];

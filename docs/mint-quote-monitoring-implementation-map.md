@@ -61,11 +61,11 @@ interface QuotePollingService {
 
 Responsibilities:
 
-- Run one polling round immediately on startup and schedule subsequent rounds without overlap.
-- Take a bounded batch of due Pollable Mint Quotes ordered by `last_polled_at`, with never-polled quotes first.
-- Mark selected quotes as polled before starting remote requests, including quotes whose requests later fail.
-- Group selected quotes by normalized mint URL and respect the existing per-mint request budget and request timeout.
-- Use NUT-29 batching when supported and individual quote checks as the fallback. Batching is an internal transport optimization and still produces one observation per quote.
+- Start polling immediately, drain currently due work, and schedule idle checks without overlapping scheduler loops.
+- Discover normalized mint queues by their oldest due Pollable Mint Quote, with never-polled quotes first.
+- Resolve cached batching support before atomically claiming one request's worth for that mint, marking every claim before remote I/O.
+- Bound all claimed and in-flight work to 5,000 quotes while processing distinct mint lanes concurrently through the existing per-mint request budget and timeout.
+- Use the advertised NUT-29 limit for batching. Claim at most 10 quotes for unsupported mints, and individually retry only the 10 oldest claimed quotes after an invalid batch response.
 - Forward `found` and authoritative `not_found` results to the handler with the HTTP request start time.
 - Log transport failures and malformed responses without asking the handler to change quote state.
 - Abort in-flight work on shutdown.
@@ -101,9 +101,7 @@ External interface:
 
 ```ts
 interface QuoteObservationHandler {
-  handle(
-    observation: QuoteObservation,
-  ): Promise<QuoteStateChange | undefined>;
+  handle(observation: QuoteObservation): Promise<QuoteStateChange | undefined>;
 }
 
 type QuoteStateChange = {
@@ -149,7 +147,20 @@ This is the persistence seam implemented by both PostgreSQL and SQLite adapters.
 
 ```ts
 interface MintQuoteMonitoringStore {
-  takeDueForPolling(input: {
+  listDueMintQueues(input: {
+    dueBefore: Date;
+    limit: number;
+    excludedMintUrls: readonly string[];
+  }): Promise<
+    Array<{
+      mintUrl: string;
+      mintUrlAliases: readonly string[];
+      oldestDueAt: Date | null;
+    }>
+  >;
+
+  takeDueForMintPolling(input: {
+    mintUrlAliases: readonly string[];
     dueBefore: Date;
     polledAt: Date;
     limit: number;
@@ -167,22 +178,27 @@ interface MintQuoteMonitoringStore {
 }
 ```
 
-`takeDueForPolling` selects and marks a bounded queue batch as one store operation. Although the deployment assumes one process, keeping selection and marking together prevents accidental overlap and keeps scheduling rules out of callers.
+`listDueMintQueues` merges stored URL aliases into normalized mint lanes,
+orders them by their oldest due quote, and accepts exclusions so the scheduler
+can page past lanes already started during the current drain. `takeDueForMintPolling`
+selects and marks one bounded mint batch as one store operation. Although the
+deployment assumes one process, keeping selection and marking together prevents
+duplicate claims and keeps scheduling rules out of callers.
 
 ## State-transition rules
 
-| Observation | Source | Current local state | Result | Emit state change |
-| --- | --- | --- | --- | --- |
-| `PAID` | Polling or WebSocket | `UNPAID`, `EXPIRED` | `PAID` | Yes |
-| `ISSUED` | Polling or WebSocket | `UNPAID`, `EXPIRED`, `PAID` | `ISSUED` | Yes |
-| `UNPAID`, request started at or after local expiry | Polling | `UNPAID` | `EXPIRED` | Yes |
-| `UNPAID`, request started before local expiry | Polling | Any | No change | No |
-| `UNPAID` | WebSocket | Any | No change | No |
-| `PENDING` | Polling or WebSocket | Any | No change | No |
-| `not_found` | Polling | `UNPAID` | `EXPIRED` | Yes |
-| Duplicate target state | Either | Same as target | No change | No |
-| Regressive terminal state | Either | Terminal state | No change | No |
-| Payload quote ID mismatch | Either | Any | Ignore | No |
+| Observation                                        | Source               | Current local state         | Result    | Emit state change |
+| -------------------------------------------------- | -------------------- | --------------------------- | --------- | ----------------- |
+| `PAID`                                             | Polling or WebSocket | `UNPAID`, `EXPIRED`         | `PAID`    | Yes               |
+| `ISSUED`                                           | Polling or WebSocket | `UNPAID`, `EXPIRED`, `PAID` | `ISSUED`  | Yes               |
+| `UNPAID`, request started at or after local expiry | Polling              | `UNPAID`                    | `EXPIRED` | Yes               |
+| `UNPAID`, request started before local expiry      | Polling              | Any                         | No change | No                |
+| `UNPAID`                                           | WebSocket            | Any                         | No change | No                |
+| `PENDING`                                          | Polling or WebSocket | Any                         | No change | No                |
+| `not_found`                                        | Polling              | `UNPAID`                    | `EXPIRED` | Yes               |
+| Duplicate target state                             | Either               | Same as target              | No change | No                |
+| Regressive terminal state                          | Either               | Terminal state              | No change | No                |
+| Payload quote ID mismatch                          | Either               | Any                         | Ignore    | No                |
 
 An observation already in flight may correct `EXPIRED` to `PAID` or `ISSUED`. Once a quote is terminal and no observation remains in flight, neither transport continues monitoring it.
 
@@ -197,9 +213,13 @@ Add a nullable `last_polled_at` column to `mint_quotes`:
 Add an index equivalent to:
 
 ```sql
-CREATE INDEX idx_mint_quotes_polling
-ON mint_quotes (state, last_polled_at, id);
+CREATE INDEX idx_mint_quotes_mint_polling_queue
+ON mint_quotes (state, mint_url, last_polled_at, id);
 ```
+
+The deployed implementation retains the original global queue index and adds a
+second `(state, mint_url, last_polled_at, id)` index in a later migration for
+per-mint claims.
 
 A quote is due when:
 

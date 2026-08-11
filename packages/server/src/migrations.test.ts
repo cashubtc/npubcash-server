@@ -1,8 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type {
-  DatabaseAdapter,
-  QueryResult,
-} from "./database/adapter";
+import type { DatabaseAdapter, QueryResult } from "./database/adapter";
 import { SqliteAdapter } from "./database/sqliteAdapter";
 import { runMigrations } from "./migrations";
 
@@ -10,7 +7,9 @@ class V2PostgresAdapter implements DatabaseAdapter {
   readonly type = "postgres" as const;
   readonly queries: string[] = [];
 
-  async query<T = Record<string, unknown>>(sql: string): Promise<QueryResult<T>> {
+  async query<T = Record<string, unknown>>(
+    sql: string,
+  ): Promise<QueryResult<T>> {
     this.queries.push(sql);
 
     if (sql.includes("information_schema.tables")) {
@@ -52,13 +51,16 @@ class InitializedV3PostgresAdapter implements DatabaseAdapter {
           { id: "002_mint_quote_monitoring" },
           { id: "003_recipient_blocks" },
           { id: "004_mint_quote_polling_queue" },
+          { id: "005_per_mint_quote_polling_queue" },
         ] as T[],
-        rowCount: 4,
+        rowCount: 5,
       };
     }
 
     if (sql.includes("INSERT INTO _migrations")) {
-      throw new Error(`Tried to reapply an initialized baseline: ${params?.[0]}`);
+      throw new Error(
+        `Tried to reapply an initialized baseline: ${params?.[0]}`,
+      );
     }
 
     this.schemaStatements.push(sql);
@@ -163,6 +165,7 @@ describe("runMigrations", () => {
         { id: "002_mint_quote_monitoring" },
         { id: "003_recipient_blocks" },
         { id: "004_mint_quote_polling_queue" },
+        { id: "005_per_mint_quote_polling_queue" },
       ]);
       expect(tables.rows).toEqual([
         { name: "_migrations" },
@@ -185,6 +188,9 @@ describe("runMigrations", () => {
       );
       expect(mintQuoteIndexes.rows.map((index) => index.name)).toContain(
         "idx_mint_quotes_polling_queue",
+      );
+      expect(mintQuoteIndexes.rows.map((index) => index.name)).toContain(
+        "idx_mint_quotes_mint_polling_queue",
       );
 
       const reconciliationForeignKeys = await adapter.query<{
@@ -223,6 +229,7 @@ describe("runMigrations", () => {
       "002_mint_quote_monitoring",
       "003_recipient_blocks",
       "004_mint_quote_polling_queue",
+      "005_per_mint_quote_polling_queue",
     ]);
     expect(adapter.schemaStatements.join("\n")).toContain(
       "CREATE TABLE IF NOT EXISTS mint_quote_mint_retries",
@@ -244,6 +251,9 @@ describe("runMigrations", () => {
     );
     expect(adapter.schemaStatements.join("\n")).toContain(
       "idx_mint_quotes_polling_queue",
+    );
+    expect(adapter.schemaStatements.join("\n")).toContain(
+      "idx_mint_quotes_mint_polling_queue",
     );
   });
 
@@ -301,10 +311,9 @@ describe("runMigrations", () => {
 
     try {
       await runMigrations(adapter);
-      await adapter.query(
-        "DELETE FROM _migrations WHERE id = ?",
-        ["004_mint_quote_polling_queue"],
-      );
+      await adapter.query("DELETE FROM _migrations WHERE id = ?", [
+        "004_mint_quote_polling_queue",
+      ]);
 
       await expect(runMigrations(adapter)).resolves.toBeUndefined();
 

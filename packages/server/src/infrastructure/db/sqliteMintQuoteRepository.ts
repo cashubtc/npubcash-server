@@ -9,10 +9,13 @@ import {
 } from "@/domain/mintQuote/MintQuoteRepository";
 import { DatabaseAdapter } from "@/database/adapter";
 import {
+  DueMintQueue,
+  ListDueMintQueuesInput,
   MintQuoteMonitoringStore,
   MintQuoteStateTransition,
-  TakeDueForPollingInput,
+  TakeDueForMintPollingInput,
 } from "@/domain/mintQuoteMonitoring/MintQuoteMonitoringStore";
+import { buildDueMintQueues } from "@/domain/mintQuoteMonitoring/buildDueMintQueues";
 
 type MintQuoteRow = {
   id: number;
@@ -29,6 +32,11 @@ type MintQuoteRow = {
   serialized_zap_request: string | null;
   locked: number;
   polling_order?: number;
+};
+
+type DueMintQueueRow = {
+  mint_url: string;
+  oldest_due_at: string | null;
 };
 
 export class SqliteMintQuoteRepository
@@ -78,11 +86,48 @@ RETURNING *`;
     return res.rows.map((row) => this.castRowToQuote(row));
   }
 
-  async takeDueForPolling(
-    input: TakeDueForPollingInput,
-  ): Promise<MintQuote[]> {
+  async listDueMintQueues(
+    input: ListDueMintQueuesInput,
+  ): Promise<DueMintQueue[]> {
     if (!Number.isInteger(input.limit) || input.limit <= 0) return [];
 
+    const res = await this.db.query<DueMintQueueRow>(
+      `SELECT mint_url,
+              CASE
+                WHEN COUNT(last_polled_at) < COUNT(*) THEN NULL
+                ELSE MIN(last_polled_at)
+              END AS oldest_due_at
+       FROM mint_quotes
+       WHERE state = 'UNPAID'
+         AND (last_polled_at IS NULL OR last_polled_at <= ?)
+       GROUP BY mint_url
+       ORDER BY mint_url`,
+      [input.dueBefore.toISOString()],
+    );
+
+    return buildDueMintQueues(
+      res.rows.map((row) => ({
+        mintUrl: row.mint_url,
+        oldestDueAt: row.oldest_due_at,
+      })),
+      input.limit,
+      input.excludedMintUrls,
+    );
+  }
+
+  async takeDueForMintPolling(
+    input: TakeDueForMintPollingInput,
+  ): Promise<MintQuote[]> {
+    if (
+      !Number.isInteger(input.limit) ||
+      input.limit <= 0 ||
+      input.mintUrlAliases.length === 0
+    ) {
+      return [];
+    }
+
+    const aliases = [...new Set(input.mintUrlAliases)];
+    const aliasPlaceholders = aliases.map(() => "?").join(", ");
     const res = await this.db.query<MintQuoteRow>(
       `WITH due AS (
          SELECT id,
@@ -91,6 +136,7 @@ RETURNING *`;
                 ) AS polling_order
          FROM mint_quotes
          WHERE state = 'UNPAID'
+           AND mint_url IN (${aliasPlaceholders})
            AND (last_polled_at IS NULL OR last_polled_at <= ?)
          ORDER BY last_polled_at IS NOT NULL, last_polled_at, id
          LIMIT ?
@@ -101,6 +147,7 @@ RETURNING *`;
        RETURNING *,
          (SELECT polling_order FROM due WHERE due.id = mint_quotes.id) AS polling_order`,
       [
+        ...aliases,
         input.dueBefore.toISOString(),
         input.limit,
         input.polledAt.toISOString(),
@@ -143,12 +190,15 @@ RETURNING *`;
     pubkey: string,
     limit = 50,
     offset = 0,
-    since?: Date
+    since?: Date,
   ): Promise<UserMintHistoryResult> {
     const cappedLimit = Math.min(limit, 50);
 
     // Build WHERE clause
-    const conditions = ["pubkey = ?", "state IN ('PAID', 'ISSUED', 'INFLIGHT')"];
+    const conditions = [
+      "pubkey = ?",
+      "state IN ('PAID', 'ISSUED', 'INFLIGHT')",
+    ];
     const params: unknown[] = [pubkey];
 
     if (since) {
@@ -161,7 +211,7 @@ RETURNING *`;
     const countParams = since ? [pubkey, since.toISOString()] : [pubkey];
     const countRes = await this.db.query<{ count: number }>(
       `SELECT COUNT(*) as count FROM mint_quotes WHERE ${whereClause}`,
-      countParams
+      countParams,
     );
     const total = countRes.rows[0]?.count ?? 0;
 
@@ -172,7 +222,7 @@ RETURNING *`;
 
     const dataRes = await this.db.query<MintQuoteRow>(
       `SELECT * FROM mint_quotes WHERE ${whereClause} ORDER BY paid_at DESC LIMIT ? OFFSET ?`,
-      queryParams
+      queryParams,
     );
 
     return {

@@ -16,12 +16,12 @@ This roadmap delivers the [mint quote monitoring implementation map](mint-quote-
 
 ## Roadmap
 
-| Slice | Outcome | Depends on | Relative size |
-| --- | --- | --- | --- |
-| 1. One observation decision path (implemented) | Existing transports reconcile state through the centralized handler and emit post-commit events | None | Large |
-| 2. Standalone WebSocket path (implemented) | Mint WebSocket lifecycle and observations no longer belong to the monitor | Slice 1 | Medium |
-| 3. Oldest-first polling path (implemented) | Database-backed polling replaces the remaining monitor and removes it | Slice 2 | Large |
-| 4. Retire legacy operations | Obsolete retry storage and configuration are removed after the new paths soak | Slice 3 plus production validation | Small |
+| Slice                                          | Outcome                                                                                         | Depends on                         | Relative size |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------- | ---------------------------------- | ------------- |
+| 1. One observation decision path (implemented) | Existing transports reconcile state through the centralized handler and emit post-commit events | None                               | Large         |
+| 2. Standalone WebSocket path (implemented)     | Mint WebSocket lifecycle and observations no longer belong to the monitor                       | Slice 1                            | Medium        |
+| 3. Oldest-first polling path (implemented)     | Database-backed polling replaces the remaining monitor and removes it                           | Slice 2                            | Large         |
+| 4. Retire legacy operations                    | Obsolete retry storage and configuration are removed after the new paths soak                   | Slice 3 plus production validation | Small         |
 
 ```mermaid
 flowchart LR
@@ -156,10 +156,10 @@ mint_quotes ordered by last_polled_at
 
 ### Included work
 
-- Add a backward-compatible migration with nullable `mint_quotes.last_polled_at` and the `(state, last_polled_at, id)` polling index.
-- Implement `takeDueForPolling` for PostgreSQL and SQLite so selection and marking are one store operation.
-- Add `QuotePollingService` with immediate startup polling, non-overlapping rounds, bounded batches, per-mint grouping, request timeout, request budget, and shutdown cancellation.
-- Preserve NUT-29 batching as an internal optimization and produce one observation per quote; retain individual-check fallback.
+- Add backward-compatible migrations with nullable `mint_quotes.last_polled_at`, the original queue index, and a `(state, mint_url, last_polled_at, id)` per-mint claim index.
+- Implement due-mint discovery and `takeDueForMintPolling` for PostgreSQL and SQLite so each mint's selection and marking are one store operation.
+- Add `QuotePollingService` with immediate startup polling, non-overlapping scheduling, a 5,000-quote global resident bound, concurrent mint lanes, request timeout, request budget, and shutdown cancellation.
+- Use each mint's cached NUT-29 batch limit, claim unsupported mints in groups of 10, and limit invalid-batch fallback to the 10 oldest claimed quotes.
 - Mark every selected quote as polled before its request, including requests that fail.
 - Start the WebSocket module first and the polling module second from application composition.
 - Remove explicit quote registration from the LNURL controller and `CommunicatorService`; newly inserted rows are discovered from the database queue.
@@ -185,7 +185,7 @@ mint_quotes ordered by last_polled_at
 - No code constructs, imports, or calls `DefaultMintQuoteMonitor` or `MintQuoteMonitorStore`.
 - The controller persists and emits `mintQuote.created` without explicitly registering monitoring.
 - `CommunicatorService` only communicates with mints for request/receive operations.
-- `last_polled_at` is written only by `takeDueForPolling`.
+- `last_polled_at` is written only by `takeDueForMintPolling`.
 - No runtime query touches either legacy monitoring table.
 - Polling and WebSocket races still emit one state-change event.
 - Fresh-database and upgrade-migration test suites pass.
@@ -231,14 +231,14 @@ The database, environment contract, documentation, and tests expose only the new
 
 ## Ownership after each slice
 
-| Concern | Before | After Slice 1 | After Slice 2 | After Slice 3 |
-| --- | --- | --- | --- | --- |
-| State decisions | `DefaultMintQuoteMonitor` | `QuoteObservationHandler` | `QuoteObservationHandler` | `QuoteObservationHandler` |
-| State-change events | `onPaid` plus `quotePaid` | `mintQuote.stateChanged` | `mintQuote.stateChanged` | `mintQuote.stateChanged` |
-| Mint WebSockets | `DefaultMintQuoteMonitor` plus transport | Same | `QuoteWebSocketService` | `QuoteWebSocketService` |
-| HTTP polling | `DefaultMintQuoteMonitor` | Same | Polling-only legacy monitor | `QuotePollingService` |
-| New quote discovery | Explicit controller call | Explicit controller call | Created event for WebSockets; explicit call for legacy polling | Created event for WebSockets; database queue for polling |
-| Retry persistence | Legacy tables | Same | Same | Unused but retained for rollback |
+| Concern             | Before                                   | After Slice 1             | After Slice 2                                                  | After Slice 3                                            |
+| ------------------- | ---------------------------------------- | ------------------------- | -------------------------------------------------------------- | -------------------------------------------------------- |
+| State decisions     | `DefaultMintQuoteMonitor`                | `QuoteObservationHandler` | `QuoteObservationHandler`                                      | `QuoteObservationHandler`                                |
+| State-change events | `onPaid` plus `quotePaid`                | `mintQuote.stateChanged`  | `mintQuote.stateChanged`                                       | `mintQuote.stateChanged`                                 |
+| Mint WebSockets     | `DefaultMintQuoteMonitor` plus transport | Same                      | `QuoteWebSocketService`                                        | `QuoteWebSocketService`                                  |
+| HTTP polling        | `DefaultMintQuoteMonitor`                | Same                      | Polling-only legacy monitor                                    | `QuotePollingService`                                    |
+| New quote discovery | Explicit controller call                 | Explicit controller call  | Created event for WebSockets; explicit call for legacy polling | Created event for WebSockets; database queue for polling |
+| Retry persistence   | Legacy tables                            | Same                      | Same                                                           | Unused but retained for rollback                         |
 
 ## Per-slice pull request checklist
 
