@@ -276,7 +276,10 @@ Shutdown stops polling before WebSockets, aborts in-flight HTTP requests, closes
 
 ### Refactor and retain
 
-- `packages/server/src/domain/mintQuoteMonitor/MintQuoteClient.ts`: retain HTTP validation, NUT-29 detection, batching, timeout, and request-budget behavior; consume it only from the polling module.
+- `packages/server/src/domain/mint/MintService.ts`: own cached NUT-29 capability detection and the advertised batch-size policy.
+- `packages/server/src/domain/mintQuoteMonitor/MintQuoteClient.ts`: retain quote-response validation, batching, timeout, and request-budget behavior; consume it only from the polling module.
+- `packages/server/src/infrastructure/FetchMintInfoLoader.ts`: refresh expired mint information through the shared per-mint request budget.
+- `packages/server/src/infrastructure/MintRequestExecutor.ts`: share per-request timeout and cancellation behavior across mint-info and quote HTTP requests.
 - `packages/server/src/domain/mintQuoteMonitor/WebSocketQuoteTransport.ts`: retain wire-level connection, subscription batching, reconnect, and payload validation as an internal adapter used by the WebSocket module.
 - Their focused transport tests remain, but tests that assert monolithic monitor scheduling move to the new module interfaces.
 

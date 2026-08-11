@@ -10,6 +10,8 @@ import { UserRepository } from "./domain/user/userRepository";
 import { MintQuoteRepository } from "./domain/mintQuote/MintQuoteRepository";
 import { FetchMintQuoteClient } from "./domain/mintQuoteMonitor/MintQuoteClient";
 import { PerMintRequestBudget } from "./infrastructure/MintRequestBudget";
+import { BudgetedMintRequestExecutor } from "./infrastructure/MintRequestExecutor";
+import { FetchMintInfoLoader } from "./infrastructure/FetchMintInfoLoader";
 import { DefaultQuoteObservationHandler } from "./domain/mintQuoteMonitoring/QuoteObservationHandler";
 import {
   DefaultQuotePollingService,
@@ -50,6 +52,15 @@ export async function initializeAppServices(
   const mintRequestBudget = new PerMintRequestBudget(
     config.mintQuoteMonitor.requestRateLimit,
   );
+  const mintRequestExecutor = new BudgetedMintRequestExecutor({
+    requestBudget: mintRequestBudget,
+    timeoutMs: config.mintQuoteMonitor.requestTimeoutMs,
+  });
+  const mintService = new MintService(repos.mintRepository, {
+    mintInfoLoader: new FetchMintInfoLoader({
+      requestExecutor: mintRequestExecutor,
+    }),
+  });
   const quoteObservationHandler = new DefaultQuoteObservationHandler({
     store: repos.mintQuoteMonitoringStore,
     events: eventBus,
@@ -67,9 +78,9 @@ export async function initializeAppServices(
   });
   const quotePollingService = new DefaultQuotePollingService({
     store: repos.mintQuoteMonitoringStore,
+    batchingSupport: mintService,
     client: new FetchMintQuoteClient({
-      timeoutMs: config.mintQuoteMonitor.requestTimeoutMs,
-      requestBudget: mintRequestBudget,
+      requestExecutor: mintRequestExecutor,
     }),
     handler: quoteObservationHandler,
     pollIntervalMs: config.mintQuoteMonitor.activePollIntervalMs,
@@ -84,7 +95,7 @@ export async function initializeAppServices(
     userService: new UserService(repos.userRepository),
     communicatorService: new CommunicatorService(),
     proofService: new ProofService(repos.proofRepository),
-    mintService: new MintService(repos.mintRepository),
+    mintService,
     recipientBlocks,
     quotePollingService,
     quoteWebSocketService,

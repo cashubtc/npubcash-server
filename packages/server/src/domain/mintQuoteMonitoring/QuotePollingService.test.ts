@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { SqliteAdapter } from "@/database/sqliteAdapter";
+import type { QuoteBatchingSupport } from "@/domain/mint/MintService";
 import { MintQuote } from "@/domain/mintQuote/MintQuote";
 import type {
   BatchQuoteCheckResult,
@@ -12,7 +13,10 @@ import { runMigrations } from "@/migrations";
 import type { TakeDueForPollingInput } from "./MintQuoteMonitoringStore";
 import type { QuoteObservation } from "./QuoteObservation";
 import type { QuoteObservationHandler } from "./QuoteObservationHandler";
-import { DefaultQuotePollingService } from "./QuotePollingService";
+import {
+  DefaultQuotePollingService,
+  type QuoteBatchingSupportProvider,
+} from "./QuotePollingService";
 
 const now = new Date("2026-08-10T12:00:00.000Z");
 
@@ -82,6 +86,7 @@ class FakeClient implements MintQuoteClient {
   readonly batchCalls: Array<{
     mintUrl: string;
     quoteIds: readonly string[];
+    batchSize: number;
     signal?: AbortSignal;
   }> = [];
   readonly individualCalls: Array<{
@@ -89,15 +94,19 @@ class FakeClient implements MintQuoteClient {
     quoteId: string;
     signal?: AbortSignal;
   }> = [];
-  batchResult: BatchQuoteCheckResult = { kind: "unsupported" };
+  batchResult: BatchQuoteCheckResult = {
+    kind: "mint_unavailable",
+    cause: new Error("No batch result configured"),
+  };
   individualResults = new Map<string, QuoteCheckResult>();
 
   async checkQuotes(
     mintUrl: string,
     quoteIds: readonly string[],
+    batchSize: number,
     signal?: AbortSignal,
   ): Promise<BatchQuoteCheckResult> {
-    this.batchCalls.push({ mintUrl, quoteIds, signal });
+    this.batchCalls.push({ mintUrl, quoteIds, batchSize, signal });
     return this.batchResult;
   }
 
@@ -107,13 +116,29 @@ class FakeClient implements MintQuoteClient {
     signal?: AbortSignal,
   ): Promise<QuoteCheckResult> {
     this.individualCalls.push({ mintUrl, quoteId, signal });
-    return this.individualResults.get(quoteId) ?? { kind: "not_found" };
+    return (
+      this.individualResults.get(quoteId) ?? {
+        kind: "not_found",
+        requestStartedAt: now,
+      }
+    );
+  }
+}
+
+class FakeBatchingSupport implements QuoteBatchingSupportProvider {
+  readonly calls: string[] = [];
+  result: QuoteBatchingSupport = { support: true, limit: 100 };
+
+  async supportsQuoteBatching(mintUrl: string): Promise<QuoteBatchingSupport> {
+    this.calls.push(mintUrl);
+    return this.result;
   }
 }
 
 function createService(input: {
   quotes?: MintQuote[];
   client?: MintQuoteClient;
+  batchingSupport?: FakeBatchingSupport;
   clock?: FakeClock;
   handler?: FakeHandler;
   pollIntervalMs?: number;
@@ -122,6 +147,7 @@ function createService(input: {
   const clock = input.clock ?? new FakeClock();
   const handler = input.handler ?? new FakeHandler();
   const client = input.client ?? new FakeClient();
+  const batchingSupport = input.batchingSupport ?? new FakeBatchingSupport();
   let returnedQuotes = false;
   const service = new DefaultQuotePollingService({
     store: {
@@ -133,11 +159,12 @@ function createService(input: {
       },
     },
     client,
+    batchingSupport,
     handler,
     clock,
     pollIntervalMs: input.pollIntervalMs ?? 20_000,
   });
-  return { service, takes, clock, handler, client };
+  return { service, takes, clock, handler, client, batchingSupport };
 }
 
 async function yieldToPromises(): Promise<void> {
@@ -147,6 +174,7 @@ async function yieldToPromises(): Promise<void> {
 
 describe("QuotePollingService", () => {
   test("immediately takes a bounded due batch including expired unpaid quotes", async () => {
+    const requestStartedAt = new Date(now.getTime() + 5_000);
     const expired = quote(
       1,
       "HTTPS://MINT.EXAMPLE.COM/",
@@ -155,7 +183,12 @@ describe("QuotePollingService", () => {
     const client = new FakeClient();
     client.batchResult = {
       kind: "found",
-      payloads: [payload(expired.quoteId, "UNPAID")],
+      checks: [
+        {
+          payload: payload(expired.quoteId, "UNPAID"),
+          requestStartedAt,
+        },
+      ],
     };
     const { service, takes, handler, clock } = createService({
       quotes: [expired],
@@ -175,7 +208,7 @@ describe("QuotePollingService", () => {
       {
         source: "polling",
         mintQuoteId: expired.id,
-        requestStartedAt: now,
+        requestStartedAt,
         result: { kind: "found", payload: payload(expired.quoteId, "UNPAID") },
       },
     ]);
@@ -190,7 +223,10 @@ describe("QuotePollingService", () => {
     const client = new FakeClient();
     client.batchResult = {
       kind: "found",
-      payloads: quotes.map((item) => payload(item.quoteId)),
+      checks: quotes.map((item) => ({
+        payload: payload(item.quoteId),
+        requestStartedAt: now,
+      })),
     };
     const { service, handler } = createService({ quotes, client });
 
@@ -200,6 +236,7 @@ describe("QuotePollingService", () => {
     expect(client.batchCalls[0]).toMatchObject({
       mintUrl: "https://mint.example.com",
       quoteIds: ["quote-1", "quote-2"],
+      batchSize: 100,
     });
     expect(
       handler.observations.map((observation) => observation.mintQuoteId),
@@ -209,13 +246,22 @@ describe("QuotePollingService", () => {
   test("falls back to individual checks and forwards found and not-found results", async () => {
     const quotes = [quote(1), quote(2)];
     const client = new FakeClient();
-    client.batchResult = { kind: "unsupported" };
+    const batchingSupport = new FakeBatchingSupport();
+    batchingSupport.result = { support: false };
     client.individualResults.set("quote-1", {
       kind: "found",
       payload: payload("quote-1"),
+      requestStartedAt: now,
     });
-    client.individualResults.set("quote-2", { kind: "not_found" });
-    const { service, handler } = createService({ quotes, client });
+    client.individualResults.set("quote-2", {
+      kind: "not_found",
+      requestStartedAt: now,
+    });
+    const { service, handler } = createService({
+      quotes,
+      client,
+      batchingSupport,
+    });
 
     await service.start();
 
@@ -223,6 +269,7 @@ describe("QuotePollingService", () => {
       "quote-1",
       "quote-2",
     ]);
+    expect(client.batchCalls).toEqual([]);
     expect(
       handler.observations.map((observation) =>
         observation.source === "polling" ? observation.result : undefined,
@@ -244,9 +291,15 @@ describe("QuotePollingService", () => {
           ? slowResult
           : {
               kind: "found",
-              payloads: quoteIds.map((quoteId) => payload(quoteId)),
+              checks: quoteIds.map((quoteId) => ({
+                payload: payload(quoteId),
+                requestStartedAt: now,
+              })),
             },
-      checkQuote: async () => ({ kind: "not_found" }),
+      checkQuote: async () => ({
+        kind: "not_found",
+        requestStartedAt: now,
+      }),
     };
     const { service, handler } = createService({
       quotes: [
@@ -272,12 +325,15 @@ describe("QuotePollingService", () => {
     let periodicSignal: AbortSignal | undefined;
     let resolvePeriodic: ((result: BatchQuoteCheckResult) => void) | undefined;
     const client: MintQuoteClient = {
-      checkQuotes: async (_mintUrl, quoteIds, signal) => {
+      checkQuotes: async (_mintUrl, quoteIds, _batchSize, signal) => {
         calls += 1;
         if (calls === 1) {
           return {
             kind: "found",
-            payloads: quoteIds.map((quoteId) => payload(quoteId)),
+            checks: quoteIds.map((quoteId) => ({
+              payload: payload(quoteId),
+              requestStartedAt: now,
+            })),
           };
         }
         periodicSignal = signal;
@@ -290,7 +346,10 @@ describe("QuotePollingService", () => {
           );
         });
       },
-      checkQuote: async () => ({ kind: "not_found" }),
+      checkQuote: async () => ({
+        kind: "not_found",
+        requestStartedAt: now,
+      }),
     };
     const takes: TakeDueForPollingInput[] = [];
     const service = new DefaultQuotePollingService({
@@ -301,6 +360,7 @@ describe("QuotePollingService", () => {
         },
       },
       client,
+      batchingSupport: new FakeBatchingSupport(),
       handler: new FakeHandler(),
       clock,
       pollIntervalMs: 20_000,
@@ -314,7 +374,10 @@ describe("QuotePollingService", () => {
 
     const stopped = service.stop();
     expect(periodicSignal?.aborted).toBe(true);
-    resolvePeriodic?.({ kind: "mint_unavailable", cause: new Error("stopped") });
+    resolvePeriodic?.({
+      kind: "mint_unavailable",
+      cause: new Error("stopped"),
+    });
     await stopped;
     expect(clock.scheduled).toHaveLength(0);
   });
@@ -368,6 +431,7 @@ describe("QuotePollingService", () => {
     const service = new DefaultQuotePollingService({
       store: repository,
       client,
+      batchingSupport: new FakeBatchingSupport(),
       handler: new FakeHandler(),
       clock: new FakeClock(),
     });

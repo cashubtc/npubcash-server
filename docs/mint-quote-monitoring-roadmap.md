@@ -148,6 +148,7 @@ Production path at the end of the slice:
 ```text
 mint_quotes ordered by last_polled_at
   -> QuotePollingService
+  -> MintService batching support
   -> MintQuoteClient
   -> QuoteObservationHandler
   -> database and mintQuote.stateChanged

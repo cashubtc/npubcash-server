@@ -3,6 +3,10 @@ import {
   PerMintRequestBudget,
   type MintRequestBudget,
 } from "../../infrastructure/MintRequestBudget";
+import {
+  BudgetedMintRequestExecutor,
+  type MintRequestExecutor,
+} from "../../infrastructure/MintRequestExecutor";
 
 export type MintQuotePayloadState = "UNPAID" | "PAID" | "ISSUED" | "PENDING";
 
@@ -15,14 +19,22 @@ export interface MintQuotePayload {
 }
 
 export type QuoteCheckResult =
-  | { kind: "found"; payload: MintQuotePayload }
-  | { kind: "not_found" }
+  | {
+      kind: "found";
+      payload: MintQuotePayload;
+      requestStartedAt: Date;
+    }
+  | { kind: "not_found"; requestStartedAt: Date }
   | { kind: "mint_unavailable"; cause: unknown }
   | { kind: "invalid_response"; cause: unknown };
 
+export interface MintQuoteCheck {
+  payload: MintQuotePayload;
+  requestStartedAt: Date;
+}
+
 export type BatchQuoteCheckResult =
-  | { kind: "found"; payloads: MintQuotePayload[] }
-  | { kind: "unsupported" }
+  | { kind: "found"; checks: MintQuoteCheck[] }
   | { kind: "mint_unavailable"; cause: unknown }
   | { kind: "invalid_response"; cause: unknown };
 
@@ -35,15 +47,18 @@ export interface MintQuoteClient {
   checkQuotes(
     mintUrl: string,
     quoteIds: readonly string[],
+    batchSize: number,
     signal?: AbortSignal,
   ): Promise<BatchQuoteCheckResult>;
 }
 
 interface FetchMintQuoteClientOptions {
   fetch?: FetchLike;
+  now?: () => Date;
   timeoutMs?: number;
   rateLimit?: RequestRateLimiterOptions;
   requestBudget?: MintRequestBudget;
+  requestExecutor?: MintRequestExecutor;
 }
 
 type FetchLike = (
@@ -108,14 +123,19 @@ export function isMintQuotePayload(value: unknown): value is MintQuotePayload {
 
 export class FetchMintQuoteClient implements MintQuoteClient {
   private readonly fetchImpl: FetchLike;
-  private readonly timeoutMs: number;
-  private readonly requestBudget: MintRequestBudget;
+  private readonly now: () => Date;
+  private readonly requestExecutor: MintRequestExecutor;
 
   constructor(options: FetchMintQuoteClientOptions = {}) {
     this.fetchImpl = options.fetch ?? fetch;
-    this.timeoutMs = options.timeoutMs ?? 10_000;
-    this.requestBudget =
-      options.requestBudget ?? new PerMintRequestBudget(options.rateLimit);
+    this.now = options.now ?? (() => new Date());
+    this.requestExecutor =
+      options.requestExecutor ??
+      new BudgetedMintRequestExecutor({
+        requestBudget:
+          options.requestBudget ?? new PerMintRequestBudget(options.rateLimit),
+        timeoutMs: options.timeoutMs,
+      });
   }
 
   async checkQuote(
@@ -128,6 +148,7 @@ export class FetchMintQuoteClient implements MintQuoteClient {
         mintUrl,
         signal,
         async (requestSignal) => {
+          const requestStartedAt = this.now();
           const response = await this.fetchImpl(
             this.buildQuoteUrl(mintUrl, quoteId),
             {
@@ -145,7 +166,7 @@ export class FetchMintQuoteClient implements MintQuoteClient {
             };
           }
           if (response.status === 400 && this.isQuoteNotFound(body)) {
-            return { kind: "not_found" };
+            return { kind: "not_found", requestStartedAt };
           }
           if (!response.ok) {
             return {
@@ -179,7 +200,7 @@ export class FetchMintQuoteClient implements MintQuoteClient {
               ),
             };
           }
-          return { kind: "found", payload: data };
+          return { kind: "found", payload: data, requestStartedAt };
         },
       );
     } catch (cause) {
@@ -190,9 +211,16 @@ export class FetchMintQuoteClient implements MintQuoteClient {
   async checkQuotes(
     mintUrl: string,
     quoteIds: readonly string[],
+    batchSize: number,
     signal?: AbortSignal,
   ): Promise<BatchQuoteCheckResult> {
-    if (quoteIds.length === 0) return { kind: "found", payloads: [] };
+    if (quoteIds.length === 0) return { kind: "found", checks: [] };
+    if (!Number.isInteger(batchSize) || batchSize <= 0) {
+      return {
+        kind: "invalid_response",
+        cause: new RangeError("Batch size must be a positive integer"),
+      };
+    }
     if (new Set(quoteIds).size !== quoteIds.length) {
       return {
         kind: "invalid_response",
@@ -200,20 +228,18 @@ export class FetchMintQuoteClient implements MintQuoteClient {
       };
     }
 
-    const support = await this.getBatchSupport(mintUrl, signal);
-    if (support.kind !== "supported") return support;
-
-    const payloads: MintQuotePayload[] = [];
-    const batchSize = support.maxBatchSize ?? quoteIds.length;
+    const checks: MintQuoteCheck[] = [];
     for (let offset = 0; offset < quoteIds.length; offset += batchSize) {
       const batch = quoteIds.slice(offset, offset + batchSize);
       let response: Response;
       let body: string;
+      let requestStartedAt: Date;
       try {
-        ({ response, body } = await this.withMintRequest(
+        ({ response, body, requestStartedAt } = await this.withMintRequest(
           mintUrl,
           signal,
           async (requestSignal) => {
+            const requestStartedAt = this.now();
             const response = await this.fetchImpl(
               this.buildBatchQuoteUrl(mintUrl),
               {
@@ -226,7 +252,11 @@ export class FetchMintQuoteClient implements MintQuoteClient {
                 signal: requestSignal,
               },
             );
-            return { response, body: await response.text() };
+            return {
+              response,
+              body: await response.text(),
+              requestStartedAt,
+            };
           },
         ));
       } catch (cause) {
@@ -282,84 +312,10 @@ export class FetchMintQuoteClient implements MintQuoteClient {
             ),
           };
         }
-        payloads.push(payload);
+        checks.push({ payload, requestStartedAt });
       }
     }
-    return { kind: "found", payloads };
-  }
-
-  private async getBatchSupport(
-    mintUrl: string,
-    signal?: AbortSignal,
-  ): Promise<
-    | { kind: "supported"; maxBatchSize?: number }
-    | Exclude<BatchQuoteCheckResult, { kind: "found" }>
-  > {
-    let response: Response;
-    let body: string;
-    try {
-      ({ response, body } = await this.withMintRequest(
-        mintUrl,
-        signal,
-        async (requestSignal) => {
-          const response = await this.fetchImpl(this.buildMintInfoUrl(mintUrl), {
-            method: "GET",
-            headers: { Accept: "application/json" },
-            signal: requestSignal,
-          });
-          return { response, body: await response.text() };
-        },
-      ));
-    } catch (cause) {
-      return { kind: "mint_unavailable", cause };
-    }
-
-    if (response.status === 429 || response.status >= 500) {
-      return {
-        kind: "mint_unavailable",
-        cause: mintResponseError("Mint info request failed", response, body),
-      };
-    }
-    if (!response.ok) return { kind: "unsupported" };
-
-    let data: unknown;
-    try {
-      data = JSON.parse(body);
-    } catch (cause) {
-      return {
-        kind: "invalid_response",
-        cause: mintResponseError(
-          "Mint info response was not valid JSON",
-          response,
-          body,
-          cause,
-        ),
-      };
-    }
-    if (!data || typeof data !== "object") return { kind: "unsupported" };
-    const nuts = (data as Record<string, unknown>).nuts;
-    if (!nuts || typeof nuts !== "object") return { kind: "unsupported" };
-    const nut29 = (nuts as Record<string, unknown>)["29"];
-    if (!nut29 || typeof nut29 !== "object") {
-      return { kind: "unsupported" };
-    }
-
-    const advertisement = nut29 as Record<string, unknown>;
-    if (
-      advertisement.methods !== undefined &&
-      (!Array.isArray(advertisement.methods) ||
-        !advertisement.methods.includes("bolt11"))
-    ) {
-      return { kind: "unsupported" };
-    }
-    const advertisedMax = advertisement.max_batch_size;
-    const maxBatchSize =
-      typeof advertisedMax === "number" &&
-      Number.isInteger(advertisedMax) &&
-      advertisedMax > 0
-        ? advertisedMax
-        : undefined;
-    return { kind: "supported", maxBatchSize };
+    return { kind: "found", checks };
   }
 
   private async withMintRequest<T>(
@@ -367,32 +323,7 @@ export class FetchMintQuoteClient implements MintQuoteClient {
     signal: AbortSignal | undefined,
     request: (signal: AbortSignal) => Promise<T>,
   ): Promise<T> {
-    return this.requestBudget.schedule(
-      mintUrl,
-      () => this.withRequestSignal(signal, request),
-      signal,
-    );
-  }
-
-  private async withRequestSignal<T>(
-    signal: AbortSignal | undefined,
-    request: (signal: AbortSignal) => Promise<T>,
-  ): Promise<T> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
-    const abortFromCaller = () => controller.abort(signal?.reason);
-    if (signal?.aborted) {
-      abortFromCaller();
-    } else {
-      signal?.addEventListener("abort", abortFromCaller, { once: true });
-    }
-
-    try {
-      return await request(controller.signal);
-    } finally {
-      clearTimeout(timeout);
-      signal?.removeEventListener("abort", abortFromCaller);
-    }
+    return this.requestExecutor.run(mintUrl, signal, request);
   }
 
   private buildQuoteUrl(mintUrl: string, quoteId: string): string {
@@ -402,10 +333,6 @@ export class FetchMintQuoteClient implements MintQuoteClient {
 
   private buildBatchQuoteUrl(mintUrl: string): string {
     return `${this.normalizeBaseUrl(mintUrl)}/v1/mint/quote/bolt11/check`;
-  }
-
-  private buildMintInfoUrl(mintUrl: string): string {
-    return `${this.normalizeBaseUrl(mintUrl)}/v1/info`;
   }
 
   private normalizeBaseUrl(mintUrl: string): string {

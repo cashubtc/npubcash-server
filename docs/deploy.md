@@ -113,6 +113,8 @@ WebSocket recovery starts before an immediate polling round. Polling groups the
 claimed rows by mint, and mints run independently so one slow mint does not
 delay another. Mints advertising NUT-29 support for `bolt11` are checked through
 the batch endpoint, split by the advertised `max_batch_size` when present.
+Batch support comes from the persisted mint-info cache and is refreshed after
+the cache's one-hour lifetime rather than fetched during every polling round.
 Unsupported or invalid batch responses use individual checks. A reachable mint
 that reports a missing quote is authoritative and expires the local quote.
 All quote-monitor HTTP requests and WebSocket connection attempts pass through
@@ -120,7 +122,7 @@ an independent token bucket for each mint. `MINT_QUOTE_RATE_LIMIT_CAPACITY`
 controls the maximum burst size and `MINT_QUOTE_RATE_LIMIT_REFILL_PER_MINUTE`
 controls the continuous refill rate.
 The safe defaults allow one immediate request followed by 20 requests per
-minute. This applies to mint-info discovery, NUT-29 batch chunks, and individual
+minute. This applies to mint-info refreshes, NUT-29 batch chunks, and individual
 fallback checks and WebSocket connection attempts without coupling traffic to
 different mints.
 

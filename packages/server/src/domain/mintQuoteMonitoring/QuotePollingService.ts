@@ -1,10 +1,9 @@
 import type { MintQuote } from "@/domain/mintQuote/MintQuote";
-import type {
-  MintQuoteClient,
-  QuoteCheckResult,
-} from "@/domain/mintQuoteMonitor/MintQuoteClient";
+import type { QuoteBatchingSupport } from "@/domain/mint/MintService";
+import type { MintQuoteClient } from "@/domain/mintQuoteMonitor/MintQuoteClient";
 import { normalizeUrl } from "@/utils/utils";
 import type { MintQuoteMonitoringStore } from "./MintQuoteMonitoringStore";
+import type { QuoteObservation } from "./QuoteObservation";
 import type { QuoteObservationHandler } from "./QuoteObservationHandler";
 
 export const DEFAULT_QUOTE_POLL_INTERVAL_MS = 20_000;
@@ -23,11 +22,19 @@ interface QuotePollingClock {
 interface QuotePollingServiceOptions {
   store: Pick<MintQuoteMonitoringStore, "takeDueForPolling">;
   client: MintQuoteClient;
+  batchingSupport: QuoteBatchingSupportProvider;
   handler: QuoteObservationHandler;
   pollIntervalMs?: number;
   batchSize?: number;
   clock?: QuotePollingClock;
   logger?: QuotePollingLogger;
+}
+
+export interface QuoteBatchingSupportProvider {
+  supportsQuoteBatching(
+    mintUrl: string,
+    signal?: AbortSignal,
+  ): Promise<QuoteBatchingSupport>;
 }
 
 export interface QuotePollingService {
@@ -44,6 +51,7 @@ const systemClock: QuotePollingClock = {
 export class DefaultQuotePollingService implements QuotePollingService {
   private readonly store: Pick<MintQuoteMonitoringStore, "takeDueForPolling">;
   private readonly client: MintQuoteClient;
+  private readonly batchingSupport: QuoteBatchingSupportProvider;
   private readonly handler: QuoteObservationHandler;
   private readonly pollIntervalMs: number;
   private readonly batchSize: number;
@@ -58,6 +66,7 @@ export class DefaultQuotePollingService implements QuotePollingService {
   constructor(options: QuotePollingServiceOptions) {
     this.store = options.store;
     this.client = options.client;
+    this.batchingSupport = options.batchingSupport;
     this.handler = options.handler;
     this.pollIntervalMs =
       options.pollIntervalMs ?? DEFAULT_QUOTE_POLL_INTERVAL_MS;
@@ -157,15 +166,31 @@ export class DefaultQuotePollingService implements QuotePollingService {
     signal: AbortSignal,
   ): Promise<void> {
     if (signal.aborted) return;
-    const requestStartedAt = this.clock.now();
+    let support: QuoteBatchingSupport;
+    try {
+      support = await this.batchingSupport.supportsQuoteBatching(
+        mintUrl,
+        signal,
+      );
+    } catch (cause) {
+      if (!signal.aborted) this.logMintFailure(mintUrl, cause);
+      return;
+    }
+    if (signal.aborted) return;
+    if (!support.support) {
+      await this.pollIndividually(mintUrl, quotes, signal);
+      return;
+    }
+
     const result = await this.client.checkQuotes(
       mintUrl,
       quotes.map((quote) => quote.quoteId),
+      support.limit,
       signal,
     );
 
     if (result.kind === "found") {
-      if (result.payloads.length !== quotes.length) {
+      if (result.checks.length !== quotes.length) {
         this.logMintFailure(
           mintUrl,
           new Error("Batch response length did not match selected quotes"),
@@ -173,9 +198,10 @@ export class DefaultQuotePollingService implements QuotePollingService {
         return;
       }
       for (let index = 0; index < quotes.length; index += 1) {
-        await this.forwardResult(quotes[index], requestStartedAt, {
+        const check = result.checks[index];
+        await this.forwardResult(quotes[index], check.requestStartedAt, {
           kind: "found",
-          payload: result.payloads[index],
+          payload: check.payload,
         });
       }
       return;
@@ -199,14 +225,20 @@ export class DefaultQuotePollingService implements QuotePollingService {
   ): Promise<void> {
     for (const quote of quotes) {
       if (signal.aborted) return;
-      const requestStartedAt = this.clock.now();
       const result = await this.client.checkQuote(
         mintUrl,
         quote.quoteId,
         signal,
       );
-      if (result.kind === "found" || result.kind === "not_found") {
-        await this.forwardResult(quote, requestStartedAt, result);
+      if (result.kind === "found") {
+        await this.forwardResult(quote, result.requestStartedAt, {
+          kind: "found",
+          payload: result.payload,
+        });
+      } else if (result.kind === "not_found") {
+        await this.forwardResult(quote, result.requestStartedAt, {
+          kind: "not_found",
+        });
       } else {
         this.logMintFailure(mintUrl, result.cause, quote.quoteId);
       }
@@ -216,7 +248,7 @@ export class DefaultQuotePollingService implements QuotePollingService {
   private async forwardResult(
     quote: MintQuote,
     requestStartedAt: Date,
-    result: Extract<QuoteCheckResult, { kind: "found" | "not_found" }>,
+    result: Extract<QuoteObservation, { source: "polling" }>["result"],
   ): Promise<void> {
     try {
       await this.handler.handle({
