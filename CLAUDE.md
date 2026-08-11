@@ -32,7 +32,7 @@ cd packages/frontend && bun run lint
 This is a **Bun monorepo** with four packages:
 
 - **@npubcash/server** (`packages/server/`) - Express.js backend with WebSocket support
-- **@npubcash/frontend** (`packages/frontend/`) - React 19 SPA with TanStack Router and Vite
+- **@npubcash/frontend** (`packages/frontend/`) - React 19 homepage built with Vite, Tailwind CSS, and shadcn/ui
 - **npubcash-sdk** (`packages/sdk/`) - Publishable client library for the npubcash API
 - **npubcash-types** (`packages/types/`) - Shared TypeScript type definitions
 
@@ -43,7 +43,7 @@ The server uses domain-driven design:
 - **Domain layer** (`domain/`) - Business logic services (UserService, MintService, ProofService, CommunicatorService)
 - **Controller layer** (`controller/`) - HTTP request handlers
 - **Infrastructure** (`infrastructure/db/`) - Repository pattern implementations
-- **Database** (`database/`) - Adapter pattern supporting PostgreSQL (production) and SQLite (development)
+- **Database** (`database/`) - Adapter pattern supporting PostgreSQL and SQLite
 
 Key patterns:
 - Event bus for decoupled communication (e.g., `quotePaid` events)
@@ -52,16 +52,19 @@ Key patterns:
 
 ### Frontend Architecture
 
-- TanStack Router with file-based routing (`routes/`)
-- AuthContext for authentication state
-- CoCo Cashu libraries for token management
-- Vite proxies `/api` to backend at `localhost:8000`
+- Single-page public homepage with no first-party wallet or authenticated routes
+- shadcn/ui components on Base UI with Tailwind CSS v4
+- Static production assets are built to `packages/frontend/dist` and served by the Express server in `API_MODE=BOTH`
 
 ## Database
 
 Supports dual databases via adapter pattern:
-- **PostgreSQL**: Production (set `PG_CONNECTIONSTRING` or individual `PG*` vars)
-- **SQLite**: Development fallback
+- **PostgreSQL**: Recommended for production (set `DATABASE_URL`)
+- **SQLite**: Development default, or an explicit production choice backed by a persistent volume
+
+Production requires `DATABASE_URL` unless SQLite is explicitly selected with
+`DATABASE_TYPE=sqlite`. PostgreSQL URLs and SQLite file paths infer the database
+type when `DATABASE_TYPE` is omitted.
 
 Migrations run automatically on startup and support both databases.
 

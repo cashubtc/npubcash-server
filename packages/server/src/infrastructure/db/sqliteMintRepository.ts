@@ -1,6 +1,6 @@
 import { Mint } from "@/domain/mint/Mint";
 import { MintRepository } from "@/domain/mint/MintRepository";
-import { queryWrapper } from "@/utils/database";
+import { DatabaseAdapter } from "@/database/adapter";
 import { GetInfoResponse } from "@cashu/cashu-ts";
 
 type SqliteMint = {
@@ -10,9 +10,11 @@ type SqliteMint = {
 };
 
 export class SqliteMintRepository implements MintRepository {
+  constructor(private readonly db: DatabaseAdapter) {}
+
   async getMint(mintUrl: string): Promise<Mint | null> {
     const query = `SELECT * from mints WHERE mint_url = ?`;
-    const res = await queryWrapper<SqliteMint>(query, [mintUrl]);
+    const res = await this.db.query<SqliteMint>(query, [mintUrl]);
     if (res.rowCount === 0) {
       return null;
     }
@@ -27,7 +29,7 @@ ON CONFLICT (mint_url)
 DO UPDATE SET
 last_checked = excluded.last_checked,
 mint_info = excluded.mint_info`;
-    const queryRes = await queryWrapper(query, [
+    const queryRes = await this.db.query(query, [
       mint.url,
       mint.lastChecked.toISOString(),
       JSON.stringify(mint.info),

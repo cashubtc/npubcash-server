@@ -3,7 +3,7 @@ import {
   getEnvVar,
   getPortFromEnv,
   getMintUrlFromEnv,
-  getHostnameFromEnv,
+  getAllowedHostnamesFromEnv,
   getNodeEnvFromEnv,
   getLogLevelFromEnv,
   getApiModeFromEnv,
@@ -14,6 +14,7 @@ import {
   getParsedMnemonicFromEnv,
   getJwtSecretFromEnv,
   getSecretKeyFromEnv,
+  getMintQuoteMonitorConfigFromEnv,
 } from "./env";
 
 let originalEnv: NodeJS.ProcessEnv;
@@ -52,12 +53,29 @@ describe("env.ts", () => {
     expect(() => getMintUrlFromEnv()).toThrow("MINTURL is required");
   });
 
-  test("getHostnameFromEnv requires HOSTNAME", () => {
-    process.env.HOSTNAME = "https://npub.cash";
-    expect(getHostnameFromEnv()).toBe("https://npub.cash");
+  test("getAllowedHostnamesFromEnv parses an optional hostname allowlist", () => {
+    delete process.env.ALLOWED_HOSTNAMES;
+    expect(getAllowedHostnamesFromEnv()).toEqual([]);
 
-    delete process.env.HOSTNAME;
-    expect(() => getHostnameFromEnv()).toThrow("HOSTNAME is required");
+    process.env.ALLOWED_HOSTNAMES = " npub.cash,EXAMPLE.COM,npub.cash ";
+    expect(getAllowedHostnamesFromEnv()).toEqual(["npub.cash", "example.com"]);
+  });
+
+  test("getAllowedHostnamesFromEnv rejects origins and wildcard entries", () => {
+    process.env.ALLOWED_HOSTNAMES = "https://npub.cash";
+    expect(() => getAllowedHostnamesFromEnv()).toThrow(
+      "ALLOWED_HOSTNAMES must contain comma-separated hostnames",
+    );
+
+    process.env.ALLOWED_HOSTNAMES = "*.npub.cash";
+    expect(() => getAllowedHostnamesFromEnv()).toThrow(
+      "ALLOWED_HOSTNAMES must contain comma-separated hostnames",
+    );
+
+    process.env.ALLOWED_HOSTNAMES = "npub.cash:443";
+    expect(() => getAllowedHostnamesFromEnv()).toThrow(
+      "ALLOWED_HOSTNAMES must contain comma-separated hostnames",
+    );
   });
 
   test("getNodeEnvFromEnv defaults to development", () => {
@@ -90,15 +108,54 @@ describe("env.ts", () => {
     expect(getApiModeFromEnv()).toBe("API_ONLY");
   });
 
-  test("getDbTypeFromEnv defaults to sqlite", () => {
+  test("getDbTypeFromEnv defaults to sqlite and infers postgres URLs", () => {
+    process.env.NODE_ENV = "production";
     delete process.env.DATABASE_TYPE;
+    delete process.env.DATABASE_URL;
     expect(getDbTypeFromEnv()).toBe("sqlite");
 
     process.env.DATABASE_TYPE = "postgres";
     expect(getDbTypeFromEnv()).toBe("postgres");
+
+    delete process.env.DATABASE_TYPE;
+    process.env.DATABASE_URL = "postgres://localhost/db";
+    expect(getDbTypeFromEnv()).toBe("postgres");
+
+    process.env.DATABASE_URL = "postgresql://localhost/db";
+    expect(getDbTypeFromEnv()).toBe("postgres");
+
+    process.env.DATABASE_URL = "./data.db";
+    expect(getDbTypeFromEnv()).toBe("sqlite");
+  });
+
+  test("getDbTypeFromEnv rejects invalid types and URL mismatches", () => {
+    process.env.NODE_ENV = "production";
+    process.env.DATABASE_TYPE = "mysql";
+    expect(() => getDbTypeFromEnv()).toThrow(
+      "DATABASE_TYPE must be either 'postgres' or 'sqlite'",
+    );
+
+    process.env.DATABASE_TYPE = "sqlite";
+    process.env.DATABASE_URL = "postgres://localhost/db";
+    expect(() => getDbTypeFromEnv()).toThrow(
+      "DATABASE_TYPE=sqlite does not match DATABASE_URL (postgres)",
+    );
+
+    process.env.DATABASE_TYPE = "postgres";
+    process.env.DATABASE_URL = "./data.db";
+    expect(() => getDbTypeFromEnv()).toThrow(
+      "DATABASE_TYPE=postgres does not match DATABASE_URL (sqlite)",
+    );
+
+    delete process.env.DATABASE_TYPE;
+    process.env.DATABASE_URL = "mysql://localhost/db";
+    expect(() => getDbTypeFromEnv()).toThrow(
+      "DATABASE_URL must be a PostgreSQL URL or a SQLite file path",
+    );
   });
 
   test("getDbConnectionStringFromEnv returns URL or default SQLite path", () => {
+    process.env.NODE_ENV = "production";
     process.env.DATABASE_URL = "postgres://localhost/db";
     expect(getDbConnectionStringFromEnv()).toBe("postgres://localhost/db");
 
@@ -106,12 +163,28 @@ describe("env.ts", () => {
     delete process.env.DATABASE_TYPE;
     process.env.NODE_ENV = "development";
     expect(getDbConnectionStringFromEnv()).toBe("./data.db");
+  });
 
+  test("getDbConnectionStringFromEnv requires a database choice in production", () => {
+    delete process.env.DATABASE_URL;
+    delete process.env.DATABASE_TYPE;
     process.env.NODE_ENV = "production";
+    expect(() => getDbConnectionStringFromEnv()).toThrow(
+      "Production requires DATABASE_URL or explicit DATABASE_TYPE=sqlite",
+    );
+
+    process.env.DATABASE_TYPE = "sqlite";
     expect(getDbConnectionStringFromEnv()).toBe("/data/npubcash.db");
 
     process.env.DATABASE_TYPE = "postgres";
-    expect(() => getDbConnectionStringFromEnv()).toThrow("Could not find DATABASE_URL");
+    process.env.DATABASE_URL = "postgres://localhost/db";
+    expect(getDbTypeFromEnv()).toBe("postgres");
+    expect(getDbConnectionStringFromEnv()).toBe("postgres://localhost/db");
+
+    delete process.env.DATABASE_URL;
+    expect(() => getDbConnectionStringFromEnv()).toThrow(
+      "Could not find DATABASE_URL",
+    );
   });
 
   test("getUsernameConfigFromEnv returns enabled/disabled config", () => {
@@ -166,5 +239,47 @@ describe("env.ts", () => {
 
     delete process.env.MNEMONIC;
     expect(() => getSecretKeyFromEnv()).toThrow("Could not find MNEMONIC");
+  });
+
+  test("getMintQuoteMonitorConfigFromEnv parses retry policy overrides", () => {
+    delete process.env.MINT_QUOTE_ACTIVE_POLL_MS;
+    delete process.env.MINT_QUOTE_RATE_LIMIT_CAPACITY;
+    delete process.env.MINT_QUOTE_RATE_LIMIT_REFILL_PER_MINUTE;
+    const defaults = getMintQuoteMonitorConfigFromEnv();
+    expect(defaults.activePollIntervalMs).toBe(20_000);
+    expect(defaults.requestRateLimit).toEqual({
+      capacity: 1,
+      refillPerMinute: 20,
+    });
+
+    process.env.MINT_QUOTE_ACTIVE_POLL_MS = "30000";
+    process.env.MINT_QUOTE_ACTIVE_RETRY_MS = "1000,2000,3000";
+    process.env.MINT_QUOTE_RECONCILIATION_RETRY_MS = "60000,300000";
+    process.env.MINT_QUOTE_RETRY_JITTER_RATIO = "0.1";
+    process.env.MINT_QUOTE_RATE_LIMIT_CAPACITY = "2";
+    process.env.MINT_QUOTE_RATE_LIMIT_REFILL_PER_MINUTE = "30";
+    expect(getMintQuoteMonitorConfigFromEnv()).toEqual({
+      activePollIntervalMs: 30_000,
+      activeRetryMs: [1_000, 2_000, 3_000],
+      reconciliationRetryMs: [60_000, 300_000],
+      jitterRatio: 0.1,
+      requestTimeoutMs: 10_000,
+      requestRateLimit: {
+        capacity: 2,
+        refillPerMinute: 30,
+      },
+      periodicReconnectMs: 180_000,
+    });
+
+    process.env.MINT_QUOTE_RATE_LIMIT_CAPACITY = "1.5";
+    expect(() => getMintQuoteMonitorConfigFromEnv()).toThrow(
+      "MINT_QUOTE_RATE_LIMIT_CAPACITY must be a positive integer",
+    );
+    process.env.MINT_QUOTE_RATE_LIMIT_CAPACITY = "2";
+
+    process.env.MINT_QUOTE_ACTIVE_RETRY_MS = "1000,nope";
+    expect(() => getMintQuoteMonitorConfigFromEnv()).toThrow(
+      "MINT_QUOTE_ACTIVE_RETRY_MS",
+    );
   });
 });

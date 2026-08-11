@@ -5,19 +5,122 @@ import { ProofService } from "./domain/proof/proofService";
 import { MintService } from "./domain/mint/MintService";
 import { QuoteSubscriptionManager } from "./websocket/subs";
 import { eventBus } from "./events";
-import { createRepositories } from "./infrastructure/db/repositoryFactory";
+import { Repositories } from "./infrastructure/db/repositoryFactory";
+import { UserRepository } from "./domain/user/userRepository";
+import { MintQuoteRepository } from "./domain/mintQuote/MintQuoteRepository";
+import { DefaultMintQuoteMonitor } from "./domain/mintQuoteMonitor/MintQuoteMonitor";
+import { FetchMintQuoteClient } from "./domain/mintQuoteMonitor/MintQuoteClient";
+import { WebSocketQuoteTransport } from "./domain/mintQuoteMonitor/WebSocketQuoteTransport";
+import { PerMintRequestBudget } from "./infrastructure/MintRequestBudget";
 import { config } from "./config/index";
+import { logger } from "./utils/logger";
+import { handleZapRequest } from "./utils/nostr";
+import {
+  createRecipientBlocks,
+  RecipientBlocks,
+} from "./domain/recipientBlock/RecipientBlocks";
 
-const repos = createRepositories(config.dbType);
+interface AppServices {
+  userRepository: UserRepository;
+  mintQuoteRepository: MintQuoteRepository;
+  userService: UserService;
+  communicatorService: CommunicatorService;
+  proofService: ProofService;
+  mintService: MintService;
+  recipientBlocks: RecipientBlocks;
+}
+
+let appServices: AppServices | null = null;
 
 export const nostrPool = new SimplePool();
 
-export const userRepository = repos.userRepository;
-export const mintQuoteRepository = repos.mintQuoteRepository;
-export const userService = new UserService(repos.userRepository);
-export const communicatorService = new CommunicatorService(repos.mintQuoteRepository);
-export const proofService = new ProofService(repos.proofRepository);
-export const mintService = new MintService(repos.mintRepository);
+export async function initializeAppServices(
+  repos: Repositories,
+): Promise<AppServices> {
+  const mintRequestBudget = new PerMintRequestBudget(
+    config.mintQuoteMonitor.requestRateLimit,
+  );
+  const mintQuoteMonitor = new DefaultMintQuoteMonitor({
+    store: repos.mintQuoteMonitorStore,
+    client: new FetchMintQuoteClient({
+      timeoutMs: config.mintQuoteMonitor.requestTimeoutMs,
+      requestBudget: mintRequestBudget,
+    }),
+    activeTransport: new WebSocketQuoteTransport({
+      logger,
+      periodicReconnectMs: config.mintQuoteMonitor.periodicReconnectMs,
+      requestBudget: mintRequestBudget,
+    }),
+    policy: config.mintQuoteMonitor,
+    logger,
+    onPaid: async (quote) => {
+      eventBus.emit("quotePaid", quote);
+      if (!quote.serializedZapRequest || !config.nostr.nostrEnabled) return;
+      try {
+        const zapRequest = JSON.parse(quote.serializedZapRequest);
+        await handleZapRequest(
+          quote.quoteId,
+          zapRequest,
+          quote.paymentRequest,
+          logger,
+        );
+      } catch (cause) {
+        logger.error("[QuoteMonitor] Failed to handle zap request", {
+          quoteId: quote.quoteId,
+          cause,
+        });
+      }
+    },
+  });
+  const recipientBlocks = await createRecipientBlocks(
+    repos.recipientBlockRepository,
+  );
+  appServices = {
+    userRepository: repos.userRepository,
+    mintQuoteRepository: repos.mintQuoteRepository,
+    userService: new UserService(repos.userRepository),
+    communicatorService: new CommunicatorService(mintQuoteMonitor),
+    proofService: new ProofService(repos.proofRepository),
+    mintService: new MintService(repos.mintRepository),
+    recipientBlocks,
+  };
+  return appServices;
+}
+
+function getAppServices(): AppServices {
+  if (!appServices) {
+    throw new Error("App services not initialized. Call setupDatabase() first.");
+  }
+  return appServices;
+}
+
+export function getUserRepository(): UserRepository {
+  return getAppServices().userRepository;
+}
+
+export function getMintQuoteRepository(): MintQuoteRepository {
+  return getAppServices().mintQuoteRepository;
+}
+
+export function getUserService(): UserService {
+  return getAppServices().userService;
+}
+
+export function getCommunicatorService(): CommunicatorService {
+  return getAppServices().communicatorService;
+}
+
+export function getProofService(): ProofService {
+  return getAppServices().proofService;
+}
+
+export function getMintService(): MintService {
+  return getAppServices().mintService;
+}
+
+export function getRecipientBlocks(): RecipientBlocks {
+  return getAppServices().recipientBlocks;
+}
 
 export const subManager = new QuoteSubscriptionManager();
 eventBus.on("quotePaid", (quote) => {

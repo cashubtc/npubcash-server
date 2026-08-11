@@ -1,12 +1,10 @@
-import type { Logger } from "winston";
+import type { MintRequestBudget } from "@/infrastructure/MintRequestBudget";
 
 export type JsonRpcId = number;
 
 export type WsRequestMethod = "subscribe" | "unsubscribe";
 
 export type SubscriptionKind = "bolt11_mint_quote";
-
-export type UnsubscribeHandler = () => void;
 
 export interface SubscribeParams {
   kind: SubscriptionKind;
@@ -38,15 +36,6 @@ export type WsNotification<TPayload> = {
   params: { subId: string; payload: TPayload };
 };
 
-export type MintQuoteState = "UNPAID" | "PAID" | "ISSUED" | "PENDING";
-
-export interface MintQuotePayload {
-  quote: string;
-  request: string;
-  state: MintQuoteState;
-  expiry: number;
-}
-
 export type TransportEvent = "open" | "message" | "error" | "close";
 
 export interface RealTimeTransport {
@@ -54,27 +43,13 @@ export interface RealTimeTransport {
   send(mintUrl: string, req: WsRequest): void;
   closeAll(): void;
   closeMint(mintUrl: string): void;
-}
-
-export interface MintAdapter {
-  checkMintQuoteState(
-    mintUrl: string,
-    quoteId: string,
-  ): Promise<MintQuotePayload>;
-}
-
-export interface HybridTransportOptions {
-  slowPollingIntervalMs?: number;
-  fastPollingIntervalMs?: number;
-}
-
-export interface PollingOptions {
-  intervalMs?: number;
+  isConnected(mintUrl: string): boolean;
 }
 
 export interface WsConnectionManagerOptions {
   disableReconnect?: boolean;
   periodicReconnectMs?: number;
+  requestBudget?: MintRequestBudget;
 }
 
 export interface WebSocketLike {
@@ -92,14 +67,3 @@ export interface WebSocketLike {
 }
 
 export type WebSocketFactory = (url: string) => WebSocketLike;
-
-export type SubscriptionCallback<TPayload = unknown> = (
-  payload: TPayload,
-) => void | Promise<void>;
-
-export interface HybridSubscriptionManagerOptions {
-  slowPollingIntervalMs?: number;
-  fastPollingIntervalMs?: number;
-  periodicReconnectMs?: number;
-  logger?: Logger;
-}

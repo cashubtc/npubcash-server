@@ -1,3 +1,7 @@
+import {
+  PerMintRequestBudget,
+  type MintRequestBudget,
+} from "@/infrastructure/MintRequestBudget";
 import type { Logger } from "winston";
 import type {
   WebSocketLike,
@@ -6,6 +10,7 @@ import type {
 } from "./types";
 
 const DEFAULT_PERIODIC_RECONNECT_MS = 180000; // 3 minutes
+const MAX_RECONNECT_DELAY_MS = 10 * 60_000;
 
 export class WsConnectionManager {
   private readonly sockets = new Map<string, WebSocketLike>();
@@ -25,7 +30,14 @@ export class WsConnectionManager {
     string,
     ReturnType<typeof setInterval>
   >();
-  private readonly options: Required<WsConnectionManagerOptions>;
+  private readonly pendingConnectionsByMint = new Map<
+    string,
+    AbortController
+  >();
+  private readonly options: Required<
+    Omit<WsConnectionManagerOptions, "requestBudget">
+  >;
+  private readonly requestBudget: MintRequestBudget;
   private readonly wsFactory: WebSocketFactory;
 
   constructor(
@@ -40,6 +52,7 @@ export class WsConnectionManager {
       periodicReconnectMs:
         options?.periodicReconnectMs ?? DEFAULT_PERIODIC_RECONNECT_MS,
     };
+    this.requestBudget = options?.requestBudget ?? new PerMintRequestBudget();
   }
 
   private buildWsUrl(baseMintUrl: string): string {
@@ -53,19 +66,60 @@ export class WsConnectionManager {
     return url.toString();
   }
 
-  private ensureSocket(mintUrl: string): WebSocketLike {
+  private ensureSocket(mintUrl: string): void {
     const existing = this.sockets.get(mintUrl);
     if (existing && existing.readyState <= 1) {
-      return existing;
+      return;
     }
+    if (existing) {
+      this.sockets.delete(mintUrl);
+      this.isOpenByMint.set(mintUrl, false);
+      this.clearPeriodicReconnectTimer(mintUrl);
+    }
+    if (this.pendingConnectionsByMint.has(mintUrl)) return;
 
+    const controller = new AbortController();
+    this.pendingConnectionsByMint.set(mintUrl, controller);
+    void this.requestBudget
+      .schedule(
+        mintUrl,
+        () => {
+          if (
+            controller.signal.aborted ||
+            this.pendingConnectionsByMint.get(mintUrl) !== controller
+          ) {
+            return;
+          }
+          this.pendingConnectionsByMint.delete(mintUrl);
+          this.createSocket(mintUrl);
+        },
+        controller.signal,
+      )
+      .catch((err) => {
+        if (this.pendingConnectionsByMint.get(mintUrl) === controller) {
+          this.pendingConnectionsByMint.delete(mintUrl);
+        }
+        if (controller.signal.aborted) return;
+        this.logger?.error("[WS] Connection attempt failed", {
+          transport: "ws",
+          mintUrl,
+          err,
+        });
+        if (!this.options.disableReconnect && this.hasListeners(mintUrl)) {
+          this.scheduleReconnect(mintUrl);
+        }
+      });
+  }
+
+  private createSocket(mintUrl: string): void {
     const wsUrl = this.buildWsUrl(mintUrl);
     this.logger?.info("[WS] Creating connection", { transport: "ws", mintUrl, wsUrl });
     const socket = this.wsFactory(wsUrl);
     this.sockets.set(mintUrl, socket);
     this.isOpenByMint.set(mintUrl, false);
 
-    const onOpen = () => {
+    const onOpen = (event: any) => {
+      if (this.sockets.get(mintUrl) !== socket) return;
       this.isOpenByMint.set(mintUrl, true);
       const pending = this.reconnectTimeoutByMint.get(mintUrl);
       if (pending) {
@@ -97,43 +151,68 @@ export class WsConnectionManager {
 
       this.logger?.info("[WS] Connection opened", { transport: "ws", mintUrl });
       this.schedulePeriodicReconnect(mintUrl);
+      this.emitToListeners(mintUrl, "open", event);
     };
 
     const onError = (err: any) => {
-      this.logger?.error("[WS] Connection error", { transport: "ws", mintUrl, err: err?.message || err });
+      if (this.sockets.get(mintUrl) !== socket) return;
+      const message = err?.message || err;
+      this.logger?.error("[WS] Connection error", {
+        transport: "ws",
+        mintUrl,
+        err: message,
+      });
+      this.emitToListeners(mintUrl, "error", err);
     };
 
-    const onClose = () => {
+    const onClose = (event: any) => {
+      if (this.sockets.get(mintUrl) !== socket) return;
       this.logger?.info("[WS] Connection closed", { transport: "ws", mintUrl });
       this.sockets.delete(mintUrl);
       this.isOpenByMint.set(mintUrl, false);
       this.sendQueueByMint.delete(mintUrl);
+      this.clearPeriodicReconnectTimer(mintUrl);
 
-      if (!this.options.disableReconnect) {
-        const hasListeners = this.listenersByMint.get(mintUrl);
-        if (
-          hasListeners &&
-          Array.from(hasListeners.values()).some((s) => s.size > 0)
-        ) {
-          this.scheduleReconnect(mintUrl);
-        }
+      if (!this.options.disableReconnect && this.hasListeners(mintUrl)) {
+        this.scheduleReconnect(mintUrl);
       }
+      this.emitToListeners(mintUrl, "close", event);
+    };
+
+    const onMessage = (event: any) => {
+      if (this.sockets.get(mintUrl) !== socket) return;
+      this.emitToListeners(mintUrl, "message", event);
     };
 
     socket.addEventListener("open", onOpen);
+    socket.addEventListener("message", onMessage);
     socket.addEventListener("error", onError);
     socket.addEventListener("close", onClose);
+  }
 
-    const map = this.listenersByMint.get(mintUrl);
-    if (map) {
-      for (const [type, set] of map.entries()) {
-        for (const listener of set.values()) {
-          socket.addEventListener(type, listener);
-        }
-      }
-    }
+  private hasListeners(mintUrl: string): boolean {
+    const listeners = this.listenersByMint.get(mintUrl);
+    return (
+      listeners !== undefined &&
+      Array.from(listeners.values()).some((set) => set.size > 0)
+    );
+  }
 
-    return socket;
+  private clearPeriodicReconnectTimer(mintUrl: string): void {
+    const timer = this.periodicReconnectTimers.get(mintUrl);
+    if (!timer) return;
+    clearInterval(timer);
+    this.periodicReconnectTimers.delete(mintUrl);
+  }
+
+  private emitToListeners(
+    mintUrl: string,
+    type: "open" | "message" | "error" | "close",
+    event: any,
+  ): void {
+    const listeners = this.listenersByMint.get(mintUrl)?.get(type);
+    if (!listeners) return;
+    for (const listener of [...listeners]) listener(event);
   }
 
   private schedulePeriodicReconnect(mintUrl: string): void {
@@ -160,31 +239,19 @@ export class WsConnectionManager {
     if (existing) {
       try {
         existing.close(1000, "Periodic reconnect");
+        return;
       } catch (err) {
         this.logger?.warn("[WS] Error closing socket for periodic reconnect", {
           transport: "ws",
           mintUrl,
           err,
         });
+        this.sockets.delete(mintUrl);
+        this.isOpenByMint.set(mintUrl, false);
       }
     }
-    this.sockets.delete(mintUrl);
-    this.isOpenByMint.set(mintUrl, false);
-
-    const hasListeners = this.listenersByMint.get(mintUrl);
-    if (
-      hasListeners &&
-      Array.from(hasListeners.values()).some((s) => s.size > 0)
-    ) {
-      try {
-        this.ensureSocket(mintUrl);
-      } catch (err) {
-        this.logger?.error("[WS] Failed to reconnect during periodic reconnect", {
-          transport: "ws",
-          mintUrl,
-          err,
-        });
-      }
+    if (this.hasListeners(mintUrl)) {
+      this.ensureSocket(mintUrl);
     }
   }
 
@@ -192,16 +259,15 @@ export class WsConnectionManager {
     if (this.reconnectTimeoutByMint.get(mintUrl)) return;
     const attempt = (this.reconnectAttemptsByMint.get(mintUrl) ?? 0) + 1;
     this.reconnectAttemptsByMint.set(mintUrl, attempt);
-    const delayMs = Math.min(30000, 1000 * 2 ** Math.min(6, attempt - 1));
+    const delayMs = Math.min(
+      MAX_RECONNECT_DELAY_MS,
+      1000 * 2 ** Math.min(10, attempt - 1),
+    );
     this.logger?.info("[WS] Scheduling reconnect", { transport: "ws", mintUrl, attempt, delayMs });
 
     const timeoutId = setTimeout(() => {
       this.reconnectTimeoutByMint.delete(mintUrl);
-      try {
-        this.ensureSocket(mintUrl);
-      } catch (err) {
-        this.logger?.error("[WS] Reconnect attempt failed", { transport: "ws", mintUrl, err });
-      }
+      this.ensureSocket(mintUrl);
     }, delayMs);
     this.reconnectTimeoutByMint.set(mintUrl, timeoutId);
   }
@@ -211,8 +277,6 @@ export class WsConnectionManager {
     type: "open" | "message" | "error" | "close",
     listener: (event: any) => void,
   ): void {
-    const socketExists = this.sockets.has(mintUrl);
-
     let map = this.listenersByMint.get(mintUrl);
     if (!map) {
       map = new Map();
@@ -226,11 +290,7 @@ export class WsConnectionManager {
     if (set.has(listener)) return;
     set.add(listener);
 
-    const socket = this.ensureSocket(mintUrl);
-
-    if (socketExists) {
-      socket.addEventListener(type, listener);
-    }
+    this.ensureSocket(mintUrl);
   }
 
   off(
@@ -238,21 +298,18 @@ export class WsConnectionManager {
     type: "open" | "message" | "error" | "close",
     listener: (event: any) => void,
   ): void {
-    const socket = this.sockets.get(mintUrl);
-    if (socket) {
-      socket.removeEventListener(type, listener);
-    }
     const map = this.listenersByMint.get(mintUrl);
     const set = map?.get(type);
     set?.delete(listener);
   }
 
   send(mintUrl: string, message: unknown): void {
-    const socket = this.ensureSocket(mintUrl);
+    this.ensureSocket(mintUrl);
+    const socket = this.sockets.get(mintUrl);
     const payload = typeof message === "string" ? message : JSON.stringify(message);
     const isOpen = this.isOpenByMint.get(mintUrl);
 
-    if (isOpen) {
+    if (socket && isOpen) {
       try {
         socket.send(payload);
         this.logger?.debug("[WS] Sent message", {
@@ -280,7 +337,10 @@ export class WsConnectionManager {
   }
 
   isConnected(mintUrl: string): boolean {
-    return this.isOpenByMint.get(mintUrl) === true;
+    return (
+      this.isOpenByMint.get(mintUrl) === true &&
+      this.sockets.get(mintUrl)?.readyState === 1
+    );
   }
 
   closeAll(): void {
@@ -295,24 +355,27 @@ export class WsConnectionManager {
     this.reconnectTimeoutByMint.clear();
     this.reconnectAttemptsByMint.clear();
 
-    for (const [mintUrl, socket] of this.sockets.entries()) {
+    for (const controller of this.pendingConnectionsByMint.values()) {
+      controller.abort(new Error("WebSocket manager closed"));
+    }
+    this.pendingConnectionsByMint.clear();
+
+    const sockets = [...this.sockets.entries()];
+    this.sockets.clear();
+    this.listenersByMint.clear();
+    for (const [mintUrl, socket] of sockets) {
       try {
         socket.close(1000, "Normal Closure");
       } catch (err) {
         this.logger?.warn("[WS] Error while closing", { transport: "ws", mintUrl, err });
       }
     }
-    this.sockets.clear();
     this.isOpenByMint.clear();
     this.sendQueueByMint.clear();
   }
 
   closeMint(mintUrl: string): void {
-    const periodicTimer = this.periodicReconnectTimers.get(mintUrl);
-    if (periodicTimer) {
-      clearInterval(periodicTimer);
-      this.periodicReconnectTimers.delete(mintUrl);
-    }
+    this.clearPeriodicReconnectTimer(mintUrl);
 
     const timeout = this.reconnectTimeoutByMint.get(mintUrl);
     if (timeout) {
@@ -321,7 +384,15 @@ export class WsConnectionManager {
     }
     this.reconnectAttemptsByMint.delete(mintUrl);
 
+    const pendingConnection = this.pendingConnectionsByMint.get(mintUrl);
+    if (pendingConnection) {
+      this.pendingConnectionsByMint.delete(mintUrl);
+      pendingConnection.abort(new Error("Mint closed"));
+    }
+
     const socket = this.sockets.get(mintUrl);
+    this.sockets.delete(mintUrl);
+    this.listenersByMint.delete(mintUrl);
     if (socket) {
       try {
         socket.close(1000, "Mint closed");
@@ -329,13 +400,10 @@ export class WsConnectionManager {
       } catch (err) {
         this.logger?.warn("[WS] Error while closing for mint", { transport: "ws", mintUrl, err });
       }
-      this.sockets.delete(mintUrl);
     }
 
     this.isOpenByMint.delete(mintUrl);
     this.sendQueueByMint.delete(mintUrl);
-    this.listenersByMint.delete(mintUrl);
-
     this.logger?.info("[WS] Closed mint", { transport: "ws", mintUrl });
   }
 }

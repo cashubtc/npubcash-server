@@ -1,6 +1,7 @@
 import { accountFromSeedWords } from "nostr-tools/nip06";
 import { HDKey } from "@scure/bip32";
 import { mnemonicToSeedSync } from "@scure/bip39";
+import { DEFAULT_MINT_QUOTE_MONITOR_POLICY } from "@/domain/mintQuoteMonitor/MintQuoteMonitor";
 
 export function getRelaysFromEnv() {
   const relays = getEnvVar("DEFAULT_RELAYS");
@@ -41,12 +42,45 @@ export function getJwtSecretFromEnv() {
   return Buffer.from(entropy).toString("hex");
 }
 
-export function getDbTypeFromEnv(): "postgres" | "sqlite" {
-  const envVar = getEnvVar("DATABASE_TYPE");
-  if (envVar === "postgres") {
+type DatabaseType = "postgres" | "sqlite";
+
+function inferDbTypeFromConnectionString(
+  connectionString: string | undefined,
+): DatabaseType | undefined {
+  if (!connectionString) {
+    return undefined;
+  }
+  if (
+    connectionString.startsWith("postgres://") ||
+    connectionString.startsWith("postgresql://")
+  ) {
     return "postgres";
   }
-  return "sqlite"; // default
+  if (connectionString.includes("://")) {
+    throw new Error(
+      "DATABASE_URL must be a PostgreSQL URL or a SQLite file path",
+    );
+  }
+  return "sqlite";
+}
+
+export function getDbTypeFromEnv(): DatabaseType {
+  const explicitType = getEnvVar("DATABASE_TYPE");
+  const inferredType = inferDbTypeFromConnectionString(getEnvVar("DATABASE_URL"));
+
+  if (explicitType) {
+    if (explicitType !== "postgres" && explicitType !== "sqlite") {
+      throw new Error("DATABASE_TYPE must be either 'postgres' or 'sqlite'");
+    }
+    if (inferredType && inferredType !== explicitType) {
+      throw new Error(
+        `DATABASE_TYPE=${explicitType} does not match DATABASE_URL (${inferredType})`,
+      );
+    }
+    return explicitType;
+  }
+
+  return inferredType ?? "sqlite";
 }
 
 function getDefaultSqlitePath(): string {
@@ -60,8 +94,14 @@ function getDefaultSqlitePath(): string {
 export function getDbConnectionStringFromEnv(): string {
   const envVar = getEnvVar("DATABASE_URL");
   if (!envVar) {
+    const dbType = getDbTypeFromEnv();
+    if (getNodeEnvFromEnv() === "production" && !getEnvVar("DATABASE_TYPE")) {
+      throw new Error(
+        "Production requires DATABASE_URL or explicit DATABASE_TYPE=sqlite",
+      );
+    }
     // Default to SQLite file if DATABASE_URL not set
-    if (getDbTypeFromEnv() === "sqlite") {
+    if (dbType === "sqlite") {
       return getDefaultSqlitePath();
     }
     throw new Error("Could not find DATABASE_URL in env");
@@ -126,14 +166,137 @@ export function getMintUrlFromEnv(): string {
   return url;
 }
 
-export function getHostnameFromEnv(): string {
-  const hostname = getEnvVar("HOSTNAME");
-  if (!hostname) throw new Error("HOSTNAME is required");
-  return hostname;
+export function getAllowedHostnamesFromEnv(): string[] {
+  const value = getEnvVar("ALLOWED_HOSTNAMES");
+  if (!value) return [];
+
+  const entries = value
+    .split(",")
+    .map((hostname) => hostname.trim().toLowerCase())
+    .filter(Boolean);
+
+  const hostnames = entries.map((hostname) => {
+    if (
+      hostname.includes("://") ||
+      hostname.includes("/") ||
+      hostname.includes("?") ||
+      hostname.includes("#") ||
+      hostname.includes("*")
+    ) {
+      throw new Error(
+        "ALLOWED_HOSTNAMES must contain comma-separated hostnames without schemes, ports, paths, or wildcards",
+      );
+    }
+
+    const hasPort = hostname.startsWith("[")
+      ? !hostname.endsWith("]")
+      : hostname.includes(":");
+    if (hasPort) {
+      throw new Error(
+        "ALLOWED_HOSTNAMES must contain comma-separated hostnames without schemes, ports, paths, or wildcards",
+      );
+    }
+
+    try {
+      const parsed = new URL(`http://${hostname}`);
+      if (
+        !parsed.hostname ||
+        parsed.username ||
+        parsed.password ||
+        parsed.port
+      ) {
+        throw new Error("invalid hostname");
+      }
+      return parsed.hostname.toLowerCase();
+    } catch {
+      throw new Error(`Invalid hostname in ALLOWED_HOSTNAMES: ${hostname}`);
+    }
+  });
+
+  return [...new Set(hostnames)];
 }
 
 export function getNodeEnvFromEnv(): "development" | "production" | "test" {
   const env = getEnvVar("NODE_ENV");
   if (env === "production" || env === "test") return env;
   return "development";
+}
+
+function getPositiveNumberFromEnv(key: string, fallback: number): number {
+  const raw = getEnvVar(key);
+  if (raw === undefined) return fallback;
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new Error(`${key} must be a positive number`);
+  }
+  return value;
+}
+
+function getPositiveIntegerFromEnv(key: string, fallback: number): number {
+  const value = getPositiveNumberFromEnv(key, fallback);
+  if (!Number.isInteger(value)) {
+    throw new Error(`${key} must be a positive integer`);
+  }
+  return value;
+}
+
+function getRetryScheduleFromEnv(
+  key: string,
+  fallback: readonly number[],
+): number[] {
+  const raw = getEnvVar(key);
+  if (raw === undefined) return [...fallback];
+  const values = raw.split(",").map((value) => Number(value.trim()));
+  if (
+    values.length === 0 ||
+    values.some((value) => !Number.isFinite(value) || value <= 0)
+  ) {
+    throw new Error(`${key} must be a comma-separated list of positive numbers`);
+  }
+  return values;
+}
+
+export function getMintQuoteMonitorConfigFromEnv() {
+  const jitterRaw = getEnvVar("MINT_QUOTE_RETRY_JITTER_RATIO");
+  const jitterRatio =
+    jitterRaw === undefined
+      ? DEFAULT_MINT_QUOTE_MONITOR_POLICY.jitterRatio
+      : Number(jitterRaw);
+  if (!Number.isFinite(jitterRatio) || jitterRatio < 0 || jitterRatio > 1) {
+    throw new Error("MINT_QUOTE_RETRY_JITTER_RATIO must be between 0 and 1");
+  }
+
+  return {
+    activePollIntervalMs: getPositiveNumberFromEnv(
+      "MINT_QUOTE_ACTIVE_POLL_MS",
+      DEFAULT_MINT_QUOTE_MONITOR_POLICY.activePollIntervalMs,
+    ),
+    activeRetryMs: getRetryScheduleFromEnv(
+      "MINT_QUOTE_ACTIVE_RETRY_MS",
+      DEFAULT_MINT_QUOTE_MONITOR_POLICY.activeRetryMs,
+    ),
+    reconciliationRetryMs: getRetryScheduleFromEnv(
+      "MINT_QUOTE_RECONCILIATION_RETRY_MS",
+      DEFAULT_MINT_QUOTE_MONITOR_POLICY.reconciliationRetryMs,
+    ),
+    jitterRatio,
+    requestTimeoutMs: getPositiveNumberFromEnv(
+      "MINT_QUOTE_REQUEST_TIMEOUT_MS",
+      10_000,
+    ),
+    requestRateLimit: {
+      capacity: getPositiveIntegerFromEnv(
+        "MINT_QUOTE_RATE_LIMIT_CAPACITY",
+        1,
+      ),
+      refillPerMinute: getPositiveNumberFromEnv(
+        "MINT_QUOTE_RATE_LIMIT_REFILL_PER_MINUTE",
+        20,
+      ),
+    },
+    periodicReconnectMs: getPositiveNumberFromEnv(
+      "MINT_QUOTE_WS_RECONNECT_MS",
+      180_000,
+    ),
+  };
 }

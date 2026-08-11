@@ -1,12 +1,11 @@
+# Nightly/new-app SQLite deployment. Do not use this app or volume unchanged when
+# upgrading an existing v2 deployment; see docs/deploy.md for the cutover steps.
 app = "nightly-npubcash"
 primary_region = "ams"
 
-[build]
-  [build.args]
-    HOSTNAME = "https://npuby.cash"
-
 [env]
-HOSTNAME = "https://npuby.cash"
+ALLOWED_HOSTNAMES = "npuby.cash,nightly-npubcash.fly.dev"
+DATABASE_TYPE = "sqlite"
 LNURL_MAX_AMOUNT = "100000000"
 LNURL_MIN_AMOUNT = "1000"
 MINTURL = "https://mint.minibits.cash/Bitcoin"

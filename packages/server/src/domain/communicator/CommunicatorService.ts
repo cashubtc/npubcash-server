@@ -1,34 +1,14 @@
-import { config } from "@/config/index";
 import { MintQuote } from "@/domain/mintQuote/MintQuote";
-import { MintQuoteRepository } from "@/domain/mintQuote/MintQuoteRepository";
-import { eventBus } from "@/events";
-import { logger } from "@/utils/logger";
-import { handleZapRequest } from "@/utils/nostr";
+import type { MintQuoteMonitor } from "@/domain/mintQuoteMonitor/MintQuoteMonitor";
 import { normalizeUrl } from "@/utils/utils";
 import { Token } from "@cashu/cashu-ts";
 import { MintCommunicator } from "almnd";
-import { Logger } from "winston";
-import {
-  HybridSubscriptionManager,
-  MintQuotePayload,
-  UnsubscribeHandler,
-} from "./infra";
+import type { Logger } from "winston";
 
 export class CommunicatorService {
-  private communicators: { [mintUrl: string]: MintCommunicator } = {};
-  private subscriptionManager: HybridSubscriptionManager;
-  private activeSubscriptions: Map<string, UnsubscribeHandler> = new Map();
-  private mintQuoteRepository: MintQuoteRepository;
+  private readonly communicators: { [mintUrl: string]: MintCommunicator } = {};
 
-  constructor(mintQuoteRepository: MintQuoteRepository) {
-    this.mintQuoteRepository = mintQuoteRepository;
-    this.subscriptionManager = new HybridSubscriptionManager({
-      slowPollingIntervalMs: 20000,
-      fastPollingIntervalMs: 5000,
-      periodicReconnectMs: 180000, // 3 minutes
-      logger,
-    });
-  }
+  constructor(private readonly mintQuoteMonitor: MintQuoteMonitor) {}
 
   async redeemToken(token: Token, logger?: Logger) {
     logger?.info(`Receiving proofs on mint ${token.mint}`);
@@ -46,107 +26,25 @@ export class CommunicatorService {
         userData.pubkey,
       );
       return { locked: true, ...res };
-    } else {
-      const res = await this.getCommunicator(mintUrl).getMintQuote(amount);
-      return { locked: false, ...res };
     }
+    const res = await this.getCommunicator(mintUrl).getMintQuote(amount);
+    return { locked: false, ...res };
   }
 
-  createQuoteSubscription(quote: MintQuote, reqLogger: Logger) {
-    const mintUrl = normalizeUrl(quote.mintUrl);
-    const quoteId = quote.quoteId;
-
-    // Check if already subscribed
-    if (this.activeSubscriptions.has(quoteId)) {
-      reqLogger.debug("[CommSvc] Already subscribed to quote", { quoteId });
-      return;
-    }
-
-    reqLogger.info("[CommSvc] Creating hybrid subscription for quote", {
-      mintUrl,
-      quoteId,
-    });
-
-    const { subId, unsubscribe } = this.subscriptionManager.subscribe(
-      mintUrl,
-      quoteId,
-      (payload: MintQuotePayload) => {
-        this.handleQuoteUpdate(quote, payload, reqLogger, unsubscribe);
-      },
-    );
-
-    this.activeSubscriptions.set(quoteId, unsubscribe);
-
-    reqLogger.debug("[CommSvc] Subscribed to quote", {
-      mintUrl,
-      quoteId,
-      subId,
-    });
-  }
-
-  private async handleQuoteUpdate(
-    quote: MintQuote,
-    payload: MintQuotePayload,
-    reqLogger: Logger,
-    unsubscribe: UnsubscribeHandler,
-  ) {
-    reqLogger.debug("[CommSvc] Received quote update", {
-      state: payload.state,
+  async createQuoteSubscription(quote: MintQuote, reqLogger: Logger) {
+    reqLogger.info("[CommSvc] Monitoring mint quote", {
+      mintUrl: normalizeUrl(quote.mintUrl),
       quoteId: quote.quoteId,
     });
-
-    if (payload.state === "PAID") {
-      reqLogger.info("[CommSvc] Mint quote got paid", { quoteId: quote.quoteId });
-      eventBus.emit("quotePaid", quote);
-      await this.mintQuoteRepository.setPaid(quote.id);
-
-      if (quote.serializedZapRequest && config.nostr.nostrEnabled) {
-        try {
-          const zapRequest = JSON.parse(quote.serializedZapRequest);
-          handleZapRequest(quote.quoteId, zapRequest, quote.paymentRequest);
-        } catch (e) {
-          reqLogger.error("[CommSvc] Failed to handle zap request", { quoteId: quote.quoteId });
-        }
-      }
-
-      this.cleanupSubscription(quote.quoteId, unsubscribe);
-    } else if (payload.state === "ISSUED") {
-      // Already minted, just cleanup
-      reqLogger.debug("[CommSvc] Quote already issued", { quoteId: quote.quoteId });
-      this.cleanupSubscription(quote.quoteId, unsubscribe);
-    } else if (this.isExpired(payload.expiry)) {
-      reqLogger.debug("[CommSvc] Mint quote expired", { quoteId: quote.quoteId });
-      await this.mintQuoteRepository.updateState(quote.id, "EXPIRED");
-      this.cleanupSubscription(quote.quoteId, unsubscribe);
-    }
+    await this.mintQuoteMonitor.watch(quote);
   }
 
-  private isExpired(expiry: number): boolean {
-    return expiry > 0 && Date.now() / 1000 > expiry;
+  async startQuoteMonitoring(): Promise<void> {
+    await this.mintQuoteMonitor.start();
   }
 
-  private cleanupSubscription(
-    quoteId: string,
-    unsubscribe: UnsubscribeHandler,
-  ) {
-    unsubscribe();
-    this.activeSubscriptions.delete(quoteId);
-  }
-
-  async setupPoller() {
-    const pendingSubs = await this.mintQuoteRepository.getPending();
-    logger.info("[CommSvc] Setup: Retrieved pending subscriptions from DB", {
-      count: pendingSubs.length,
-    });
-    pendingSubs.forEach((quote) => {
-      this.createQuoteSubscription(quote, logger);
-    });
-  }
-
-  shutdown() {
-    logger.info("[CommSvc] Shutting down");
-    this.subscriptionManager.closeAll();
-    this.activeSubscriptions.clear();
+  async shutdown(): Promise<void> {
+    await this.mintQuoteMonitor.stop();
   }
 
   getCommunicator(mintUrl: string) {
@@ -154,13 +52,14 @@ export class CommunicatorService {
     if (this.communicators[parsedUrl]) {
       return this.communicators[parsedUrl];
     }
-    const comm = new MintCommunicator(parsedUrl, {
-      initialPollingTimeout: { mint: 10000, melt: 10000, proof: 10000 },
-      backoffFunction: (r) => Math.min(5000 * Math.pow(2, r), 600000),
+    const communicator = new MintCommunicator(parsedUrl, {
+      initialPollingTimeout: { mint: 10_000, melt: 10_000, proof: 10_000 },
+      backoffFunction: (retry) =>
+        Math.min(5_000 * Math.pow(2, retry), 600_000),
       throttleCapacity: 10,
-      throttleTimeout: 3500,
+      throttleTimeout: 3_500,
     });
-    this.communicators[parsedUrl] = comm;
-    return comm;
+    this.communicators[parsedUrl] = communicator;
+    return communicator;
   }
 }

@@ -1,6 +1,6 @@
 import { Mint } from "@/domain/mint/Mint";
 import { MintRepository } from "@/domain/mint/MintRepository";
-import { queryWrapper } from "@/utils/database";
+import { DatabaseAdapter } from "@/database/adapter";
 import { GetInfoResponse } from "@cashu/cashu-ts";
 
 type PostgresMint = {
@@ -10,9 +10,11 @@ type PostgresMint = {
 };
 
 export class PostgresMintRepository implements MintRepository {
+  constructor(private readonly db: DatabaseAdapter) {}
+
   async getMint(mintUrl: string): Promise<Mint | null> {
     const query = `SELECT * from mints WHERE mint_url = $1`;
-    const res = await queryWrapper<PostgresMint>(query, [mintUrl]);
+    const res = await this.db.query<PostgresMint>(query, [mintUrl]);
     if (res.rowCount === 0) {
       return null;
     }
@@ -27,7 +29,7 @@ ON CONFLICT (mint_url)
 DO UPDATE SET
 last_checked = $2,
 mint_info = $3`;
-    const queryRes = await queryWrapper(query, [
+    const queryRes = await this.db.query(query, [
       mint.url,
       mint.lastChecked,
       mint.info,

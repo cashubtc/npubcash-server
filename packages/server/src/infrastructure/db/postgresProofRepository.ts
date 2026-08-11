@@ -1,7 +1,7 @@
 import { ProofRepository } from "@/domain/proof/proofRepository";
-import { createBulkInsertQuery, queryWrapper } from "@/utils/database";
+import { DatabaseAdapter } from "@/database/adapter";
+import { createBulkInsertPayload } from "@/utils/sql";
 import { Proof } from "@cashu/cashu-ts";
-import { Data } from "ws";
 
 type ProofSpendState = "UNSPENT" | "INFLIGHT" | "SPENT";
 
@@ -40,11 +40,21 @@ class DatabaseProof {
 }
 
 export class PostgresProofRepository implements ProofRepository {
+  constructor(private readonly db: DatabaseAdapter) {}
+
   async saveProofs(proofs: Proof[]): Promise<void> {
-    const res = await createBulkInsertQuery<DatabaseProof>(
-      "proofs",
-      ["amount", "keyset_id", "secret", '"C"', "state"],
+    if (proofs.length === 0) {
+      return;
+    }
+
+    const columns = ["amount", "keyset_id", "secret", '"C"', "state"];
+    const payload = createBulkInsertPayload(
+      columns,
       proofs.map((p) => [p.amount, p.id, p.secret, p.C, "UNSPENT"]),
+    );
+    const res = await this.db.query<DatabaseProof>(
+      `INSERT INTO proofs (${columns.join(",")}) VALUES ${payload.valueString};`,
+      payload.flatValues,
     );
     if (res.rowCount !== proofs.length) {
       throw new Error("Something went wrong adding proofs to db");

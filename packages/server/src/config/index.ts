@@ -3,10 +3,11 @@ import {
   getDbConnectionStringFromEnv,
   getDbTypeFromEnv,
   getEnvVar,
-  getHostnameFromEnv,
+  getAllowedHostnamesFromEnv,
   getJwtSecretFromEnv,
   getLogLevelFromEnv,
   getMintUrlFromEnv,
+  getMintQuoteMonitorConfigFromEnv,
   getNodeEnvFromEnv,
   getPortFromEnv,
   getRelaysFromEnv,
@@ -45,11 +46,12 @@ export const config = {
   usernameConfig: getUsernameConfigFromEnv(),
   port: getPortFromEnv(),
   mintUrl: getMintUrlFromEnv(),
-  hostname: getHostnameFromEnv(),
+  allowedHostnames: getAllowedHostnamesFromEnv(),
   nodeEnv: getNodeEnvFromEnv(),
   nostr: createNostrConfig(),
   jwtSecret: getJwtSecretFromEnv(),
   lnurlLimits: createLnurlLimits(),
+  mintQuoteMonitor: getMintQuoteMonitorConfigFromEnv(),
 } as const;
 
 export type AppConfig = typeof config;

@@ -3,3 +3,5 @@ coverage
 dist
 .env
 venv
+packages/server/*.db
+packages/server/*.db-*

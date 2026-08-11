@@ -5,7 +5,11 @@ import {
 } from "@/errors";
 import { NextFunction, Request, Response } from "express";
 import { Token, getDecodedToken } from "@cashu/cashu-ts";
-import { communicatorService, proofService, userService } from "@/config";
+import {
+  getCommunicatorService,
+  getProofService,
+  getUserService,
+} from "@/config";
 import { config } from "../config/index";
 import { SetUsernamePayload } from "npubcash-types";
 
@@ -15,6 +19,9 @@ export async function usernameController(
   next: NextFunction,
 ) {
   try {
+    const communicatorService = getCommunicatorService();
+    const proofService = getProofService();
+    const userService = getUserService();
     if (!config.usernameConfig.enabled) {
       throw new BadRequestError(
         "Usernames can not be purchased on this instance",

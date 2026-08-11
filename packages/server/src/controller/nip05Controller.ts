@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { userService } from "@/config";
+import { getUserService } from "@/config";
 
 export async function nip05Controller(
   req: Request<unknown, unknown, unknown, { name: string }>,
@@ -10,6 +10,7 @@ export async function nip05Controller(
     return res.json({ names: {}, relays: {} });
   }
   try {
+    const userService = getUserService();
     const user = await userService.getUserByName(name);
     if (!user) {
       return res.json({ names: {}, relays: {} });

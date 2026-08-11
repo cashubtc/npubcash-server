@@ -1,7 +1,6 @@
 import { User, UserWithName } from "@/domain/user/user";
 import { UserRepository } from "@/domain/user/userRepository";
-import { queryWrapper } from "@/utils/database";
-import { config } from "@/config/index";
+import { DatabaseAdapter } from "@/database/adapter";
 
 type UserTableRow = {
   id: number;
@@ -13,8 +12,13 @@ type UserTableRow = {
 };
 
 export class PostgresUserRepository implements UserRepository {
+  constructor(
+    private readonly db: DatabaseAdapter,
+    private readonly defaultMintUrl: string,
+  ) {}
+
   async getUserByPubkey(pubkey: string): Promise<User | null> {
-    const res = await queryWrapper<UserTableRow>(
+    const res = await this.db.query<UserTableRow>(
       `SELECT * from l_users WHERE pubkey = $1;`,
       [pubkey],
     );
@@ -24,7 +28,7 @@ export class PostgresUserRepository implements UserRepository {
     return this.castRowToUser(res.rows[0]);
   }
   async getUserByName(name: string): Promise<UserWithName | null> {
-    const res = await queryWrapper<UserTableRow & { name: string }>(
+    const res = await this.db.query<UserTableRow & { name: string }>(
       `SELECT * from l_users WHERE name = $1;`,
       [name],
     );
@@ -39,7 +43,7 @@ export class PostgresUserRepository implements UserRepository {
     throw new Error("Invalid database return ");
   }
   async createUser(pubkey: string, name: string): Promise<void> {
-    const res = await queryWrapper<UserTableRow>(
+    const res = await this.db.query<UserTableRow>(
       `INSERT INTO l_users (pubkey, name) VALUES ($1, $2);`,
       [pubkey, name],
     );
@@ -55,8 +59,8 @@ VALUES ($1, $2, $3)
 ON CONFLICT (pubkey)
 DO UPDATE SET name = $3
 RETURNING *;`;
-    const params = [pubkey, config.mintUrl, name];
-    const queryRes = await queryWrapper<UserTableRow>(query, params);
+    const params = [pubkey, this.defaultMintUrl, name];
+    const queryRes = await this.db.query<UserTableRow>(query, params);
     if (queryRes.rowCount === 0) {
       throw new Error("Did not update username");
     }
@@ -72,7 +76,7 @@ INSERT INTO l_users (lock_quote, pubkey)
 VALUES ($1, $2)
 ON CONFLICT (pubkey)
 DO UPDATE SET lock_quote = $1;`;
-    const queryRes = await queryWrapper(query, [shouldLockQuote, pubkey]);
+    const queryRes = await this.db.query(query, [shouldLockQuote, pubkey]);
     if (queryRes.rowCount === 0) {
       throw new Error("Did not update lock_quote");
     }
@@ -88,7 +92,7 @@ name = $2,
 mint_url = $3,
 lock_quote = $4;
 `;
-    const queryRes = await queryWrapper(query, [
+    const queryRes = await this.db.query(query, [
       user.pubkey,
       user.name,
       user.mintUrl,
