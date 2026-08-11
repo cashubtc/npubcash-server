@@ -145,10 +145,14 @@ export function getUsernameConfigFromEnv():
   if (!usernameMint || !usernameCost) {
     return { enabled: false };
   }
+  const amount = Number(usernameCost);
+  if (!/^\d+$/.test(usernameCost) || !Number.isSafeInteger(amount)) {
+    throw new Error("USERNAME_COST must be a non-negative integer");
+  }
   return {
     enabled: true,
     mintUrl: usernameMint,
-    amount: parseInt(usernameCost),
+    amount,
   };
 }
 

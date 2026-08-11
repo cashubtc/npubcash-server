@@ -198,6 +198,31 @@ describe("env.ts", () => {
       mintUrl: "https://mint.example.com",
       amount: 1000,
     });
+
+    process.env.USERNAME_COST = "0";
+    expect(getUsernameConfigFromEnv()).toEqual({
+      enabled: true,
+      mintUrl: "https://mint.example.com",
+      amount: 0,
+    });
+  });
+
+  test("getUsernameConfigFromEnv rejects invalid costs", () => {
+    process.env.USERNAME_MINT = "https://mint.example.com";
+
+    for (const usernameCost of [
+      "invalid",
+      "-1",
+      "1.5",
+      "1e3",
+      " ",
+      "9007199254740992",
+    ]) {
+      process.env.USERNAME_COST = usernameCost;
+      expect(() => getUsernameConfigFromEnv()).toThrow(
+        "USERNAME_COST must be a non-negative integer",
+      );
+    }
   });
 
   test("getRelaysFromEnv parses comma-separated relays", () => {
