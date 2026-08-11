@@ -229,6 +229,25 @@ class FakeBatchingSupport implements QuoteBatchingSupportProvider {
   }
 }
 
+class FakeLogger {
+  readonly debugEntries: Array<{
+    message: string;
+    meta?: Record<string, unknown>;
+  }> = [];
+  readonly warningEntries: Array<{
+    message: string;
+    meta?: Record<string, unknown>;
+  }> = [];
+
+  debug(message: string, meta?: Record<string, unknown>): void {
+    this.debugEntries.push({ message, meta });
+  }
+
+  warn(message: string, meta?: Record<string, unknown>): void {
+    this.warningEntries.push({ message, meta });
+  }
+}
+
 function createService(input: {
   quotes?: readonly MintQuote[];
   store?: FakeStore;
@@ -238,6 +257,7 @@ function createService(input: {
   handler?: FakeHandler;
   pollIntervalMs?: number;
   maxResidentQuotes?: number;
+  logger?: FakeLogger;
 }) {
   const store = input.store ?? new FakeStore(input.quotes);
   const clock = input.clock ?? new FakeClock();
@@ -252,6 +272,7 @@ function createService(input: {
     clock,
     pollIntervalMs: input.pollIntervalMs ?? 20_000,
     maxResidentQuotes: input.maxResidentQuotes,
+    logger: input.logger,
   });
   return { service, store, clock, handler, client, batchingSupport };
 }
@@ -264,6 +285,64 @@ async function yieldToPromises(): Promise<void> {
 }
 
 describe("QuotePollingService", () => {
+  test("logs polling lifecycle, queue discovery, claims, and round totals", async () => {
+    const logger = new FakeLogger();
+    const { service } = createService({
+      quotes: quotes(2),
+      logger,
+    });
+
+    await service.start();
+    await service.stop();
+
+    expect(logger.debugEntries).toEqual([
+      {
+        message: "[QuotePollingService] Polling started",
+        meta: {
+          pollIntervalMs: 20_000,
+          maxResidentQuotes: DEFAULT_MAX_RESIDENT_QUOTES,
+        },
+      },
+      {
+        message: "[QuotePollingService] Polling round started",
+        meta: { dueBefore: "2026-08-10T11:59:40.000Z" },
+      },
+      {
+        message: "[QuotePollingService] Due mint queues discovered",
+        meta: {
+          mintCount: 1,
+          excludedMintCount: 0,
+          activeMintLanes: 0,
+          residentQuotes: 0,
+        },
+      },
+      {
+        message: "[QuotePollingService] Claimed quotes for polling",
+        meta: {
+          mintUrl: "https://mint.example.com",
+          quoteCount: 2,
+          claimLimit: 100,
+          mode: "batch",
+          advertisedBatchSize: 100,
+          residentQuotes: 2,
+        },
+      },
+      {
+        message: "[QuotePollingService] Polling round completed",
+        meta: {
+          mintCount: 1,
+          claimedQuotes: 2,
+          durationMs: 0,
+          aborted: false,
+        },
+      },
+      {
+        message: "[QuotePollingService] Polling stopped",
+        meta: undefined,
+      },
+    ]);
+  });
+
   test("uses an advertised 1,000 quote capacity for one atomic claim and request", async () => {
     const client = new FakeClient();
     const batchingSupport = new FakeBatchingSupport();

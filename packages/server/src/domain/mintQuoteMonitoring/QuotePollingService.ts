@@ -14,7 +14,13 @@ export const DEFAULT_MAX_RESIDENT_QUOTES = 5_000;
 const INDIVIDUAL_POLL_LIMIT = 10;
 
 interface QuotePollingLogger {
+  debug(message: string, meta?: Record<string, unknown>): unknown;
   warn(message: string, meta?: Record<string, unknown>): unknown;
+}
+
+interface QuotePollingRoundStats {
+  mintUrls: Set<string>;
+  claimedQuotes: number;
 }
 
 interface QuotePollingClock {
@@ -114,6 +120,11 @@ export class DefaultQuotePollingService implements QuotePollingService {
     if (this.stopped) throw new Error("QuotePollingService has been stopped");
     this.started = true;
 
+    this.logger?.debug("[QuotePollingService] Polling started", {
+      pollIntervalMs: this.pollIntervalMs,
+      maxResidentQuotes: this.maxResidentQuotes,
+    });
+
     await this.runRound();
     this.scheduleNextRound();
   }
@@ -131,6 +142,7 @@ export class DefaultQuotePollingService implements QuotePollingService {
     } catch {
       // runRound owns failure reporting; shutdown only waits for settlement.
     }
+    this.logger?.debug("[QuotePollingService] Polling stopped");
   }
 
   private async runRound(): Promise<void> {
@@ -138,11 +150,30 @@ export class DefaultQuotePollingService implements QuotePollingService {
 
     const controller = new AbortController();
     this.roundController = controller;
-    const round = this.pollDueQuotes(controller.signal);
+    const startedAt = this.clock.now();
+    this.logger?.debug("[QuotePollingService] Polling round started", {
+      dueBefore: new Date(
+        startedAt.getTime() - this.pollIntervalMs,
+      ).toISOString(),
+    });
+    const stats: QuotePollingRoundStats = {
+      mintUrls: new Set<string>(),
+      claimedQuotes: 0,
+    };
+    const round = this.pollDueQuotes(controller.signal, stats);
     this.round = round;
 
     try {
       await round;
+      this.logger?.debug("[QuotePollingService] Polling round completed", {
+        mintCount: stats.mintUrls.size,
+        claimedQuotes: stats.claimedQuotes,
+        durationMs: Math.max(
+          0,
+          this.clock.now().getTime() - startedAt.getTime(),
+        ),
+        aborted: controller.signal.aborted,
+      });
     } catch (cause) {
       if (!controller.signal.aborted) {
         this.logger?.warn("[QuotePollingService] Polling round failed", {
@@ -157,7 +188,10 @@ export class DefaultQuotePollingService implements QuotePollingService {
     }
   }
 
-  private async pollDueQuotes(signal: AbortSignal): Promise<void> {
+  private async pollDueQuotes(
+    signal: AbortSignal,
+    stats: QuotePollingRoundStats,
+  ): Promise<void> {
     const skippedMintUrls = new Set<string>();
 
     while (!signal.aborted) {
@@ -185,8 +219,20 @@ export class DefaultQuotePollingService implements QuotePollingService {
           if (queues.length === 0) break;
           foundQueue = true;
 
+          this.logger?.debug(
+            "[QuotePollingService] Due mint queues discovered",
+            {
+              mintCount: queues.length,
+              excludedMintCount:
+                skippedMintUrls.size + discoveredMintUrls.size,
+              activeMintLanes: this.activeMintLanes.size,
+              residentQuotes: this.residentQuotes,
+            },
+          );
+
           for (const queue of queues) {
             discoveredMintUrls.add(queue.mintUrl);
+            stats.mintUrls.add(queue.mintUrl);
           }
           const queuedLanes = queues.map((queue) => ({
             queue,
@@ -198,9 +244,11 @@ export class DefaultQuotePollingService implements QuotePollingService {
 
           for (const { queue, token } of queuedLanes) {
             let task: Promise<void>;
-            task = this.pollMintQueue(queue, token, dueBefore, signal)
-              .then((claimedQuotes) => {
-                if (claimedQuotes === 0) skippedMintUrls.add(queue.mintUrl);
+            task = this.pollMintQueue(queue, token, dueBefore, signal, stats)
+              .then((laneClaimedQuotes) => {
+                if (laneClaimedQuotes === 0) {
+                  skippedMintUrls.add(queue.mintUrl);
+                }
               })
               .catch((cause) => {
                 skippedMintUrls.add(queue.mintUrl);
@@ -231,6 +279,7 @@ export class DefaultQuotePollingService implements QuotePollingService {
     laneToken: symbol,
     dueBefore: Date,
     signal: AbortSignal,
+    stats: QuotePollingRoundStats,
   ): Promise<number> {
     if (signal.aborted) return 0;
 
@@ -267,9 +316,19 @@ export class DefaultQuotePollingService implements QuotePollingService {
           limit: reservedCapacity,
         });
         totalClaimedQuotes += quotes.length;
+        stats.claimedQuotes += quotes.length;
         this.releaseCapacity(reservedCapacity - quotes.length, laneToken);
         heldCapacity = quotes.length;
         if (quotes.length === 0 || signal.aborted) return totalClaimedQuotes;
+
+        this.logger?.debug("[QuotePollingService] Claimed quotes for polling", {
+          mintUrl: queue.mintUrl,
+          quoteCount: quotes.length,
+          claimLimit: reservedCapacity,
+          mode: support.support ? "batch" : "individual",
+          advertisedBatchSize: support.support ? support.limit : undefined,
+          residentQuotes: this.residentQuotes,
+        });
 
         if (support.support) {
           await this.pollBatch(queue.mintUrl, quotes, support.limit, signal);
