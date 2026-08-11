@@ -33,7 +33,7 @@ export async function usernameController(
       throw new UsernameTakenError();
     }
 
-    if (amount > 0) {
+    if (amount !== 0) {
       const xCashu = req.header("X-Cashu");
       if (!xCashu) {
         throw new PaymentRequiredError(amount, mintUrl);
