@@ -15,6 +15,7 @@ import { PerMintRequestBudget } from "./infrastructure/MintRequestBudget";
 import { config } from "./config/index";
 import { logger } from "./utils/logger";
 import { handleZapRequest } from "./utils/nostr";
+import { decodeZapRequestParameter } from "./utils/zapRequest";
 import {
   createRecipientBlocks,
   RecipientBlocks,
@@ -57,7 +58,7 @@ export async function initializeAppServices(
       eventBus.emit("quotePaid", quote);
       if (!quote.serializedZapRequest || !config.nostr.nostrEnabled) return;
       try {
-        const zapRequest = JSON.parse(quote.serializedZapRequest);
+        const zapRequest = decodeZapRequestParameter(quote.serializedZapRequest);
         await handleZapRequest(
           quote.quoteId,
           zapRequest,
