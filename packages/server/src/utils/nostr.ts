@@ -12,8 +12,6 @@ import { config } from "../config/index";
 import { Logger } from "winston";
 import { decodeZapRequestParameter } from "./zapRequest";
 
-export { decodeZapRequestParameter } from "./zapRequest";
-
 export function getTagValues(e: Event, tag: string, position: number) {
   const tags = e.tags;
   const values: string[] = [];
