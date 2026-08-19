@@ -1,6 +1,9 @@
 import { Request, Response, NextFunction } from "express";
 import { ApiError, LnurlError, PaymentRequiredError } from ".";
-import { encodeCBOR } from "@/utils/cbor";
+import {
+  createCashuPaymentTerms,
+  encodeCashuPaymentRequest,
+} from "@/domain/payment/paymentRequest";
 import { getRequestLogger } from "@/utils/logger";
 
 function loggableError(error: unknown): unknown {
@@ -67,9 +70,7 @@ export function errorHandler(
 }
 
 function generatePaymentRequiredPayload(amount: number, mintUrl: string) {
-  const paymentRequestPayload = { a: amount, u: "sat", m: [mintUrl] };
-  const cborPayload = encodeCBOR(paymentRequestPayload);
-  const encodedRequest =
-    "creqA" + Buffer.from(cborPayload).toString("base64url");
-  return encodedRequest;
+  return encodeCashuPaymentRequest(
+    createCashuPaymentTerms(amount, [mintUrl]),
+  );
 }

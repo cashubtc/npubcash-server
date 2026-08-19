@@ -1,5 +1,38 @@
 # Endpoints
 
+## Provider Info
+
+```
+GET /api/v2/info
+```
+
+Returns the provider capabilities that wallets can use for feature discovery.
+This endpoint is public and does not require authentication.
+
+```json
+{
+  "error": false,
+  "data": {
+    "version": 2,
+    "features": {
+      "username": {
+        "enabled": true,
+        "payment": {
+          "amount": 5000,
+          "unit": "sat",
+          "mints": ["https://mint.example.com"]
+        }
+      }
+    }
+  }
+}
+```
+
+When username purchases are disabled, `username` is returned as
+`{ "enabled": false }` without payment terms. Discovery payment terms are
+advisory; wallets must treat the payment request in a subsequent `402` response
+as authoritative.
+
 ## Wallet
 
 The WALLET endpoints provide the core functionality of npub.cash

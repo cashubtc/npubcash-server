@@ -2,6 +2,8 @@ import type {
   ErrorResponse,
   QuotesResponse,
   Quote,
+  ProviderInfo,
+  ProviderInfoResponse,
   UserResponse,
   User,
 } from "npubcash-types";
@@ -20,7 +22,8 @@ import { PaymentRequest } from "@cashu/cashu-ts";
 
 const API_PATHS = {
   QUOTES: "/api/v2/wallet/quotes",
-  INFO: "/api/v2/user/info",
+  PROVIDER_INFO: "/api/v2/info",
+  USER_INFO: "/api/v2/user/info",
   USERNAME: "/api/v2/user/username",
 };
 const PAGINATION_LIMIT = 50;
@@ -72,6 +75,19 @@ export class NPCClient {
   }
 
   /**
+   * Discover the public capabilities offered by the NpubCash provider.
+   *
+   * Payment terms are advisory. The payment request returned by a subsequent
+   * 402 response remains authoritative.
+   */
+  public async getProviderInfo(): Promise<ProviderInfo> {
+    const infoRes = await this._request<ProviderInfoResponse>(
+      API_PATHS.PROVIDER_INFO,
+    );
+    return infoRes.data;
+  }
+
+  /**
    * Fetch account information for the authenticated user.
    *
    * @returns The user's account information.
@@ -79,9 +95,8 @@ export class NPCClient {
    */
   public async getInfo(): Promise<User> {
     const infoRes = await this._authenticatedRequest<UserResponse>(
-      API_PATHS.INFO,
+      API_PATHS.USER_INFO,
     );
-    console.log(infoRes);
     return infoRes.data.user;
   }
 
@@ -207,6 +222,14 @@ export class NPCClient {
     path: string,
     options: RequestOptions = {},
   ): Promise<T> {
+    return this._request(path, options, true);
+  }
+
+  private async _request<T extends ApiResponse>(
+    path: string,
+    options: RequestOptions = {},
+    authenticated = false,
+  ): Promise<T> {
     const url = new URL(`${this._baseUrl}${path}`);
 
     if (options.params) {
@@ -218,18 +241,23 @@ export class NPCClient {
     }
 
     try {
-      const urlForAuth = `${url.protocol}//${url.host}${url.pathname}`;
-      const authToken = await this.authProvider.getAuthToken(
-        urlForAuth,
-        options.method || "GET",
-      );
-      this.logger.debug(`Auth token obtained for URL: ${urlForAuth}`);
+      let authorizationHeader: { Authorization?: string } = {};
+      if (authenticated) {
+        const urlForAuth = `${url.protocol}//${url.host}${url.pathname}`;
+        authorizationHeader = {
+          Authorization: await this.authProvider.getAuthToken(
+            urlForAuth,
+            options.method || "GET",
+          ),
+        };
+        this.logger.debug(`Auth token obtained for URL: ${urlForAuth}`);
+      }
 
       const res = await fetch(url.toString(), {
         ...options,
         headers: {
           ...options.headers,
-          Authorization: authToken,
+          ...authorizationHeader,
         },
       });
 
@@ -253,7 +281,7 @@ export class NPCClient {
       return responseData;
     } catch (error) {
       if (!(error instanceof ApiError)) {
-        this.logger.error("Authenticated request failed unexpectedly:", error);
+        this.logger.error("Request failed unexpectedly:", error);
       }
       throw error;
     }
