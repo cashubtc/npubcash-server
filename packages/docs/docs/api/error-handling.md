@@ -1,10 +1,11 @@
-# Error Handling <Badge type="warning" text="npubcash v2" />
+# Error handling
 
-This guide covers how to handle errors when working with the npubcash API.
+npubcash uses two error formats: one for its authenticated JSON API and one for
+the LNURL protocol.
 
-## Error Response Format
+## Authenticated API errors
 
-All API endpoints return errors in a consistent JSON format:
+Most `/api/v2` failures return an HTTP error status and a JSON body:
 
 ```json
 {
@@ -13,190 +14,82 @@ All API endpoints return errors in a consistent JSON format:
 }
 ```
 
-## HTTP Status Codes
+Common statuses include:
 
-The API uses standard HTTP status codes to indicate the type of error:
+| Status | Meaning |
+| --- | --- |
+| `400 Bad Request` | Required input or headers are missing or invalid. |
+| `401 Unauthorized` | The NIP-98 event or JWT is missing, invalid, or expired. |
+| `402 Payment Required` | A username purchase requires a Cashu payment. |
+| `404 Not Found` | The requested resource does not exist. |
+| `409 Conflict` | The requested username is already taken. |
+| `500 Internal Server Error` | The server could not complete the request. |
 
-### 200 OK
-Request succeeded. The response body contains the requested data.
+A `402` response also exposes an encoded Cashu payment request through the
+`X-Cashu` response header.
 
-### 400 Bad Request
-The request was malformed or contained invalid parameters.
+## LNURL errors
 
-**Example:**
+LNURL discovery and invoice failures follow the LNURL error shape:
+
 ```json
 {
-  "error": true,
-  "message": "Invalid mint URL format"
+  "status": "ERROR",
+  "reason": "Invalid recipient."
 }
 ```
 
-### 401 Unauthorized
-Authentication is required or the provided authentication token is invalid.
+Some recipient errors intentionally use HTTP 200 because LNURL clients inspect
+the response body. Do not rely on the HTTP status alone for LNURL requests.
 
-**Common causes:**
-- Missing `Authorization` header
-- Invalid NIP-98 signature
-- Expired JWT token
-- Malformed authentication token
+## SDK errors
 
-**Example:**
-```json
-{
-  "error": true,
-  "message": "Invalid or expired authentication token"
-}
-```
+SDK HTTP methods throw `ApiError`, which exposes both `message` and
+`statusCode`. A username request that receives `402` throws
+`PaymentRequiredError`; its `paymentRequest` property contains the decoded Cashu
+payment request.
 
-### 403 Forbidden
-The request is authenticated but the user is not authorized to perform this action.
+```ts
+import {
+  ApiError,
+  NPCClient,
+  PaymentRequiredError,
+} from "npubcash-sdk";
 
-**Example:**
-```json
-{
-  "error": true,
-  "message": "Quotes are locked"
-}
-```
-
-### 404 Not Found
-The requested resource does not exist.
-
-**Example:**
-```json
-{
-  "error": true,
-  "message": "Quote not found"
-}
-```
-
-### 500 Internal Server Error
-An unexpected error occurred on the server.
-
-**Example:**
-```json
-{
-  "error": true,
-  "message": "Internal server error"
-}
-```
-
-## Handling Errors in Code
-
-### Using the SDK
-
-The SDK automatically handles HTTP errors and throws exceptions:
-
-```typescript
-import { NPCClient, JWTAuthProvider } from "npubcash-sdk";
-
-const client = new NPCClient(baseUrl, authProvider);
-
-try {
-  const quotes = await client.getAllQuotes();
-} catch (error) {
-  if (error instanceof Error) {
-    console.error("Error fetching quotes:", error.message);
+async function loadQuotes(client: NPCClient) {
+  try {
+    return await client.getAllQuotes();
+  } catch (error) {
+    if (error instanceof PaymentRequiredError) {
+      console.error("Cashu payment required", error.paymentRequest);
+    } else if (error instanceof ApiError) {
+      console.error(`npubcash request failed (${error.statusCode})`, error.message);
     }
+    throw error;
   }
+}
 ```
 
-### Using Fetch Directly
+The SDK authentication provider automatically requests another JWT after its
+cached token expires. Create a new client/provider only when changing the
+server, signer, or authentication strategy.
 
-When using `fetch` directly, check the response status:
+## Direct fetch
 
-```typescript
-async function getQuotes() {
+```ts
+async function getQuotes(token: string) {
   const response = await fetch("https://npub.cash/api/v2/wallet/quotes", {
-    headers: {
-      "Authorization": "Bearer " + token
-    }
+    headers: { Authorization: `Bearer ${token}` },
   });
 
+  const body = await response.json();
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.message || `HTTP ${response.status}`);
+    throw new Error(body.message ?? `HTTP ${response.status}`);
   }
-
-  const data = await response.json();
-  return data.data;
+  return body.data.quotes;
 }
 ```
 
-### WebSocket Errors
-
-WebSocket errors are handled via the error callback:
-
-```typescript
-const dispose = client.subscribe(
-  (quoteId) => {
-    console.log("Quote updated:", quoteId);
-  },
-  (error) => {
-    console.error("WebSocket error:", error);
-    // Handle reconnection logic
-  }
-);
-```
-
-## Common Error Scenarios
-
-### Authentication Failures
-
-**Problem:** `401 Unauthorized` errors
-
-**Solutions:**
-1. Ensure the `Authorization` header is included
-2. For NIP-98: Verify the signature is valid and the event is properly formatted
-3. For JWT: Check if the token has expired and request a new one
-4. Verify the server URL is correct
-
-**Example:**
-```typescript
-// Refresh JWT token if expired
-try {
-  await client.getAllQuotes();
-} catch (error) {
-  if (error.message.includes("401")) {
-    // Re-authenticate to get a new token
-    const newAuth = new JWTAuthProvider(baseUrl, signer);
-    client.setAuthProvider(newAuth);
-  }
-}
-```
-
-### Invalid Data
-
-Validate data before sending requests:
-
-```typescript
-function setMintUrl(mintUrl: string) {
-  // Validate URL format
-  try {
-    new URL(mintUrl);
-  } catch {
-    throw new Error("Invalid mint URL format");
-  }
-
-  return client.settings.setMintUrl(mintUrl);
-}
-```
-
-## Debugging Tips
-
-1. **Check the error message** - it often contains helpful information
-2. **Verify authentication** - ensure tokens are valid and not expired
-3. **Check request format** - verify headers, body, and URL are correct
-4. **Review server logs** - if you have access, check server-side logs
-5. **Test with curl** - verify the API works outside your application
-
-```bash
-# Test authentication
-curl -X GET "https://npub.cash/api/v2/auth/nip98" \
-  -H "Authorization: Nostr YOUR_TOKEN"
-
-# Test endpoint
-curl -X GET "https://npub.cash/api/v2/wallet/quotes" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  -v  # Verbose output for debugging
-```
+For WebSocket connections, handle `error` messages and transport errors through
+the SDK's optional `onError` callback. Reconnect by creating a new subscription;
+the current subscription manager does not reconnect automatically.

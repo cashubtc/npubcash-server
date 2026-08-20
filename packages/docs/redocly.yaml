@@ -1,0 +1,6 @@
+extends:
+  - recommended
+
+rules:
+  # LNURL and NIP-05 encode expected lookup failures in HTTP 200 responses.
+  operation-4xx-response: off

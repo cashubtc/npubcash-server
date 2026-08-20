@@ -1,33 +1,35 @@
-# API Endpoints <Badge type="warning" text="npubcash v2" />
+# API reference
 
-This document provides a comprehensive reference for all npubcash-server v2 API endpoints.
+The HTTP API is described by the machine-readable [OpenAPI document](/openapi.yaml).
+Authenticated endpoints accept either a NIP-98 authorization event or a JWT
+issued by the authentication endpoint. See [Authentication](./authentication.md)
+for the complete flow.
 
-## Base URL
+Examples below use `https://npub.cash` as the server URL. Self-hosted instances
+should replace it with their own origin.
 
-All API endpoints are prefixed with `/api/v2`. For example, if your server is hosted at `https://npub.cash`, the full URL for the quotes endpoint would be `https://npub.cash/api/v2/wallet/quotes`.
+## Wallet
 
-## Authentication
+### List paid mint quotes
 
-Most endpoints require authentication. See the [Authentication guide](./authentication.md) for details on NIP-98 and JWT authentication methods.
+`GET /api/v2/wallet/quotes`
 
-## Wallet Endpoints
+Returns mint quotes belonging to the authenticated user whose state is `PAID`,
+`ISSUED`, or `INFLIGHT`. Consumers mint these quotes directly with the mint in
+`mintUrl`.
 
-### Get Quotes
+Query parameters:
 
-Retrieve paid mint quotes associated with the authenticated user. Consumers
-must mint these quotes directly with the mint identified by `mintUrl`.
+| Name | Required | Description |
+| --- | --- | --- |
+| `since` | No | Return quotes paid after this Unix timestamp, in seconds. |
+| `limit` | No | Page size from 1 to 1000. The server caps it at 50. Defaults to 50. |
+| `offset` | No | Number of matching quotes to skip. Defaults to 0. |
 
-**Endpoint:** `GET /api/v2/wallet/quotes`
-
-**Authentication:** Required (NIP-98 or JWT Bearer)
-
-**Query Parameters:**
-
-- `since` (optional): Return quotes paid after this Unix timestamp in seconds.
-- `limit` (optional): Page size. Defaults to 50.
-- `offset` (optional): Number of quotes to skip. Defaults to 0.
-
-**Response:**
+```bash
+curl "https://npub.cash/api/v2/wallet/quotes?limit=50&offset=0" \
+  -H "Authorization: Bearer $NPUBCASH_TOKEN"
+```
 
 ```json
 {
@@ -54,116 +56,109 @@ must mint these quotes directly with the mint identified by `mintUrl`.
 }
 ```
 
-Follow pagination until the number of retrieved quotes reaches
-`metadata.total`. The server continues to return paid quotes after a consumer
-has minted them, so consumers must durably track completed `(mintUrl, quoteId)`
-pairs.
+Follow pagination until all `metadata.total` results have been read. Quotes
+remain in this history after they have been minted or spent, so consumers must
+durably record processed `(mintUrl, quoteId)` pairs.
 
-**Example:**
+## User
+
+### Get user settings
+
+`GET /api/v2/user/info`
+
+Returns the authenticated user's current mint, quote-locking preference, and
+optional username. A default user resource is returned when no settings have
+been saved yet.
 
 ```bash
-# Using JWT Bearer token
-curl -X GET "https://npub.cash/api/v2/wallet/quotes" \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR..."
-
-# Using NIP-98
-curl -X GET "https://npub.cash/api/v2/wallet/quotes" \
-  -H "Authorization: Nostr eyJpZCI6ImZlOTY0ZTc1ODkwMzM..."
-
-# With pagination and a paid-at watermark
-curl -X GET "https://npub.cash/api/v2/wallet/quotes?since=1234567890&limit=50&offset=0" \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR..."
+curl https://npub.cash/api/v2/user/info \
+  -H "Authorization: Bearer $NPUBCASH_TOKEN"
 ```
-
-## Settings Endpoints
-
-### Update Mint URL
-
-Set or update the mint URL for the authenticated user.
-
-**Endpoint:** `PUT /api/v2/settings/mint`
-
-**Authentication:** Required (NIP-98 or JWT Bearer)
-
-**Request Body:**
-
-```json
-{
-  "mintUrl": "https://mint.example"
-}
-```
-
-**Response:**
 
 ```json
 {
   "error": false,
   "data": {
-    "pubkey": "npub1...",
-    "mintUrl": "https://mint.example",
-    "lockQuotes": false
+    "user": {
+      "pubkey": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+      "mintUrl": "https://mint.example",
+      "lockQuote": false
+    }
   }
 }
 ```
 
-**Example:**
+### Set the preferred mint
+
+`PATCH /api/v2/user/mint`
+
+The mint is used for future incoming payments. Existing quotes remain bound to
+the mint that created them.
 
 ```bash
-curl -X PUT "https://npub.cash/api/v2/settings/mint" \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR..." \
+curl -X PATCH https://npub.cash/api/v2/user/mint \
+  -H "Authorization: Bearer $NPUBCASH_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"mintUrl": "https://mint.example"}'
+  -d '{"mint_url":"https://mint.example"}'
 ```
 
-### Lock/Unlock Quotes
+The response uses the same `{ "error": false, "data": { "user": ... } }`
+shape as the user-info endpoint.
 
-Lock or unlock quotes for the authenticated user. When locked, quotes cannot be claimed.
+### Configure quote locking
 
-**Endpoint:** `PUT /api/v2/settings/lock`
+`PATCH /api/v2/user/lock`
 
-**Authentication:** Required (NIP-98 or JWT Bearer)
-
-**Request Body:**
-
-```json
-{
-  "lockQuotes": true
-}
-```
-
-**Response:**
-
-```json
-{
-  "error": false,
-  "data": {
-    "pubkey": "npub1...",
-    "mintUrl": "https://mint.example",
-    "lockQuotes": true
-  }
-}
-```
-
-**Example:**
+When enabled, future quotes are created using the mint's supported locking
+mechanism. Enabling this setting fails if the selected mint does not advertise
+locking support.
 
 ```bash
-curl -X PUT "https://npub.cash/api/v2/settings/lock" \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR..." \
+curl -X PATCH https://npub.cash/api/v2/user/lock \
+  -H "Authorization: Bearer $NPUBCASH_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"lockQuotes": true}'
+  -d '{"lockQuotes":true}'
 ```
 
-## Authentication Endpoints
+### Purchase a username
 
-### Get JWT Token
+`POST /api/v2/user/username`
 
-Exchange a NIP-98 authentication header for a JWT bearer token.
+Username purchases are available only when the server operator enables them.
+The first request normally returns `402 Payment Required` with an encoded Cashu
+payment request in the `X-Cashu` response header. Pay that request, then repeat
+the request with the resulting Cashu token in an `X-Cashu` request header.
 
-**Endpoint:** `GET /api/v2/auth/nip98`
+```bash
+curl -i -X POST https://npub.cash/api/v2/user/username \
+  -H "Authorization: Bearer $NPUBCASH_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"username":"alice"}'
+```
 
-**Authentication:** Required (NIP-98 only)
+```bash
+curl -X POST https://npub.cash/api/v2/user/username \
+  -H "Authorization: Bearer $NPUBCASH_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "X-Cashu: cashuB..." \
+  -d '{"username":"alice"}'
+```
 
-**Response:**
+Successful purchases return `201 Created` and the updated user resource.
+
+## Authentication
+
+### Exchange NIP-98 for a JWT
+
+`GET /api/v2/auth/nip98`
+
+This endpoint requires NIP-98 authentication. It returns a JWT bound to the
+request's `User-Agent` header and valid for 30 minutes.
+
+```bash
+curl https://npub.cash/api/v2/auth/nip98 \
+  -H "Authorization: Nostr $NIP98_TOKEN"
+```
 
 ```json
 {
@@ -174,178 +169,113 @@ Exchange a NIP-98 authentication header for a JWT bearer token.
 }
 ```
 
-**Example:**
+## Lightning Address and NIP-05
+
+### Discover a Lightning Address
+
+`GET /.well-known/lnurlp/{user}`
+
+`user` may be an `npub1...` public key or a purchased username. The response's
+`callback` points back to this same route.
 
 ```bash
-curl -X GET "https://npub.cash/api/v2/auth/nip98" \
-  -H "Authorization: Nostr eyJpZCI6ImZlOTY0ZTc1ODkwMzM..."
+curl https://npub.cash/.well-known/lnurlp/npub1...
 ```
-
-The returned token can be used as a Bearer token for subsequent requests:
-
-```bash
-curl -X GET "https://npub.cash/api/v2/wallet/quotes" \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR..."
-```
-
-## WebSocket Endpoints
-
-### Quote Updates
-
-Subscribe to real-time quote updates via WebSocket.
-
-**Endpoint:** `wss://npub.cash/api/v2/ws/quote`
-
-**Authentication:** NIP-98 challenge/response
-
-**Protocol:**
-
-1. Client connects to the WebSocket endpoint
-2. Server sends a challenge message:
-   ```json
-   {
-     "type": "challenge",
-     "challenge": "random-challenge-string"
-   }
-   ```
-3. Client responds with a NIP-98 signed authentication:
-   ```json
-   {
-     "type": "auth",
-     "token": "Nostr eyJpZCI6ImZlOTY0ZTc1ODkwMzM..."
-   }
-   ```
-4. Server validates and sends confirmation:
-   ```json
-   {
-     "type": "ok"
-   }
-   ```
-5. Server sends update messages when quotes change:
-   ```json
-   {
-     "type": "update",
-     "quoteId": "quote-id-123"
-   }
-   ```
-
-**Example (JavaScript):**
-
-```javascript
-const ws = new WebSocket("wss://npub.cash/api/v2/ws/quote");
-
-ws.onmessage = async (event) => {
-  const message = JSON.parse(event.data);
-
-  if (message.type === "challenge") {
-    // Sign the challenge using NIP-98
-    const token = await signNip98Challenge(message.challenge);
-    ws.send(
-      JSON.stringify({
-        type: "auth",
-        token: token,
-      })
-    );
-  } else if (message.type === "update") {
-    console.log("Quote updated:", message.quoteId);
-  }
-};
-```
-
-## Lightning Address Endpoints
-
-### LNURL Pay Request
-
-Handle Lightning Address payment requests (LUD-16).
-
-**Endpoint:** `GET /.well-known/lnurlp/{npub}`
-
-**Authentication:** Not required (public endpoint)
-
-**Path Parameters:**
-
-- `npub`: Nostr public key (npub format)
-
-**Query Parameters:**
-
-- `amount` (optional): Amount in millisatoshis
-
-**Response:**
 
 ```json
 {
   "tag": "payRequest",
-  "commentAllowed": 0,
-  "callback": "https://npub.cash/api/v2/lnurl/{npub}",
-  "metadata": "[[\"text/plain\",\"Payment to npub1...\"]]",
+  "callback": "https://npub.cash/.well-known/lnurlp/npub1...",
+  "metadata": "[[\"text/plain\",\"A cashu lightning address... Neat!\"]]",
   "minSendable": 1000,
-  "maxSendable": 1000000
+  "maxSendable": 100000000
 }
 ```
 
-**Example:**
+When Nostr zaps are enabled, the response also includes `allowsNostr: true` and
+the server's `nostrPubkey`.
+
+### Request an invoice
+
+`GET /.well-known/lnurlp/{user}?amount={millisatoshis}`
+
+Pass an integer amount within the discovery response's `minSendable` and
+`maxSendable` range. An optional URL-encoded `nostr` query parameter may contain
+a zap request when the server supports zaps.
 
 ```bash
-curl "https://npub.cash/.well-known/lnurlp/npub1mhcr4j594hsrnen594d7700n2t03n8gdx83zhxzculk6sh9nhwlq7uc226"
+curl "https://npub.cash/.well-known/lnurlp/npub1...?amount=100000"
 ```
-
-### LNURL Callback
-
-Generate a Lightning invoice for a payment request.
-
-**Endpoint:** `GET /api/v2/lnurl/callback/{npub}`
-
-**Authentication:** Not required (public endpoint)
-
-**Path Parameters:**
-
-- `npub`: Nostr public key (npub format)
-
-**Query Parameters:**
-
-- `amount`: Amount in millisatoshis (required)
-
-**Response:**
 
 ```json
 {
-  "status": "OK",
-  "pr": "lnbc10u1p3...",
+  "pr": "lnbc1...",
   "routes": []
 }
 ```
 
-**Example:**
+LNURL errors use `{ "status": "ERROR", "reason": "..." }` rather than the
+authenticated API's error shape.
+
+### Resolve a NIP-05 username
+
+`GET /.well-known/nostr.json?name={username}`
 
 ```bash
-curl "https://npub.cash/api/v2/lnurl/callback/npub1...?amount=100000"
+curl "https://npub.cash/.well-known/nostr.json?name=alice"
 ```
-
-## Error Responses
-
-All endpoints return errors in a consistent format:
 
 ```json
 {
-  "error": true,
-  "message": "Error description"
+  "names": {
+    "alice": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
+  },
+  "relays": {}
 }
 ```
 
-**Common HTTP Status Codes:**
+## Quote updates over WebSocket
 
-- `200 OK`: Request succeeded
-- `400 Bad Request`: Invalid request parameters
-- `401 Unauthorized`: Authentication required or invalid
-- `403 Forbidden`: Authenticated but not authorized
-- `404 Not Found`: Resource not found
-- `500 Internal Server Error`: Server error
+Connect to `wss://npub.cash/api/v2/ws/quote`. The server closes connections
+that do not authenticate within 15 seconds.
 
-**Example Error Response:**
+1. The server supplies the exact URL and method to sign:
 
-```json
-{
-  "error": true,
-  "message": "Invalid authentication token"
-}
-```
+   ```json
+   {
+     "type": "challenge",
+     "payload": {
+       "url": "wss://npub.cash/api/v2/ws/quote",
+       "method": "GET"
+     }
+   }
+   ```
+
+2. Sign a NIP-98 event for that URL and method, then respond:
+
+   ```json
+   {
+     "type": "challenge-response",
+     "payload": "Nostr eyJpZCI6ImZlOTY0ZTc1ODkwMzM..."
+   }
+   ```
+
+3. A successful challenge receives:
+
+   ```json
+   { "type": "challenge-success" }
+   ```
+
+4. Quote changes are delivered as:
+
+   ```json
+   {
+     "type": "update",
+     "payload": {
+       "quoteId": "quote-id-123"
+     }
+   }
+   ```
+
+The server may send `{ "type": "error", "payload": "..." }` when
+authentication fails. The SDK's `subscribe` method implements this protocol.

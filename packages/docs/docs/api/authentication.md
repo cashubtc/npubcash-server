@@ -1,38 +1,35 @@
-# Authentication <Badge type="warning" text="npubcash v2" />
+# Authentication
 
-Most endpoints of the API are protected and accept either one of two authentication headers
+Protected endpoints accept either a NIP-98 authorization event or a JWT bearer
+token obtained with NIP-98.
 
-## NIP-98 Auth
+## NIP-98
 
-NIP-98 Auth is the basic authentication method inside npub.cash.
-It requires a valid NIP-98 header on every request.
-The exact format of the header is specified in the [nips repository](https://github.com/nostr-protocol/nips/blob/master/98.md).
+NIP-98 signs the exact request URL and HTTP method with a Nostr key. The event
+must be regenerated when the URL or method changes. Follow the canonical
+[NIP-98 specification](https://github.com/nostr-protocol/nips/blob/master/98.md)
+when constructing events.
 
-The generated token is then included as the `Authorization` header in the request.
+Send the encoded event in the `Authorization` header:
 
-```
-GET /api/v2/wallet/quotes
+```http
+GET /api/v2/wallet/quotes HTTP/1.1
+Host: npub.cash
 Authorization: Nostr eyJpZCI6ImZlOTY0ZTc1ODkwMzM...
 ```
 
-:::warning
-NIP-98 headers need to be recreated for every request.
-If you are using a signing extension, this can lead to a lot of pop-ups.
-Consider using JWT Auth instead.
-:::
+NIP-98 works for every protected HTTP endpoint, but signing every request can
+be disruptive when a browser extension asks the user for approval. Most clients
+should exchange one NIP-98 event for a short-lived JWT.
 
-## JWT Auth
+## JWT bearer tokens
 
-With JWT Auth users obtain a bearer authentication token that can then be used to
-authenticate subsequent requests. The initial request for the token needs to be authenticated
-with a [NIP-98](#nip-98-auth) Auth header.
+Request a JWT by authenticating `GET /api/v2/auth/nip98` with NIP-98:
 
+```bash
+curl https://npub.cash/api/v2/auth/nip98 \
+  -H "Authorization: Nostr $NIP98_TOKEN"
 ```
-GET /api/v2/auth/nip98
-Authorization: Nostr eyJpZCI6ImZlOTY0ZTc1ODkwMzM...
-```
-
-The server will respond with a JSON payload including the token:
 
 ```json
 {
@@ -43,53 +40,35 @@ The server will respond with a JSON payload including the token:
 }
 ```
 
-The bearer token retrieved from this endpoint must then be used to authenticate subsequent
-requests by including it as the `Authorization` header.
+Use the token for subsequent requests:
 
-```
-GET /api/v2/wallet/quotes
+```http
+GET /api/v2/wallet/quotes HTTP/1.1
+Host: npub.cash
 Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR...
 ```
 
-:::tip
-JWT tokens are valid for 30 minutes. The SDK automatically handles token refresh, but if you're using the API directly, you'll need to request a new token when it expires.
-:::
+JWTs expire after 30 minutes and are bound to the `User-Agent` header used when
+they were issued. Keep that header stable while using a token. Request a new
+token with NIP-98 after expiration.
 
-## Token Expiration
+The SDK's `JWTAuthProvider` handles the exchange and refreshes its cached token
+automatically.
 
-JWT tokens have a 30-minute lifetime. When a token expires, you'll receive a `401 Unauthorized` response. To continue making requests:
+## WebSocket authentication
 
-1. Request a new JWT token using NIP-98 authentication
-2. Use the new token for subsequent requests
+The quote WebSocket cannot use a JWT bearer token. After connecting, sign the
+URL and method supplied in the server's challenge and return the resulting
+NIP-98 token. See the [WebSocket protocol](./endpoints.md#quote-updates-over-websocket)
+for the exact message shapes.
 
-The SDK handles this automatically, but when using the API directly, you'll need to implement token refresh logic.
+## Security guidance
 
-## Example: Using JWT Auth
-
-Here's a complete example of using JWT authentication:
-
-```bash
-# Step 1: Get JWT token with NIP-98
-curl -X GET "https://npub.cash/api/v2/auth/nip98" \
-  -H "Authorization: Nostr eyJpZCI6ImZlOTY0ZTc1ODkwMzM..."
-
-# Response:
-# {
-#   "error": false,
-#   "data": {
-#     "token": "eyJhbGciOiJIUzI1NiIsInR..."
-#   }
-# }
-
-# Step 2: Use JWT token for API requests
-curl -X GET "https://npub.cash/api/v2/wallet/quotes" \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR..."
-```
-
-## Security Considerations
-
-- **Never share your private key** - Keep your nostr private key secure
-- **Use HTTPS** - Always connect to npubcash servers over HTTPS
-- **Token storage** - If storing JWT tokens, use secure storage (not localStorage for sensitive apps)
-- **Token expiration** - JWT tokens expire quickly for security; implement proper refresh logic
-- **Signing extensions** - Be cautious with browser extensions that request signing permissions
+- Never send a Nostr private key to the server or include it in application logs.
+- Use HTTPS and WSS outside local development.
+- Store bearer tokens in memory where possible and avoid persistent browser
+  storage for sensitive applications.
+- Generate NIP-98 events for the exact public URL, including its scheme and
+  hostname.
+- Treat the signer prompt as a security boundary: show users what origin and
+  action they are authorizing.
