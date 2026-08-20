@@ -10,6 +10,7 @@ import { ZapRequestData } from "../types";
 import { nostrPool } from "../config";
 import { config } from "../config/index";
 import { Logger } from "winston";
+import { decodeZapRequestParameter } from "./zapRequest";
 
 export function getTagValues(e: Event, tag: string, position: number) {
   const tags = e.tags;
@@ -84,7 +85,7 @@ export function decodeAndValidateZapRequest(
   encodedZapRequest: string,
   lnurlAmount: string,
 ) {
-  const decodedEvent = JSON.parse(decodeURI(encodedZapRequest)) as Event;
+  const decodedEvent = decodeZapRequestParameter(encodedZapRequest);
   validateEvent(decodedEvent);
   const zapRequestData = extractZapRequestData(decodedEvent);
   const isValidData = isValidZapRequestData(
@@ -107,10 +108,6 @@ export function isValidZapRequestData(z: ZapRequestData, lnurlAmount: number) {
     }
   }
   return true;
-}
-
-export function decodeZapRequestParameter(r: string) {
-  return JSON.parse(decodeURI(r)) as Event;
 }
 
 const createTimeoutPromise = (ms: number) => {
