@@ -7,9 +7,6 @@ hero:
   text: "Documentation for the npubcash API"
   actions:
     - theme: brand
-      text: Migration Day
-      link: /docs/migration-day
-    - theme: brand
       text: Get Started
       link: /docs/getting-started
     - theme: alt
