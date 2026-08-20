@@ -49,26 +49,7 @@ SDK HTTP methods throw `ApiError`, which exposes both `message` and
 `PaymentRequiredError`; its `paymentRequest` property contains the decoded Cashu
 payment request.
 
-```ts
-import {
-  ApiError,
-  NPCClient,
-  PaymentRequiredError,
-} from "npubcash-sdk";
-
-async function loadQuotes(client: NPCClient) {
-  try {
-    return await client.getAllQuotes();
-  } catch (error) {
-    if (error instanceof PaymentRequiredError) {
-      console.error("Cashu payment required", error.paymentRequest);
-    } else if (error instanceof ApiError) {
-      console.error(`npubcash request failed (${error.statusCode})`, error.message);
-    }
-    throw error;
-  }
-}
-```
+<<< ../../examples/sdk-errors.ts
 
 The SDK authentication provider automatically requests another JWT after its
 cached token expires. Create a new client/provider only when changing the

@@ -1,30 +1,48 @@
-# How does it work? <Badge type="warning" text="npubcash v2" />
+# How it works <Badge type="warning" text="npubcash v2" />
 
-npub.cash is a Lightning address powered by Cashu and nostr. It lets anyone receive Lightning payments to a LUD‑16 address without registration.
+npubcash combines Lightning Address discovery, Nostr identity, and Cashu mint
+quotes. It coordinates incoming payments without operating a custodial wallet
+balance for each recipient.
 
 ## Identity
 
-npub.cash uses nostr identities. Your nostr public key becomes your address.
-
-A npub.cash Lightning address looks like this:
+An `npub1...` Nostr public key is immediately usable as the local part of an
+npubcash Lightning Address:
 
 ```text
 npub1mhcr4j594hsrnen594d7700n2t03n8gdx83zhxzculk6sh9nhwlq7uc226@npub.cash
 ```
 
-Any nostr public key is a valid npub.cash address. The server associates incoming payments with the provided public key.
+No account registration is needed. The server decodes the `npub` and associates
+incoming mint quotes with its underlying public key. Operators may also enable
+paid usernames, which resolve to the same Nostr identity through Lightning
+Address and NIP-05 endpoints.
 
-To retrieve your saved payments you authenticate using a NIP‑98 header. The server validates the header, extracts your public key, looks up saved payments for that key, and returns them.
+Protected wallet and settings requests use NIP-98. Clients may exchange one
+NIP-98 event for a short-lived JWT to avoid signing every HTTP request.
 
-Because identity comes from nostr, npub.cash requires no sign‑up or setup—nostr users can use it immediately.
+## Incoming payment
 
-## Payments
+1. A payer resolves `<recipient>@npub.cash` through LNURL-pay.
+2. npubcash determines the recipient's configured mint and locking preference.
+3. The server requests a BOLT11 mint quote and returns its invoice to the payer.
+4. Quote monitoring observes the mint until the invoice is paid or expires.
+5. The paid quote is stored with the recipient's public key and published to
+   connected quote-update subscribers.
 
-npub.cash uses Cashu to handle payments.
+## Collecting a payment
 
-1. A payer sends a Lightning address request to the server for your nostr key.
-2. The server requests a Cashu BOLT11 quote from its configured mint.
-3. The mint returns a Lightning invoice; the server forwards this invoice to the payer.
-4. The server monitors the invoice status. When it is paid, the server stores the paid quote and associates it with your public key.
+The authenticated recipient retrieves paid quote metadata from
+`GET /api/v2/wallet/quotes`. The response identifies the mint, quote ID, amount,
+invoice, state, and whether the quote was locked.
 
-Later, you can claim funds by authenticating (NIP‑98) and requesting your saved quotes from the server.
+The recipient's wallet—not npubcash-server—uses that quote with the identified
+mint to issue Cashu proofs. This separation means:
+
+- the consumer must support the mint-quote issuance flow;
+- the consumer must persist its Cashu wallet state safely;
+- the consumer must track processed `(mintUrl, quoteId)` pairs; and
+- changing the preferred mint affects only future incoming payments.
+
+The server intentionally keeps paid quotes in history after collection, making
+recovery possible but requiring idempotent consumer logic.
