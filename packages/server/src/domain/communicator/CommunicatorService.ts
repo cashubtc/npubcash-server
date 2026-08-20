@@ -1,7 +1,7 @@
 import { MintQuote } from "@/domain/mintQuote/MintQuote";
 import type { MintQuoteMonitor } from "@/domain/mintQuoteMonitor/MintQuoteMonitor";
 import { normalizeUrl } from "@/utils/utils";
-import { Mint, Wallet, type Token } from "@cashu/cashu-ts";
+import { Mint, Wallet, type KeyChainCache, type Token } from "@cashu/cashu-ts";
 import { MintCommunicator } from "almnd";
 import type { Logger } from "winston";
 
@@ -16,22 +16,22 @@ export class CommunicatorService {
     if (cached) return cached;
 
     const mint = new Mint(mintUrl);
-    const [mintInfo, { keysets: rawKeysets }] = await Promise.all([
+    const [mintInfo, { keysets }] = await Promise.all([
       mint.getInfo(),
       mint.getKeys(),
     ]);
-    const keysetCache = await Promise.all(
-      rawKeysets.map(async (ks: any) => {
-        const { keysets: [keyset] } = await mint.getKeys(ks.id) as any;
-        return { id: ks.id, unit: ks.unit, active: ks.active ?? true, keys: keyset.keys };
-      }),
-    );
+
     const wallet = new Wallet(mint);
-    wallet.loadMintFromCache(mintInfo as any, {
+    wallet.loadMintFromCache(mintInfo, {
       mintUrl,
       unit: "sat",
-      keysets: keysetCache as any,
-    });
+      keysets: keysets.map((ks) => ({
+        id: ks.id,
+        unit: ks.unit,
+        active: ks.active ?? true,
+        keys: ks.keys,
+      })),
+    } satisfies KeyChainCache);
     this.walletCache.set(mintUrl, wallet);
     return wallet;
   }
