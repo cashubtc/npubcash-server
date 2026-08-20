@@ -1,6 +1,7 @@
 # API reference
 
-The HTTP API is described by the machine-readable [OpenAPI document](/openapi.yaml).
+The HTTP API is available as an [interactive reference](/api-reference.html)
+generated from the machine-readable [OpenAPI document](/openapi.yaml).
 Authenticated endpoints accept either a NIP-98 authorization event or a JWT
 issued by the authentication endpoint. See [Authentication](./authentication.md)
 for the complete flow.
@@ -279,3 +280,5 @@ that do not authenticate within 15 seconds.
 
 The server may send `{ "type": "error", "payload": "..." }` when
 authentication fails. The SDK's `subscribe` method implements this protocol.
+Low-level clients may send `{ "type": "ping" }`; the server responds with
+`{ "type": "pong" }`.

@@ -1,4 +1,4 @@
-# How it works <Badge type="warning" text="npubcash v2" />
+# How it works
 
 npubcash combines Lightning Address discovery, Nostr identity, and Cashu mint
 quotes. It coordinates incoming payments without operating a custodial wallet

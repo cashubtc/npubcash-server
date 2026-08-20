@@ -1,10 +1,10 @@
 ---
-# https://vitepress.dev/reference/default-theme-home-page
 layout: home
 
 hero:
-  name: "npubcash-docs"
-  text: "Documentation for the npubcash API"
+  name: "npubcash"
+  text: "Lightning Addresses for Nostr"
+  tagline: Receive Lightning payments through Cashu without creating another account.
   actions:
     - theme: brand
       text: Get Started
@@ -17,10 +17,10 @@ hero:
       link: /docs/sdk/npubcash-sdk
 
 features:
-  - title: Lightning Addresses for everyone
-    details: Leveraging Cashu and nostr, npubcash-server provides Lightning Addresses for everyone
-  - title: No Sign-Up
-    details: Authentication and addresses are based on nostr identities. No sign up required
-  - title: Easy to integrate
-    details: The npubcash API is easy to integrate in nostr and cashu applications
+  - title: Lightning Addresses
+    details: Every Nostr public key can receive through a familiar Lightning Address.
+  - title: No sign-up
+    details: Nostr identities provide authentication and address ownership.
+  - title: Cashu-native collection
+    details: Wallets mint paid quotes directly with the recipient's configured Cashu mint.
 ---

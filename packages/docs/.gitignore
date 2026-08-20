@@ -5,6 +5,7 @@ node_modules
 out
 dist
 *.tgz
+public/api-reference.html
 
 # code coverage
 coverage

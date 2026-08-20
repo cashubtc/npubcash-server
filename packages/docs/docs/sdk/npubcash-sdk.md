@@ -1,4 +1,4 @@
-# npubcash SDK (`npubcash-sdk`) <Badge type="warning" text="npubcash v2" />
+# npubcash SDK (`npubcash-sdk`)
 
 `npubcash-sdk` is a TypeScript client for the npubcash HTTP and WebSocket APIs.
 It handles NIP-98 authentication, short-lived JWTs, pagination, settings, paid

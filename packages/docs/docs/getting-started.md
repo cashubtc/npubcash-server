@@ -1,4 +1,4 @@
-# Getting started <Badge type="warning" text="npubcash v2" />
+# Getting started
 
 npubcash lets a Nostr identity receive Lightning payments through a Lightning
 Address. No npubcash registration is required for an `npub` address.

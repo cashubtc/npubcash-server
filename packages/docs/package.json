@@ -3,11 +3,22 @@
   "type": "module",
   "private": true,
   "devDependencies": {
-    "vitepress": "^1.6.4"
+    "@redocly/cli": "^2.46.2",
+    "markdownlint-cli2": "^0.23.2",
+    "typescript": "~5.8.3",
+    "vitepress": "^1.6.4",
+    "yaml": "^2.9.0"
   },
   "scripts": {
-    "docs:dev": "vitepress dev",
-    "build": "vitepress build",
-    "docs:preview": "vitepress preview"
+    "docs:dev": "bun run generate:api && vitepress dev",
+    "build": "bun run generate:api && vitepress build",
+    "check": "bun run generate:api && bun run lint:markdown && bun run check:links && bun run check:routes && bun run check:openapi && bun run typecheck:examples",
+    "check:links": "bun scripts/check-links.ts",
+    "check:openapi": "redocly lint public/openapi.yaml --config redocly.yaml",
+    "check:routes": "bun scripts/check-api-routes.ts",
+    "docs:preview": "vitepress preview",
+    "generate:api": "redocly build-docs public/openapi.yaml --output public/api-reference.html --config redocly.yaml --title 'npubcash API reference' --disableGoogleFont",
+    "lint:markdown": "markdownlint-cli2 index.md 'docs/**/*.md'",
+    "typecheck:examples": "tsc -p tsconfig.examples.json --noEmit"
   }
 }

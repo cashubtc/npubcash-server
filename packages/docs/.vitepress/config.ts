@@ -1,12 +1,13 @@
 import { defineConfig } from "vitepress";
 
 export default defineConfig({
-  title: "npubcash Documentation",
-  description: "Documentation for the npubcash API and SDK",
+  title: "npubcash",
+  description: "Lightning Addresses for Nostr, powered by Cashu",
+  lastUpdated: true,
 
   themeConfig: {
     nav: [
-      { text: "Home", link: "/" },
+      { text: "Guide", link: "/docs/getting-started" },
       { text: "API", link: "/docs/api/endpoints" },
       { text: "SDK", link: "/docs/sdk/npubcash-sdk" },
       { text: "Deployment", link: "/docs/server/deployment" },
@@ -14,10 +15,10 @@ export default defineConfig({
 
     sidebar: [
       {
-        text: "Getting Started",
+        text: "Guide",
         items: [
-          { text: "Getting Started", link: "/docs/getting-started" },
-          { text: "How does it work?", link: "/docs/how-does-it-work" },
+          { text: "Getting started", link: "/docs/getting-started" },
+          { text: "How it works", link: "/docs/how-does-it-work" },
         ],
       },
       {
@@ -49,8 +50,16 @@ export default defineConfig({
       message: "Released under the MIT License.",
     },
 
+    editLink: {
+      pattern:
+        "https://github.com/cashubtc/npubcash-server/edit/main/packages/docs/:path",
+      text: "Edit this page on GitHub",
+    },
+
     search: {
       provider: "local",
     },
+
+    outline: [2, 3],
   },
 });

@@ -1,4 +1,4 @@
-# Deploying npubcash-server <Badge type="warning" text="npubcash v2" />
+# Deploying npubcash-server
 
 The repository includes a multi-stage Docker image that builds the frontend and
 runs the server with Bun. The container listens on port 8000 and supports either
