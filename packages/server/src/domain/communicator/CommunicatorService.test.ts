@@ -1,5 +1,5 @@
 import { describe, test, expect, mock, beforeEach } from "bun:test";
-import type { MintQuoteRepository } from "@/domain/mintQuote/MintQuoteRepository";
+import type { MintQuoteMonitor } from "@/domain/mintQuoteMonitor/MintQuoteMonitor";
 import { getEncodedToken, getEncodedTokenV4, createRandomSecretKey, createRandomRawBlindedMessage, type Token, getDecodedToken } from "@cashu/cashu-ts";
 
 // Break the import cycle CommunicatorService → @/config/index → config.ts → CommunicatorService
@@ -45,7 +45,7 @@ mock.module("@cashu/cashu-ts", () => ({
   },
 }));
 
-const fakeRepo = {} as unknown as MintQuoteRepository;
+const fakeRepo = {} as unknown as MintQuoteMonitor;
 
 describe("CommunicatorService.redeemToken (V4 token decoding)", () => {
   beforeEach(() => {
