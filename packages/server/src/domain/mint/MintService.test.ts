@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { GetInfoResponse } from "@cashu/cashu-ts";
+import type { MintInfo } from "@cashu/cashu-ts";
 import { Mint } from "./Mint";
 import type { MintRepository } from "./MintRepository";
 import { MintService } from "./MintService";
@@ -15,7 +15,7 @@ function createService(nut29?: Record<string, unknown>): MintService {
       5: { methods: [], disabled: false },
       ...(nut29 ? { 29: nut29 } : {}),
     },
-  } as unknown as GetInfoResponse;
+  } as unknown as MintInfo;
   const mint = new Mint({
     url: "https://mint.example.com",
     info,
