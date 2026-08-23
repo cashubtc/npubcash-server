@@ -1,7 +1,7 @@
 import { Mint } from "@/domain/mint/Mint";
 import { MintRepository } from "@/domain/mint/MintRepository";
 import { DatabaseAdapter } from "@/database/adapter";
-import { GetInfoResponse } from "@cashu/cashu-ts";
+import { MintInfo } from "@cashu/cashu-ts";
 
 type SqliteMint = {
   last_checked: string;
@@ -42,7 +42,7 @@ mint_info = excluded.mint_info`;
   private dbMintToModel(dbMint: SqliteMint): Mint {
     return new Mint({
       url: dbMint.mint_url,
-      info: JSON.parse(dbMint.mint_info) as GetInfoResponse,
+      info: JSON.parse(dbMint.mint_info) as MintInfo,
       lastChecked: new Date(dbMint.last_checked),
     });
   }

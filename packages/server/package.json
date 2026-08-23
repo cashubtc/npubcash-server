@@ -14,7 +14,7 @@
   "author": "Egge",
   "license": "MIT",
   "dependencies": {
-    "@cashu/cashu-ts": "^2.4.1",
+    "@cashu/cashu-ts": "^3.5.0",
     "@scure/bip32": "^1.6.2",
     "@scure/bip39": "^1.5.4",
     "almnd": "0.4.0",

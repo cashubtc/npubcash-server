@@ -4,7 +4,7 @@ import {
   UsernameTakenError,
 } from "@/errors";
 import { NextFunction, Request, Response } from "express";
-import { Token, getDecodedToken } from "@cashu/cashu-ts";
+import { Mint, Token, getDecodedToken } from "@cashu/cashu-ts";
 import {
   getCommunicatorService,
   getProofService,
@@ -75,7 +75,9 @@ async function validatePayment(
   }
   let decodedToken: Token;
   try {
-    decodedToken = getDecodedToken(tokenString);
+    const mint = new Mint(requiredMint);
+    const { keysets } = await mint.getKeys();
+    decodedToken = getDecodedToken(tokenString, keysets);
   } catch (e) {
     return throwPaymentError("invalid token");
   }
