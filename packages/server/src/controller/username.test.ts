@@ -23,13 +23,13 @@ const redeemToken = mock(async (_token: typeof decodedToken) => redeemedProofs);
 const saveProofs = mock(async (_proofs: typeof redeemedProofs) => {});
 
 mock.module("@/config", () => ({
-  communicatorService: { redeemToken },
-  proofService: { saveProofs },
-  userService: {
+  getCommunicatorService: () => ({ redeemToken }),
+  getProofService: () => ({ saveProofs }),
+  getUserService: () => ({
     setUsername,
     usernameExists,
     validateAndParseUsername,
-  },
+  }),
 }));
 
 mock.module("../config/index", () => ({

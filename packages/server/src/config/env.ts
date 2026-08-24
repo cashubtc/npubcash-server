@@ -1,7 +1,17 @@
 import { accountFromSeedWords } from "nostr-tools/nip06";
 import { HDKey } from "@scure/bip32";
 import { mnemonicToSeedSync } from "@scure/bip39";
-import { DEFAULT_MINT_QUOTE_MONITOR_POLICY } from "@/domain/mintQuoteMonitor/MintQuoteMonitor";
+import { DEFAULT_QUOTE_POLL_INTERVAL_MS } from "@/domain/mintQuoteMonitoring/QuotePollingService";
+
+const DEPRECATED_ACTIVE_RETRY_MS = [5_000, 10_000, 30_000, 60_000] as const;
+const DEPRECATED_RECONCILIATION_RETRY_MS = [
+  60_000,
+  300_000,
+  1_800_000,
+  7_200_000,
+  21_600_000,
+] as const;
+const DEPRECATED_RETRY_JITTER_RATIO = 0.2;
 
 export function getRelaysFromEnv() {
   const relays = getEnvVar("DEFAULT_RELAYS");
@@ -264,7 +274,7 @@ export function getMintQuoteMonitorConfigFromEnv() {
   const jitterRaw = getEnvVar("MINT_QUOTE_RETRY_JITTER_RATIO");
   const jitterRatio =
     jitterRaw === undefined
-      ? DEFAULT_MINT_QUOTE_MONITOR_POLICY.jitterRatio
+      ? DEPRECATED_RETRY_JITTER_RATIO
       : Number(jitterRaw);
   if (!Number.isFinite(jitterRatio) || jitterRatio < 0 || jitterRatio > 1) {
     throw new Error("MINT_QUOTE_RETRY_JITTER_RATIO must be between 0 and 1");
@@ -273,15 +283,15 @@ export function getMintQuoteMonitorConfigFromEnv() {
   return {
     activePollIntervalMs: getPositiveNumberFromEnv(
       "MINT_QUOTE_ACTIVE_POLL_MS",
-      DEFAULT_MINT_QUOTE_MONITOR_POLICY.activePollIntervalMs,
+      DEFAULT_QUOTE_POLL_INTERVAL_MS,
     ),
     activeRetryMs: getRetryScheduleFromEnv(
       "MINT_QUOTE_ACTIVE_RETRY_MS",
-      DEFAULT_MINT_QUOTE_MONITOR_POLICY.activeRetryMs,
+      DEPRECATED_ACTIVE_RETRY_MS,
     ),
     reconciliationRetryMs: getRetryScheduleFromEnv(
       "MINT_QUOTE_RECONCILIATION_RETRY_MS",
-      DEFAULT_MINT_QUOTE_MONITOR_POLICY.reconciliationRetryMs,
+      DEPRECATED_RECONCILIATION_RETRY_MS,
     ),
     jitterRatio,
     requestTimeoutMs: getPositiveNumberFromEnv(

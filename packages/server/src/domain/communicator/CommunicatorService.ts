@@ -1,5 +1,3 @@
-import { MintQuote } from "@/domain/mintQuote/MintQuote";
-import type { MintQuoteMonitor } from "@/domain/mintQuoteMonitor/MintQuoteMonitor";
 import { normalizeUrl } from "@/utils/utils";
 import { Token } from "@cashu/cashu-ts";
 import { MintCommunicator } from "almnd";
@@ -7,8 +5,6 @@ import type { Logger } from "winston";
 
 export class CommunicatorService {
   private readonly communicators: { [mintUrl: string]: MintCommunicator } = {};
-
-  constructor(private readonly mintQuoteMonitor: MintQuoteMonitor) {}
 
   async redeemToken(token: Token, logger?: Logger) {
     logger?.info(`Receiving proofs on mint ${token.mint}`);
@@ -29,22 +25,6 @@ export class CommunicatorService {
     }
     const res = await this.getCommunicator(mintUrl).getMintQuote(amount);
     return { locked: false, ...res };
-  }
-
-  async createQuoteSubscription(quote: MintQuote, reqLogger: Logger) {
-    reqLogger.info("[CommSvc] Monitoring mint quote", {
-      mintUrl: normalizeUrl(quote.mintUrl),
-      quoteId: quote.quoteId,
-    });
-    await this.mintQuoteMonitor.watch(quote);
-  }
-
-  async startQuoteMonitoring(): Promise<void> {
-    await this.mintQuoteMonitor.start();
-  }
-
-  async shutdown(): Promise<void> {
-    await this.mintQuoteMonitor.stop();
   }
 
   getCommunicator(mintUrl: string) {

@@ -20,6 +20,7 @@ import { Event } from "nostr-tools";
 import { config } from "@/config/index";
 import { getPublicRequestUrl } from "@/utils/publicRequest";
 import { RecipientBlockedError } from "@/domain/recipientBlock/RecipientBlocks";
+import { eventBus } from "@/events";
 
 export async function lnurlController(
   req: Request<
@@ -87,7 +88,7 @@ export async function lnurlController(
       locked,
     });
 
-    await communicatorService.createQuoteSubscription(mintQuote, logger);
+    eventBus.emit("mintQuote.created", mintQuote);
 
     res.json({
       pr: request,

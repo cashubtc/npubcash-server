@@ -11,7 +11,7 @@ import {
   isMintQuotePayload,
   type MintQuotePayload,
 } from "./MintQuoteClient";
-import type { ActiveQuoteTransport } from "./MintQuoteMonitor";
+import type { QuoteWebSocketTransport } from "@/domain/mintQuoteMonitoring/QuoteWebSocketTransport";
 
 const MAX_FILTERS_PER_SUBSCRIPTION = 50;
 
@@ -35,7 +35,7 @@ interface MintSubscriptions {
   bySubId: Map<string, WireSubscription>;
 }
 
-interface WebSocketQuoteTransportOptions {
+export interface WebSocketQuoteTransportOptions {
   transport?: RealTimeTransport;
   logger?: Logger;
   createSubscriptionId?: () => string;
@@ -43,7 +43,7 @@ interface WebSocketQuoteTransportOptions {
   requestBudget?: MintRequestBudget;
 }
 
-export class WebSocketQuoteTransport implements ActiveQuoteTransport {
+export class WebSocketQuoteTransport implements QuoteWebSocketTransport {
   private readonly transport: RealTimeTransport;
   private readonly logger?: Logger;
   private readonly createSubscriptionId: () => string;
@@ -163,7 +163,7 @@ export class WebSocketQuoteTransport implements ActiveQuoteTransport {
       this.sendSubscribeBatches(mintUrl, current, pending);
       if (reopening && pending.length > 0) {
         this.logger?.info(
-          "[QuoteMonitor] Re-subscribed quotes after WebSocket reopen",
+          "[QuoteWebSocketTransport] Re-subscribed quotes after WebSocket reopen",
           { mintUrl, count: pending.length },
         );
       }
@@ -266,9 +266,10 @@ export class WebSocketQuoteTransport implements ActiveQuoteTransport {
       if (!mint || !wireSubscription) return;
       const payload = notification.params?.payload;
       if (!isMintQuotePayload(payload)) {
-        this.logger?.warn("[QuoteMonitor] Ignored invalid WebSocket quote payload", {
-          mintUrl,
-        });
+        this.logger?.warn(
+          "[QuoteWebSocketTransport] Ignored invalid WebSocket quote payload",
+          { mintUrl },
+        );
         return;
       }
       if (!wireSubscription.quoteIds.has(payload.quote)) return;
@@ -278,15 +279,18 @@ export class WebSocketQuoteTransport implements ActiveQuoteTransport {
       }
       Promise.resolve(subscription.onPayload(payload)).catch(
         (cause) => {
-          this.logger?.error("[QuoteMonitor] WebSocket quote callback failed", {
-            mintUrl,
-            quoteId: subscription.quoteId,
-            cause,
-          });
+          this.logger?.error(
+            "[QuoteWebSocketTransport] WebSocket quote callback failed",
+            {
+              mintUrl,
+              quoteId: subscription.quoteId,
+              cause,
+            },
+          );
         },
       );
     } catch (cause) {
-      this.logger?.warn("[QuoteMonitor] Ignored invalid WebSocket message", {
+      this.logger?.warn("[QuoteWebSocketTransport] Ignored invalid WebSocket message", {
         mintUrl,
         cause,
       });

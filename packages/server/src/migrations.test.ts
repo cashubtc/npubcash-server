@@ -1,8 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type {
-  DatabaseAdapter,
-  QueryResult,
-} from "./database/adapter";
+import type { DatabaseAdapter, QueryResult } from "./database/adapter";
 import { SqliteAdapter } from "./database/sqliteAdapter";
 import { runMigrations } from "./migrations";
 
@@ -10,7 +7,9 @@ class V2PostgresAdapter implements DatabaseAdapter {
   readonly type = "postgres" as const;
   readonly queries: string[] = [];
 
-  async query<T = Record<string, unknown>>(sql: string): Promise<QueryResult<T>> {
+  async query<T = Record<string, unknown>>(
+    sql: string,
+  ): Promise<QueryResult<T>> {
     this.queries.push(sql);
 
     if (sql.includes("information_schema.tables")) {
@@ -51,13 +50,17 @@ class InitializedV3PostgresAdapter implements DatabaseAdapter {
           { id: "001_v3_baseline" },
           { id: "002_mint_quote_monitoring" },
           { id: "003_recipient_blocks" },
+          { id: "004_mint_quote_polling_queue" },
+          { id: "005_per_mint_quote_polling_queue" },
         ] as T[],
-        rowCount: 3,
+        rowCount: 5,
       };
     }
 
     if (sql.includes("INSERT INTO _migrations")) {
-      throw new Error(`Tried to reapply an initialized baseline: ${params?.[0]}`);
+      throw new Error(
+        `Tried to reapply an initialized baseline: ${params?.[0]}`,
+      );
     }
 
     this.schemaStatements.push(sql);
@@ -153,11 +156,16 @@ describe("runMigrations", () => {
       const mintQuoteColumns = await adapter.query<{ name: string }>(
         "PRAGMA table_info(mint_quotes)",
       );
+      const mintQuoteIndexes = await adapter.query<{ name: string }>(
+        "PRAGMA index_list(mint_quotes)",
+      );
 
       expect(applied.rows).toEqual([
         { id: "001_v3_baseline" },
         { id: "002_mint_quote_monitoring" },
         { id: "003_recipient_blocks" },
+        { id: "004_mint_quote_polling_queue" },
+        { id: "005_per_mint_quote_polling_queue" },
       ]);
       expect(tables.rows).toEqual([
         { name: "_migrations" },
@@ -174,6 +182,15 @@ describe("runMigrations", () => {
       );
       expect(mintQuoteColumns.rows.map((column) => column.name)).not.toContain(
         "serialzed_zap_request",
+      );
+      expect(mintQuoteColumns.rows.map((column) => column.name)).toContain(
+        "last_polled_at",
+      );
+      expect(mintQuoteIndexes.rows.map((index) => index.name)).toContain(
+        "idx_mint_quotes_polling_queue",
+      );
+      expect(mintQuoteIndexes.rows.map((index) => index.name)).toContain(
+        "idx_mint_quotes_mint_polling_queue",
       );
 
       const reconciliationForeignKeys = await adapter.query<{
@@ -211,6 +228,8 @@ describe("runMigrations", () => {
     expect(adapter.applied).toEqual([
       "002_mint_quote_monitoring",
       "003_recipient_blocks",
+      "004_mint_quote_polling_queue",
+      "005_per_mint_quote_polling_queue",
     ]);
     expect(adapter.schemaStatements.join("\n")).toContain(
       "CREATE TABLE IF NOT EXISTS mint_quote_mint_retries",
@@ -226,6 +245,15 @@ describe("runMigrations", () => {
     );
     expect(adapter.schemaStatements.join("\n")).toContain(
       "pubkey ~ '^[0-9a-f]{64}$'",
+    );
+    expect(adapter.schemaStatements.join("\n")).toContain(
+      "ADD COLUMN IF NOT EXISTS last_polled_at TIMESTAMPTZ",
+    );
+    expect(adapter.schemaStatements.join("\n")).toContain(
+      "idx_mint_quotes_polling_queue",
+    );
+    expect(adapter.schemaStatements.join("\n")).toContain(
+      "idx_mint_quotes_mint_polling_queue",
     );
   });
 
@@ -273,6 +301,34 @@ describe("runMigrations", () => {
           null,
         ]),
       ).rejects.toThrow();
+    } finally {
+      await adapter.close();
+    }
+  });
+
+  test("retries a partially applied SQLite polling-queue migration", async () => {
+    const adapter = new SqliteAdapter(":memory:");
+
+    try {
+      await runMigrations(adapter);
+      await adapter.query("DELETE FROM _migrations WHERE id = ?", [
+        "004_mint_quote_polling_queue",
+      ]);
+
+      await expect(runMigrations(adapter)).resolves.toBeUndefined();
+
+      const columns = await adapter.query<{ name: string }>(
+        "PRAGMA table_info(mint_quotes)",
+      );
+      const indexes = await adapter.query<{ name: string }>(
+        "PRAGMA index_list(mint_quotes)",
+      );
+      expect(
+        columns.rows.filter((column) => column.name === "last_polled_at"),
+      ).toHaveLength(1);
+      expect(indexes.rows.map((index) => index.name)).toContain(
+        "idx_mint_quotes_polling_queue",
+      );
     } finally {
       await adapter.close();
     }

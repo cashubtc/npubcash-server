@@ -1,7 +1,7 @@
 import { DatabaseAdapter } from "@/database/adapter";
 import { MintRepository } from "@/domain/mint/MintRepository";
 import { MintQuoteRepository } from "@/domain/mintQuote/MintQuoteRepository";
-import { MintQuoteMonitorStore } from "@/domain/mintQuoteMonitor/MintQuoteMonitorStore";
+import { MintQuoteMonitoringStore } from "@/domain/mintQuoteMonitoring/MintQuoteMonitoringStore";
 import { ProofRepository } from "@/domain/proof/proofRepository";
 import { UserRepository } from "@/domain/user/userRepository";
 import { RecipientBlockRepository } from "@/domain/recipientBlock/recipientBlockRepository";
@@ -21,7 +21,7 @@ export interface Repositories {
   proofRepository: ProofRepository;
   mintRepository: MintRepository;
   mintQuoteRepository: MintQuoteRepository;
-  mintQuoteMonitorStore: MintQuoteMonitorStore;
+  mintQuoteMonitoringStore: MintQuoteMonitoringStore;
   recipientBlockRepository: RecipientBlockRepository;
 }
 
@@ -40,7 +40,7 @@ export function createRepositories(
       proofRepository: new SqliteProofRepository(db),
       mintRepository: new SqliteMintRepository(db),
       mintQuoteRepository,
-      mintQuoteMonitorStore: mintQuoteRepository,
+      mintQuoteMonitoringStore: mintQuoteRepository,
       recipientBlockRepository: new SqliteRecipientBlockRepository(db),
     };
   }
@@ -51,7 +51,7 @@ export function createRepositories(
     proofRepository: new PostgresProofRepository(db),
     mintRepository: new PostgresMintRepository(db),
     mintQuoteRepository,
-    mintQuoteMonitorStore: mintQuoteRepository,
+    mintQuoteMonitoringStore: mintQuoteRepository,
     recipientBlockRepository: new PostgresRecipientBlockRepository(db),
   };
 }

@@ -8,6 +8,33 @@ permissions:
   contents: read
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: npubcash
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d npubcash"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - run: bun install --frozen-lockfile
+      - name: Run tests with PostgreSQL integration coverage
+        run: bun test
+        env:
+          TEST_POSTGRES_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/npubcash
+
   build:
     runs-on: ubuntu-latest
     steps:

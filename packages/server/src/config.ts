@@ -8,10 +8,19 @@ import { eventBus } from "./events";
 import { Repositories } from "./infrastructure/db/repositoryFactory";
 import { UserRepository } from "./domain/user/userRepository";
 import { MintQuoteRepository } from "./domain/mintQuote/MintQuoteRepository";
-import { DefaultMintQuoteMonitor } from "./domain/mintQuoteMonitor/MintQuoteMonitor";
 import { FetchMintQuoteClient } from "./domain/mintQuoteMonitor/MintQuoteClient";
-import { WebSocketQuoteTransport } from "./domain/mintQuoteMonitor/WebSocketQuoteTransport";
 import { PerMintRequestBudget } from "./infrastructure/MintRequestBudget";
+import { BudgetedMintRequestExecutor } from "./infrastructure/MintRequestExecutor";
+import { FetchMintInfoLoader } from "./infrastructure/FetchMintInfoLoader";
+import { DefaultQuoteObservationHandler } from "./domain/mintQuoteMonitoring/QuoteObservationHandler";
+import {
+  DefaultQuotePollingService,
+  type QuotePollingService,
+} from "./domain/mintQuoteMonitoring/QuotePollingService";
+import {
+  DefaultQuoteWebSocketService,
+  type QuoteWebSocketService,
+} from "./domain/mintQuoteMonitoring/QuoteWebSocketService";
 import { config } from "./config/index";
 import { logger } from "./utils/logger";
 import { handleZapRequest } from "./utils/nostr";
@@ -29,6 +38,8 @@ interface AppServices {
   proofService: ProofService;
   mintService: MintService;
   recipientBlocks: RecipientBlocks;
+  quotePollingService: QuotePollingService;
+  quoteWebSocketService: QuoteWebSocketService;
 }
 
 let appServices: AppServices | null = null;
@@ -41,37 +52,39 @@ export async function initializeAppServices(
   const mintRequestBudget = new PerMintRequestBudget(
     config.mintQuoteMonitor.requestRateLimit,
   );
-  const mintQuoteMonitor = new DefaultMintQuoteMonitor({
-    store: repos.mintQuoteMonitorStore,
-    client: new FetchMintQuoteClient({
-      timeoutMs: config.mintQuoteMonitor.requestTimeoutMs,
-      requestBudget: mintRequestBudget,
+  const mintRequestExecutor = new BudgetedMintRequestExecutor({
+    requestBudget: mintRequestBudget,
+    timeoutMs: config.mintQuoteMonitor.requestTimeoutMs,
+  });
+  const mintService = new MintService(repos.mintRepository, {
+    mintInfoLoader: new FetchMintInfoLoader({
+      requestExecutor: mintRequestExecutor,
     }),
-    activeTransport: new WebSocketQuoteTransport({
+  });
+  const quoteObservationHandler = new DefaultQuoteObservationHandler({
+    store: repos.mintQuoteMonitoringStore,
+    events: eventBus,
+  });
+  const quoteWebSocketService = new DefaultQuoteWebSocketService({
+    store: repos.mintQuoteMonitoringStore,
+    handler: quoteObservationHandler,
+    transportOptions: {
       logger,
       periodicReconnectMs: config.mintQuoteMonitor.periodicReconnectMs,
       requestBudget: mintRequestBudget,
-    }),
-    policy: config.mintQuoteMonitor,
-    logger,
-    onPaid: async (quote) => {
-      eventBus.emit("quotePaid", quote);
-      if (!quote.serializedZapRequest || !config.nostr.nostrEnabled) return;
-      try {
-        const zapRequest = decodeZapRequestParameter(quote.serializedZapRequest);
-        await handleZapRequest(
-          quote.quoteId,
-          zapRequest,
-          quote.paymentRequest,
-          logger,
-        );
-      } catch (cause) {
-        logger.error("[QuoteMonitor] Failed to handle zap request", {
-          quoteId: quote.quoteId,
-          cause,
-        });
-      }
     },
+    events: eventBus,
+    logger,
+  });
+  const quotePollingService = new DefaultQuotePollingService({
+    store: repos.mintQuoteMonitoringStore,
+    batchingSupport: mintService,
+    client: new FetchMintQuoteClient({
+      requestExecutor: mintRequestExecutor,
+    }),
+    handler: quoteObservationHandler,
+    pollIntervalMs: config.mintQuoteMonitor.activePollIntervalMs,
+    logger,
   });
   const recipientBlocks = await createRecipientBlocks(
     repos.recipientBlockRepository,
@@ -80,10 +93,12 @@ export async function initializeAppServices(
     userRepository: repos.userRepository,
     mintQuoteRepository: repos.mintQuoteRepository,
     userService: new UserService(repos.userRepository),
-    communicatorService: new CommunicatorService(mintQuoteMonitor),
+    communicatorService: new CommunicatorService(),
     proofService: new ProofService(repos.proofRepository),
-    mintService: new MintService(repos.mintRepository),
+    mintService,
     recipientBlocks,
+    quotePollingService,
+    quoteWebSocketService,
   };
   return appServices;
 }
@@ -123,7 +138,52 @@ export function getRecipientBlocks(): RecipientBlocks {
   return getAppServices().recipientBlocks;
 }
 
+export async function startMintQuoteMonitoring(): Promise<void> {
+  const services = getAppServices();
+  await services.quoteWebSocketService.start();
+  try {
+    await services.quotePollingService.start();
+  } catch (cause) {
+    await services.quoteWebSocketService.stop();
+    throw cause;
+  }
+}
+
+export async function stopMintQuoteMonitoring(): Promise<void> {
+  const services = getAppServices();
+  try {
+    await services.quotePollingService.stop();
+  } finally {
+    await services.quoteWebSocketService.stop();
+  }
+}
+
 export const subManager = new QuoteSubscriptionManager();
-eventBus.on("quotePaid", (quote) => {
+eventBus.on("mintQuote.stateChanged", ({ quote }) => {
+  if (quote.state !== "PAID") return;
   subManager.update(quote.pubkey, quote);
+});
+
+eventBus.on("mintQuote.stateChanged", async ({ quote }) => {
+  if (
+    quote.state !== "PAID" ||
+    !quote.serializedZapRequest ||
+    !config.nostr.nostrEnabled
+  ) {
+    return;
+  }
+  try {
+    const zapRequest = decodeZapRequestParameter(quote.serializedZapRequest);
+    await handleZapRequest(
+      quote.quoteId,
+      zapRequest,
+      quote.paymentRequest,
+      logger,
+    );
+  } catch (cause) {
+    logger.error("[QuoteObservationHandler] Failed to handle zap request", {
+      quoteId: quote.quoteId,
+      cause,
+    });
+  }
 });
