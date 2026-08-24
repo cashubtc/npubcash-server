@@ -1,14 +1,42 @@
 import { normalizeUrl } from "@/utils/utils";
-import { Token } from "@cashu/cashu-ts";
-import { MintCommunicator } from "almnd";
+import type {
+  LockedMintQuoteResponse,
+  MintQuoteResponse,
+  Proof,
+  Token,
+} from "@cashu/cashu-ts";
 import type { Logger } from "winston";
 
+interface CommunicatorServiceOptions {
+  walletFactory: CommunicatorWalletFactory;
+}
+
+export interface CommunicatorWallet {
+  receive(token: Token): Promise<Proof[]>;
+  createMintQuote(amount: number): Promise<MintQuoteResponse>;
+  createLockedMintQuote(
+    amount: number,
+    publicKey: string,
+  ): Promise<LockedMintQuoteResponse>;
+}
+
+export type CommunicatorWalletFactory = (
+  mintUrl: string,
+) => CommunicatorWallet;
+
 export class CommunicatorService {
-  private readonly communicators: { [mintUrl: string]: MintCommunicator } = {};
+  private readonly walletFactory: CommunicatorWalletFactory;
+  private readonly wallets = new Map<string, CommunicatorWallet>();
+
+  constructor(options: CommunicatorServiceOptions) {
+    this.walletFactory = options.walletFactory;
+  }
 
   async redeemToken(token: Token, logger?: Logger) {
     logger?.info(`Receiving proofs on mint ${token.mint}`);
-    return this.getCommunicator(token.mint).receive(token);
+    const normalizedMintUrl = normalizeUrl(token.mint);
+    const wallet = this.getWallet(normalizedMintUrl);
+    return wallet.receive(token);
   }
 
   async createMintQuote(
@@ -16,30 +44,25 @@ export class CommunicatorService {
     userData: { pubkey: string; lockQuote: boolean },
     mintUrl: string,
   ) {
+    const normalizedMintUrl = normalizeUrl(mintUrl);
+    const wallet = this.getWallet(normalizedMintUrl);
     if (userData.lockQuote) {
-      const res = await this.getCommunicator(mintUrl).getLockedMintQuote(
+      const res = await wallet.createLockedMintQuote(
         amount,
-        userData.pubkey,
+        `02${userData.pubkey}`,
       );
       return { locked: true, ...res };
     }
-    const res = await this.getCommunicator(mintUrl).getMintQuote(amount);
+    const res = await wallet.createMintQuote(amount);
     return { locked: false, ...res };
   }
 
-  getCommunicator(mintUrl: string) {
-    const parsedUrl = normalizeUrl(mintUrl);
-    if (this.communicators[parsedUrl]) {
-      return this.communicators[parsedUrl];
+  private getWallet(normalizedMintUrl: string): CommunicatorWallet {
+    let wallet = this.wallets.get(normalizedMintUrl);
+    if (!wallet) {
+      wallet = this.walletFactory(normalizedMintUrl);
+      this.wallets.set(normalizedMintUrl, wallet);
     }
-    const communicator = new MintCommunicator(parsedUrl, {
-      initialPollingTimeout: { mint: 10_000, melt: 10_000, proof: 10_000 },
-      backoffFunction: (retry) =>
-        Math.min(5_000 * Math.pow(2, retry), 600_000),
-      throttleCapacity: 10,
-      throttleTimeout: 3_500,
-    });
-    this.communicators[parsedUrl] = communicator;
-    return communicator;
+    return wallet;
   }
 }
