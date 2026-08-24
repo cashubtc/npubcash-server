@@ -16,6 +16,8 @@ jobs:
         with:
           bun-version: 1.3.14
       - run: bun install --frozen-lockfile
+      - name: Check documentation
+        run: bun run --cwd packages/docs check
       - run: bun run build
       - run: docker build --tag npubcash-server:ci .
 

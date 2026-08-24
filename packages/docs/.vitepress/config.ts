@@ -1,6 +1,11 @@
 import { defineConfig } from "vitepress";
 
+const pagesBasePath = process.env.VITEPRESS_BASE_PATH
+  ?.replace(/^\/+/, "")
+  .replace(/\/+$/, "");
+
 export default defineConfig({
+  base: pagesBasePath ? `/${pagesBasePath}/` : "/",
   title: "npubcash",
   description: "Lightning Addresses for Nostr, powered by Cashu",
   lastUpdated: true,

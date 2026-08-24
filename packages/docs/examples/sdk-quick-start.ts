@@ -25,5 +25,5 @@ const unsubscribe = client.subscribe(
   (message) => console.error("Subscription error:", message),
 );
 
-// Call this when the subscription is no longer needed.
-unsubscribe();
+// Keep the subscription active, then call this from your application's teardown:
+// unsubscribe();

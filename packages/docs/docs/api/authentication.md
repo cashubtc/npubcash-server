@@ -5,8 +5,10 @@ token obtained with NIP-98.
 
 ## NIP-98
 
-NIP-98 signs the exact request URL and HTTP method with a Nostr key. The event
-must be regenerated when the URL or method changes. Follow the canonical
+NIP-98 signs a request URL and HTTP method with a Nostr key. For npubcash HTTP
+endpoints, sign the public origin and pathname without the query string, even
+when the request includes query parameters. Regenerate the event when the
+origin, pathname, or method changes. Follow the canonical
 [NIP-98 specification](https://github.com/nostr-protocol/nips/blob/master/98.md)
 when constructing events.
 
@@ -68,7 +70,7 @@ for the exact message shapes.
 - Use HTTPS and WSS outside local development.
 - Store bearer tokens in memory where possible and avoid persistent browser
   storage for sensitive applications.
-- Generate NIP-98 events for the exact public URL, including its scheme and
-  hostname.
+- Generate NIP-98 events for the public scheme, hostname, and pathname, without
+  query parameters.
 - Treat the signer prompt as a security boundary: show users what origin and
   action they are authorizing.
