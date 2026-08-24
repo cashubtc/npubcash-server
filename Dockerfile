@@ -1,10 +1,8 @@
-FROM oven/bun:1.3.14 AS base
+FROM oven/bun:1.3.14-alpine AS base
 
 FROM base AS builder
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends git \
-    && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache git libc6-compat
 
 WORKDIR /app
 
