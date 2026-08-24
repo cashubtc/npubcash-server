@@ -23,18 +23,22 @@ cd packages/server && bun test
 # Run frontend dev server only
 cd packages/frontend && bun run dev
 
+# Run the documentation site
+bun run docs:dev
+
 # Lint frontend
 cd packages/frontend && bun run lint
 ```
 
 ## Architecture
 
-This is a **Bun monorepo** with four packages:
+This is a **Bun monorepo** with five packages:
 
 - **@npubcash/server** (`packages/server/`) - Express.js backend with WebSocket support
 - **@npubcash/frontend** (`packages/frontend/`) - React 19 homepage built with Vite, Tailwind CSS, and shadcn/ui
 - **npubcash-sdk** (`packages/sdk/`) - Publishable client library for the npubcash API
 - **npubcash-types** (`packages/types/`) - Shared TypeScript type definitions
+- **@npubcash/docs** (`packages/docs/`) - VitePress documentation site
 
 ### Server Architecture
 

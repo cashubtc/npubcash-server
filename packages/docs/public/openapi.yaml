@@ -1,0 +1,483 @@
+openapi: 3.1.0
+info:
+  title: npubcash HTTP API
+  version: 2.0.0
+  license:
+    name: MIT
+    identifier: MIT
+  description: |
+    HTTP endpoints exposed by npubcash-server. WebSocket authentication and
+    quote updates are documented separately because OpenAPI describes HTTP.
+servers:
+  - url: https://npub.cash
+    description: Public npubcash service
+tags:
+  - name: Wallet
+    description: Paid Cashu mint quotes associated with a Nostr identity.
+  - name: User
+    description: User settings and paid username registration.
+  - name: Authentication
+    description: NIP-98 to JWT authentication exchange.
+  - name: Lightning Address
+    description: Public LNURL-pay discovery and invoice creation.
+  - name: NIP-05
+    description: Public NIP-05 username resolution.
+paths:
+  /api/v2/wallet/quotes:
+    get:
+      tags: [Wallet]
+      operationId: listQuotes
+      summary: List paid mint quotes
+      security:
+        - Nip98: []
+        - BearerAuth: []
+      parameters:
+        - name: since
+          in: query
+          description: Return quotes paid after this Unix timestamp in seconds.
+          schema:
+            type: integer
+            minimum: 0
+        - name: limit
+          in: query
+          description: Requested page size. The server caps the result at 50.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        "200":
+          description: A page of paid, issued, or in-flight mint quotes.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuotesResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v2/user/info:
+    get:
+      tags: [User]
+      operationId: getUser
+      summary: Get user settings
+      security:
+        - Nip98: []
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Current user settings.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v2/user/mint:
+    patch:
+      tags: [User]
+      operationId: setUserMint
+      summary: Set the preferred mint for future payments
+      security:
+        - Nip98: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mint_url]
+              properties:
+                mint_url:
+                  type: string
+                  format: uri
+                  example: https://mint.example
+      responses:
+        "200":
+          description: Updated user settings.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v2/user/lock:
+    patch:
+      tags: [User]
+      operationId: setQuoteLocking
+      summary: Configure locking for future quotes
+      security:
+        - Nip98: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lockQuotes]
+              properties:
+                lockQuotes:
+                  type: boolean
+      responses:
+        "200":
+          description: Updated user settings.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v2/user/username:
+    post:
+      tags: [User]
+      operationId: purchaseUsername
+      summary: Purchase a username with Cashu
+      security:
+        - Nip98: []
+        - BearerAuth: []
+      parameters:
+        - name: X-Cashu
+          in: header
+          required: false
+          description: Cashu token satisfying the payment request.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username]
+              properties:
+                username:
+                  type: string
+                  minLength: 3
+                  pattern: "^(?!npub1)[a-zA-Z0-9]+$"
+      responses:
+        "201":
+          description: Username purchased and user settings updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "402":
+          description: A Cashu payment is required or the supplied payment is invalid.
+          headers:
+            X-Cashu:
+              description: Encoded Cashu payment request.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "409":
+          description: The username is already taken.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v2/auth/nip98:
+    get:
+      tags: [Authentication]
+      operationId: issueJwt
+      summary: Exchange NIP-98 authorization for a JWT
+      security:
+        - Nip98: []
+      responses:
+        "200":
+          description: JWT valid for 30 minutes and bound to the User-Agent header.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error, data]
+                properties:
+                  error:
+                    const: false
+                  data:
+                    type: object
+                    required: [token]
+                    properties:
+                      token:
+                        type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /.well-known/lnurlp/{user}:
+    get:
+      tags: [Lightning Address]
+      operationId: lnurlPay
+      security: []
+      summary: Discover a recipient or request an invoice
+      description: |
+        Without `amount`, returns an LNURL-pay discovery response. With an
+        amount in millisatoshis, returns a BOLT11 invoice.
+      parameters:
+        - name: user
+          in: path
+          required: true
+          description: An npub or purchased username.
+          schema:
+            type: string
+        - name: amount
+          in: query
+          required: false
+          description: Invoice amount in millisatoshis.
+          schema:
+            type: integer
+            minimum: 1
+        - name: nostr
+          in: query
+          required: false
+          description: URL-encoded Nostr zap request.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: LNURL-pay discovery, invoice, or protocol error response.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/LnurlPayResponse"
+                  - $ref: "#/components/schemas/LnurlInvoiceResponse"
+                  - $ref: "#/components/schemas/LnurlError"
+        "500":
+          description: The LNURL service is temporarily unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LnurlError"
+  /.well-known/nostr.json:
+    get:
+      tags: [NIP-05]
+      operationId: resolveNip05
+      security: []
+      summary: Resolve a purchased username to a Nostr public key
+      parameters:
+        - name: name
+          in: query
+          required: false
+          description: >-
+            Purchased username to resolve. When omitted or unknown, the server
+            returns empty name and relay mappings.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: >-
+            NIP-05 mappings, empty mappings for a missing or unknown name, or a
+            lookup failure encoded in the response body.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/Nip05Response"
+                  - $ref: "#/components/schemas/ApiError"
+components:
+  securitySchemes:
+    Nip98:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: An encoded NIP-98 event prefixed with `Nostr `.
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  responses:
+    BadRequest:
+      description: The request is invalid or is missing required data.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiError"
+    Unauthorized:
+      description: Authorization is missing, invalid, or expired.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiError"
+    InternalError:
+      description: The server could not complete the request.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiError"
+  schemas:
+    ApiError:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          const: true
+        message:
+          type: string
+    User:
+      type: object
+      required: [pubkey, mintUrl, lockQuote]
+      properties:
+        pubkey:
+          type: string
+          description: Hex-encoded Nostr public key.
+        name:
+          type: string
+        mintUrl:
+          type: string
+          format: uri
+        lockQuote:
+          type: boolean
+    UserResponse:
+      type: object
+      required: [error, data]
+      properties:
+        error:
+          const: false
+        data:
+          type: object
+          required: [user]
+          properties:
+            user:
+              $ref: "#/components/schemas/User"
+    Quote:
+      type: object
+      required:
+        - createdAt
+        - paidAt
+        - expiresAt
+        - mintUrl
+        - quoteId
+        - request
+        - amount
+        - state
+        - locked
+      properties:
+        createdAt:
+          type: integer
+        paidAt:
+          type: integer
+        expiresAt:
+          type: integer
+        mintUrl:
+          type: string
+          format: uri
+        quoteId:
+          type: string
+        request:
+          type: string
+        amount:
+          type: integer
+        state:
+          type: string
+          enum: [PAID, ISSUED, INFLIGHT]
+        locked:
+          type: boolean
+        zapRequest:
+          type: string
+    QuotesResponse:
+      type: object
+      required: [error, data, metadata]
+      properties:
+        error:
+          const: false
+        data:
+          type: object
+          required: [quotes]
+          properties:
+            quotes:
+              type: array
+              items:
+                $ref: "#/components/schemas/Quote"
+        metadata:
+          type: object
+          required: [total, limit]
+          properties:
+            since:
+              type: integer
+            offset:
+              type: integer
+            total:
+              type: integer
+            limit:
+              type: integer
+    Nip05Response:
+      type: object
+      required: [names, relays]
+      properties:
+        names:
+          type: object
+          additionalProperties:
+            type: string
+        relays:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+              format: uri
+    LnurlPayResponse:
+      type: object
+      required: [callback, minSendable, maxSendable, metadata, tag]
+      properties:
+        callback:
+          type: string
+          format: uri
+        minSendable:
+          type: integer
+        maxSendable:
+          type: integer
+        metadata:
+          type: string
+        tag:
+          const: payRequest
+        allowsNostr:
+          type: boolean
+        nostrPubkey:
+          type: string
+    LnurlInvoiceResponse:
+      type: object
+      required: [pr, routes]
+      properties:
+        pr:
+          type: string
+        routes:
+          type: array
+          items: {}
+    LnurlError:
+      type: object
+      required: [status, reason]
+      properties:
+        status:
+          const: ERROR
+        reason:
+          type: string

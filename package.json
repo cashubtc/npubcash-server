@@ -6,6 +6,8 @@
   "scripts": {
     "build": "bun run --filter '*' build",
     "dev": "bun run --filter '!@npubcash-env' dev",
+    "docs:dev": "bun run --cwd packages/docs docs:dev",
+    "docs:preview": "bun run --cwd packages/docs docs:preview",
     "setup": "node dist/env/index.js",
     "start": "NODE_ENV=development bun run --filter '@npubcash/server' start"
   },
