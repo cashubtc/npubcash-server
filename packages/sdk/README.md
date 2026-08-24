@@ -4,7 +4,8 @@ TypeScript client SDK for the NpubCash v2 API. Provides a high-level HTTP client
 
 ### Features
 
-- **NPCClient**: Fetch quotes, subscribe to updates, update user settings
+- **NPCClient**: Discover provider features, fetch quotes, subscribe to updates,
+  and update user settings
 - **JWTAuthProvider**: NIP-98 → short-lived JWT with transparent caching
 - **Logging**: `ConsoleLogger` or bring your own `Logger` implementation
 - **ESM/CJS**: Works with modern bundlers and Node
@@ -29,6 +30,10 @@ const signer = async (template: any) => window.nostr!.signEvent(template);
 
 const client = new NPCClient(baseUrl, new JWTAuthProvider(baseUrl, signer));
 client.setLogger(new ConsoleLogger());
+
+// Discover public features without requesting an auth token
+const provider = await client.getProviderInfo();
+const usernameOffer = provider.features.username;
 
 // Fetch all quotes (auto-paginates)
 const quotes = await client.getAllQuotes(); // type inferred
@@ -87,6 +92,7 @@ Return types are fully inferred from method signatures; explicit type imports ar
 
 - `constructor(baseUrl: string, authProvider: AuthProvider)`
 - `setLogger(logger: Logger): void`
+- `getProviderInfo(): Promise<ProviderInfo>` — public provider capabilities
 - `getQuotesSince(since: number): Promise<Quote[]>` — UNIX seconds
 - `getAllQuotes(): Promise<Quote[]>`
 - `subscribe(onUpdate: (quoteId: string) => void, onError?: (msg: string) => void): () => void` — disposer
