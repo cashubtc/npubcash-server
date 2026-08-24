@@ -32,6 +32,12 @@ for (const route of routeCalls(baseSource)) {
 }
 
 const v2Source = read(join(routesRoot, "v2/index.ts"));
+for (const route of routeCalls(v2Source)) {
+  actual.add(
+    `${route.method.toUpperCase()} ${joinPath("api/v2", route.path)}`,
+  );
+}
+
 const imports = new Map(
   [...v2Source.matchAll(/import\s+(\w+)\s+from\s+"\.\/([^"]+)"/g)].map(
     ([, name, path]) => [name, path],

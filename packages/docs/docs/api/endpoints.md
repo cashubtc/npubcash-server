@@ -9,6 +9,45 @@ for the complete flow.
 Examples below use `https://npub.cash` as the server URL. Self-hosted instances
 should replace it with their own origin.
 
+## Provider
+
+### Discover provider capabilities
+
+`GET /api/v2/info`
+
+This public endpoint describes features offered by the server and does not
+require authentication. Responses may be cached for five minutes.
+
+```bash
+curl https://npub.cash/api/v2/info
+```
+
+When username registration is enabled, the response includes its price, unit,
+and accepted mint:
+
+```json
+{
+  "error": false,
+  "data": {
+    "version": 2,
+    "features": {
+      "username": {
+        "enabled": true,
+        "payment": {
+          "amount": 5000,
+          "unit": "sat",
+          "mints": ["https://mint.example"]
+        }
+      }
+    }
+  }
+}
+```
+
+When registration is disabled, `username` is `{ "enabled": false }` without
+payment terms. Discovery terms are advisory; the encoded payment request in a
+subsequent `402 Payment Required` response is authoritative.
+
 ## Wallet
 
 ### List paid mint quotes

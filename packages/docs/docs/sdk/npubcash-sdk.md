@@ -32,6 +32,25 @@ Do not include a trailing slash in `baseUrl`.
 
 ## Client API
 
+### Provider discovery
+
+- `getProviderInfo(): Promise<ProviderInfo>` returns the server's public feature
+  availability and advisory payment terms without requesting authentication.
+
+Use it before offering optional features such as username registration:
+
+```ts
+const provider = await client.getProviderInfo();
+const usernameFeature = provider.features.username;
+
+if (usernameFeature.enabled) {
+  console.log(usernameFeature.payment);
+}
+```
+
+The payment request returned by a later `PaymentRequiredError` remains
+authoritative.
+
 ### Account
 
 - `getInfo(): Promise<User>` returns the current mint, quote-locking preference,

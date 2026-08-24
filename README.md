@@ -1,6 +1,6 @@
 <br />
 <div align="center">
-  <a href="https://github.com/github_username/repo_name">
+  <a href="https://github.com/cashubtc/npubcash-server">
     <img src="https://image.nostr.build/c6720e6ad2ac5726792254a0097e2cc3b75c18036f88de914a5a2684a7d6c170.jpg" alt="Logo" width="80" height="80">
   </a>
 
@@ -9,7 +9,7 @@
   <p align="center">
     The webserver powering npub.cash
     <br />
-    <a href="https://docs.cashu-address.com"><strong>Explore the docs »</strong></a>
+    <a href="https://cashubtc.github.io/npubcash-server/"><strong>Explore the docs »</strong></a>
     <br />
     <br />
     <a href="https://npub.cash">View Demo</a>
@@ -18,42 +18,54 @@
 
 ## About The Project
 
-Cashu Mints can offer a better and more sovereign custodial Lightning experience. However because eCash tokens are stored by the users themselves, offline receiving can be challenging. npub.cash introduces a LNURL service that generates tokens on received payments and holds on to them for a user, until they come back online. This is a reference implemenation of the npub.cash service written in Typescript.
+npub.cash gives every Nostr identity an LNURL-pay address backed by a chosen
+Cashu mint. The server creates and monitors incoming mint quotes, then stores
+the paid quote metadata for the recipient. A recipient wallet retrieves that
+metadata and mints the Cashu proofs directly; the server does not hold a wallet
+balance on the recipient's behalf.
+
+This repository is a Bun monorepo containing the Express server, public React
+homepage, TypeScript SDK, shared API types, and VitePress documentation.
 
 ## Getting Started
 
-npubcash-server is a NodeJs application written in TypeScript. Below is a step-by-step on how to get it started.
+npubcash-server is written in TypeScript and runs on Bun.
 
 ### Prerequisites
 
-- Node and npm. Install NodeJs and it's package manager npm.
+- [Bun](https://bun.sh/) 1.3.14 or a compatible release
 
 ### Installation
 
 1. Clone the repo
 
-```sh
-git clone https://github.com/github_username/repo_name.git
+```bash
+git clone --branch v3 https://github.com/cashubtc/npubcash-server.git
+cd npubcash-server
 ```
 
-2. Install NPM packages
+2. Install the locked workspace dependencies
 
-```sh
-npm install
+```bash
+bun install --frozen-lockfile
 ```
 
-3. Setup your environment varaibles according to `example.env`. Variables from `.env` will be automatically read by the development server, but not the production build.
+3. Copy `example.env` to `.env` and provide at least `MINTURL` and either
+   `JWT_SECRET` or `MNEMONIC`. The example selects SQLite explicitly so it is
+   also safe from the production missing-database guard.
 
-4. Start the development server
+4. Start the development workspace
 
-```sh
-npm run dev
+```bash
+bun run dev
 ```
 
 ## Usage
 
-By default the dev server will include the projects landing page on the root domain.
-For more details check out the [documentation](https://docs.cashu-address.com)
+By default the server includes the public landing page on the root domain and
+serves the v2 HTTP API under `/api/v2`. See the
+[documentation](https://cashubtc.github.io/npubcash-server/) for the payment
+model, API, SDK, and production deployment guide.
 
 ### Migrating a v2 PostgreSQL database
 
@@ -114,14 +126,10 @@ new or renamed app does not inherit the v2 app's secrets. The checked-in
 See [the deployment guide](docs/deploy.md#flyio-and-v2-to-v3-cutover) for the
 cutover commands and rollback precautions.
 
-## Roadmap
+## Project status
 
-- [x] Implement basic API
-- [x] Implement NIP-05 endpoint for all users
-- [x] Add notifications
-- [ ] Improved error handling and logging
-- [ ] Remove Blink API (depends on cashu webhooks)
-- [ ] Implement NUT-10 (depends on ecosystem)
+`v3` is the maintained release line. Use GitHub issues and pull requests for
+current roadmap work rather than the removed Blink-era implementation plan.
 
 ## Contributing
 
