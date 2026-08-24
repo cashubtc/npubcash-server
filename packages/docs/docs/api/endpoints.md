@@ -216,7 +216,8 @@ curl https://npub.cash/api/v2/auth/nip98 \
 `GET /.well-known/lnurlp/{user}`
 
 `user` may be an `npub1...` public key or a purchased username. The response's
-`callback` points back to this same route.
+`callback` points back to this same route, and its metadata advertises the
+canonical LUD-16 identifier for the public host.
 
 ```bash
 curl https://npub.cash/.well-known/lnurlp/npub1...
@@ -226,7 +227,7 @@ curl https://npub.cash/.well-known/lnurlp/npub1...
 {
   "tag": "payRequest",
   "callback": "https://npub.cash/.well-known/lnurlp/npub1...",
-  "metadata": "[[\"text/plain\",\"A cashu lightning address... Neat!\"]]",
+  "metadata": "[[\"text/plain\",\"A cashu lightning address... Neat!\"],[\"text/identifier\",\"npub1...@npub.cash\"]]",
   "minSendable": 1000,
   "maxSendable": 100000000
 }

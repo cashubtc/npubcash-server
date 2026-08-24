@@ -1,18 +1,21 @@
 import { config } from "../config/index";
 
 export function createLnurlResponse(username: string, publicOrigin: string) {
+  const origin = new URL(publicOrigin);
   const callback = new URL(
     `/.well-known/lnurlp/${username}`,
-    publicOrigin,
+    origin,
   ).toString();
+  const metadata = JSON.stringify([
+    ["text/plain", "A cashu lightning address... Neat!"],
+    ["text/identifier", `${username.toLowerCase()}@${origin.host}`],
+  ]);
   if (config.nostr.nostrEnabled) {
     return {
       callback,
       maxSendable: config.lnurlLimits.max,
       minSendable: config.lnurlLimits.min,
-      metadata: JSON.stringify([
-        ["text/plain", "A cashu lightning address... Neat!"],
-      ]),
+      metadata,
       tag: "payRequest",
       allowsNostr: true,
       nostrPubkey: config.nostr.zapKeys.publicKey,
@@ -22,9 +25,7 @@ export function createLnurlResponse(username: string, publicOrigin: string) {
       callback,
       maxSendable: config.lnurlLimits.max,
       minSendable: config.lnurlLimits.min,
-      metadata: JSON.stringify([
-        ["text/plain", "A cashu lightning address... Neat!"],
-      ]),
+      metadata,
       tag: "payRequest",
     };
   }
