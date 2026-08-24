@@ -93,7 +93,9 @@ export async function initializeAppServices(
     userRepository: repos.userRepository,
     mintQuoteRepository: repos.mintQuoteRepository,
     userService: new UserService(repos.userRepository),
-    communicatorService: new CommunicatorService(),
+    communicatorService: new CommunicatorService({
+      requestBudget: mintRequestBudget,
+    }),
     proofService: new ProofService(repos.proofRepository),
     mintService,
     recipientBlocks,

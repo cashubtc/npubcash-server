@@ -76,7 +76,6 @@
         "@cashu/cashu-ts": "^2.4.1",
         "@scure/bip32": "^1.6.2",
         "@scure/bip39": "^1.5.4",
-        "almnd": "0.4.0",
         "compression": "^1.8.0",
         "cors": "^2.8.5",
         "express": "^4.21.2",
@@ -682,8 +681,6 @@
     "algoliasearch": ["algoliasearch@5.57.0", "", { "dependencies": { "@algolia/abtesting": "1.23.0", "@algolia/client-abtesting": "5.57.0", "@algolia/client-analytics": "5.57.0", "@algolia/client-common": "5.57.0", "@algolia/client-insights": "5.57.0", "@algolia/client-personalization": "5.57.0", "@algolia/client-query-suggestions": "5.57.0", "@algolia/client-search": "5.57.0", "@algolia/ingestion": "1.57.0", "@algolia/monitoring": "1.57.0", "@algolia/recommend": "5.57.0", "@algolia/requester-browser-xhr": "5.57.0", "@algolia/requester-fetch": "5.57.0", "@algolia/requester-node-http": "5.57.0" } }, "sha512-HpND7MBGctOAkd1GoQoDZCGoCpqNTS5NG1LuhElFet3RdLJkwnyTYZXZhXwtpAQPrI36fqQ3eT6KQrdKDTKu3A=="],
 
     "alien-signals": ["alien-signals@0.4.14", "", {}, "sha512-itUAVzhczTmP2U5yX67xVpsbbOiquusbWVyA9N+sy6+r6YVbFkahXvNCeEPWEOMhwDYwbVbGHFkVL03N9I5g+Q=="],
-
-    "almnd": ["almnd@0.4.0", "", { "dependencies": { "@cashu/cashu-ts": "^2.5.2" } }, "sha512-k5so0p364HkgVXrH3W+apnTrCQ5RsQSWe6JIMgI2vfcCKO4fvrPp1+zW6m2oAa/s/F8bguzwpF+Y0j2VQY8fRg=="],
 
     "ansi-regex": ["ansi-regex@6.2.2", "", {}, "sha512-Bq3SmSpyFHaWjPk8If9yc6svM8c56dB5BAtW4Qbw5jHTwwXXcTLoRMkpDJp6VL0XzlWaCHTXrkFURMYmD0sLqg=="],
 
