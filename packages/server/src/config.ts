@@ -1,6 +1,7 @@
 import { SimplePool } from "nostr-tools";
 import { UserService } from "./domain/user/UserService";
 import { CommunicatorService } from "./domain/communicator/CommunicatorService";
+import { createCashuWalletFactory } from "./domain/communicator/CashuWalletFactory";
 import { ProofService } from "./domain/proof/proofService";
 import { MintService } from "./domain/mint/MintService";
 import { QuoteSubscriptionManager } from "./websocket/subs";
@@ -94,7 +95,9 @@ export async function initializeAppServices(
     mintQuoteRepository: repos.mintQuoteRepository,
     userService: new UserService(repos.userRepository),
     communicatorService: new CommunicatorService({
-      requestBudget: mintRequestBudget,
+      walletFactory: createCashuWalletFactory({
+        requestExecutor: mintRequestExecutor,
+      }),
     }),
     proofService: new ProofService(repos.proofRepository),
     mintService,

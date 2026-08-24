@@ -1,52 +1,17 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
-import type { Token } from "@cashu/cashu-ts";
+import { beforeEach, describe, expect, test } from "bun:test";
+import { deriveKeysetId, type Token } from "@cashu/cashu-ts";
 import type { MintRequestBudget } from "@/infrastructure/MintRequestBudget";
+import { BudgetedMintRequestExecutor } from "@/infrastructure/MintRequestExecutor";
+import { createCashuWalletFactory } from "./CashuWalletFactory";
+import {
+  CommunicatorService,
+  type CommunicatorWalletFactory,
+} from "./CommunicatorService";
 
-interface RecordedWallet {
-  mintUrl: string;
-  quoteAmounts: number[];
-  lockedQuotes: Array<{ amount: number; publicKey: string }>;
-  receivedTokens: Token[];
+interface RecordedRequest {
+  url: string;
+  init: RequestInit | undefined;
 }
-
-const wallets: RecordedWallet[] = [];
-
-mock.module("@cashu/cashu-ts", () => ({
-  CashuMint: class CashuMint {
-    constructor(readonly mintUrl: string) {}
-  },
-  CashuWallet: class CashuWallet {
-    private readonly record: RecordedWallet;
-
-    constructor(mint: { mintUrl: string }) {
-      this.record = {
-        mintUrl: mint.mintUrl,
-        quoteAmounts: [],
-        lockedQuotes: [],
-        receivedTokens: [],
-      };
-      wallets.push(this.record);
-    }
-
-    async createMintQuote(amount: number) {
-      if (amount === 999) throw new Error("mint quote failed");
-      this.record.quoteAmounts.push(amount);
-      return { quote: "quote-id", request: "lnbc1invoice" };
-    }
-
-    async createLockedMintQuote(amount: number, publicKey: string) {
-      this.record.lockedQuotes.push({ amount, publicKey });
-      return { quote: "locked-quote-id", request: "lnbc1locked" };
-    }
-
-    async receive(token: Token) {
-      this.record.receivedTokens.push(token);
-      return [{ amount: 8, id: "keyset-id", secret: "secret", C: "C" }];
-    }
-  },
-}));
-
-const { CommunicatorService } = await import("./CommunicatorService");
 
 class RecordingBudget implements MintRequestBudget {
   readonly mintUrls: string[] = [];
@@ -60,15 +25,41 @@ class RecordingBudget implements MintRequestBudget {
   }
 }
 
+const mintKeys = {
+  1: "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+};
+const keysetId = deriveKeysetId(mintKeys);
+
 describe("CommunicatorService", () => {
+  let requests: RecordedRequest[];
+  let budget: RecordingBudget;
+  let walletCreations: number;
+  let service: CommunicatorService;
+
   beforeEach(() => {
-    wallets.length = 0;
+    requests = [];
+    budget = new RecordingBudget();
+    walletCreations = 0;
+    const requestExecutor = new BudgetedMintRequestExecutor({
+      requestBudget: budget,
+      timeoutMs: 1_000,
+    });
+    const createWallet = createCashuWalletFactory({
+      requestExecutor,
+      fetch: async (input, init) => {
+        const url = input.toString();
+        requests.push({ url, init });
+        return mintResponse(url, init);
+      },
+    });
+    const walletFactory: CommunicatorWalletFactory = (mintUrl) => {
+      walletCreations += 1;
+      return createWallet(mintUrl);
+    };
+    service = new CommunicatorService({ walletFactory });
   });
 
-  test("creates ordinary mint quotes through the shared request budget", async () => {
-    const budget = new RecordingBudget();
-    const service = new CommunicatorService({ requestBudget: budget });
-
+  test("budgets the HTTP request that creates an ordinary mint quote", async () => {
     await expect(
       service.createMintQuote(
         21,
@@ -80,20 +71,15 @@ describe("CommunicatorService", () => {
       quote: "quote-id",
       request: "lnbc1invoice",
     });
+
     expect(budget.mintUrls).toEqual(["https://mint.example.com"]);
-    expect(wallets).toEqual([
-      {
-        mintUrl: "https://mint.example.com",
-        quoteAmounts: [21],
-        lockedQuotes: [],
-        receivedTokens: [],
-      },
+    expect(requests.map(({ url }) => url)).toEqual([
+      "https://mint.example.com/v1/mint/quote/bolt11",
     ]);
+    expect(requestBody(requests[0])).toEqual({ unit: "sat", amount: 21 });
   });
 
-  test("creates locked mint quotes with a compressed Nostr public key", async () => {
-    const budget = new RecordingBudget();
-    const service = new CommunicatorService({ requestBudget: budget });
+  test("budgets both HTTP requests needed for a locked mint quote", async () => {
     const nostrPublicKey = "22".repeat(32);
 
     await expect(
@@ -107,38 +93,43 @@ describe("CommunicatorService", () => {
       quote: "locked-quote-id",
       request: "lnbc1locked",
     });
-    expect(budget.mintUrls).toEqual(["https://mint.example.com"]);
-    expect(wallets[0]?.lockedQuotes).toEqual([
-      { amount: 34, publicKey: `02${nostrPublicKey}` },
+
+    expect(budget.mintUrls).toEqual([
+      "https://mint.example.com",
+      "https://mint.example.com",
     ]);
+    expect(requests.map(({ url }) => url)).toEqual([
+      "https://mint.example.com/v1/info",
+      "https://mint.example.com/v1/mint/quote/bolt11",
+    ]);
+    expect(requestBody(requests[1])).toEqual({
+      unit: "sat",
+      amount: 34,
+      pubkey: `02${nostrPublicKey}`,
+    });
   });
 
-  test("redeems a token through its mint's shared request budget", async () => {
-    const budget = new RecordingBudget();
-    const service = new CommunicatorService({ requestBudget: budget });
+  test("budgets every HTTP request needed to redeem a token", async () => {
     const token = {
       mint: "HTTPS://TOKEN-MINT.EXAMPLE.COM/",
       proofs: [],
     } as Token;
 
-    await expect(service.redeemToken(token)).resolves.toEqual([
-      { amount: 8, id: "keyset-id", secret: "secret", C: "C" },
+    await expect(service.redeemToken(token)).resolves.toEqual([]);
+
+    expect(budget.mintUrls).toEqual([
+      "https://token-mint.example.com",
+      "https://token-mint.example.com",
+      "https://token-mint.example.com",
     ]);
-    expect(budget.mintUrls).toEqual(["https://token-mint.example.com"]);
-    expect(wallets).toEqual([
-      {
-        mintUrl: "https://token-mint.example.com",
-        quoteAmounts: [],
-        lockedQuotes: [],
-        receivedTokens: [token],
-      },
+    expect(requests.map(({ url }) => url)).toEqual([
+      "https://token-mint.example.com/v1/keysets",
+      `https://token-mint.example.com/v1/keys/${keysetId}`,
+      "https://token-mint.example.com/v1/swap",
     ]);
   });
 
   test("shares one wallet and budget lane across equivalent mint URLs", async () => {
-    const budget = new RecordingBudget();
-    const service = new CommunicatorService({ requestBudget: budget });
-
     await service.createMintQuote(
       5,
       { pubkey: "33".repeat(32), lockQuote: false },
@@ -150,19 +141,18 @@ describe("CommunicatorService", () => {
       "https://mint.example.com",
     );
 
+    expect(walletCreations).toBe(1);
     expect(budget.mintUrls).toEqual([
       "https://mint.example.com",
       "https://mint.example.com",
     ]);
-    expect(wallets).toHaveLength(1);
-    expect(wallets[0]?.quoteAmounts).toEqual([5, 8]);
+    expect(requests.map(requestBody)).toEqual([
+      { unit: "sat", amount: 5 },
+      { unit: "sat", amount: 8 },
+    ]);
   });
 
   test("propagates failures from cashu-ts", async () => {
-    const service = new CommunicatorService({
-      requestBudget: new RecordingBudget(),
-    });
-
     await expect(
       service.createMintQuote(
         999,
@@ -172,3 +162,52 @@ describe("CommunicatorService", () => {
     ).rejects.toThrow("mint quote failed");
   });
 });
+
+function requestBody(request: RecordedRequest | undefined): unknown {
+  return JSON.parse(String(request?.init?.body));
+}
+
+function mintResponse(url: string, init?: RequestInit): Response {
+  if (url.endsWith("/v1/info")) {
+    return Response.json({
+      name: "Test mint",
+      pubkey: mintKeys[1],
+      version: "test/1.0",
+      nuts: { 20: { supported: true } },
+    });
+  }
+  if (url.endsWith("/v1/keysets")) {
+    return Response.json({
+      keysets: [
+        { id: keysetId, unit: "sat", active: true, input_fee_ppk: 0 },
+      ],
+    });
+  }
+  if (url.endsWith(`/v1/keys/${keysetId}`)) {
+    return Response.json({
+      keysets: [{ id: keysetId, unit: "sat", keys: mintKeys }],
+    });
+  }
+  if (url.endsWith("/v1/swap")) {
+    return Response.json({ signatures: [] });
+  }
+  if (url.endsWith("/v1/mint/quote/bolt11")) {
+    const body = JSON.parse(String(init?.body)) as {
+      amount: number;
+      pubkey?: string;
+    };
+    if (body.amount === 999) {
+      return Response.json({ error: "mint quote failed" }, { status: 500 });
+    }
+    return Response.json({
+      quote: body.pubkey ? "locked-quote-id" : "quote-id",
+      request: body.pubkey ? "lnbc1locked" : "lnbc1invoice",
+      state: "UNPAID",
+      expiry: 1_800_000_000,
+      amount: body.amount,
+      unit: "sat",
+      ...(body.pubkey ? { pubkey: body.pubkey } : {}),
+    });
+  }
+  return Response.json({ error: "unexpected request" }, { status: 500 });
+}
