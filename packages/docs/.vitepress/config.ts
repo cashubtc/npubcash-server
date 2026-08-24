@@ -57,7 +57,7 @@ export default defineConfig({
 
     editLink: {
       pattern:
-        "https://github.com/cashubtc/npubcash-server/edit/main/packages/docs/:path",
+        "https://github.com/cashubtc/npubcash-server/edit/v3/packages/docs/:path",
       text: "Edit this page on GitHub",
     },
 

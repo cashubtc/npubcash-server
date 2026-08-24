@@ -14,10 +14,10 @@ SQLite or PostgreSQL.
 
 ## Build the image
 
-Clone the default branch and build from the repository root:
+Clone the maintained `v3` branch and build from the repository root:
 
 ```bash
-git clone https://github.com/cashubtc/npubcash-server.git
+git clone --branch v3 https://github.com/cashubtc/npubcash-server.git
 cd npubcash-server
 docker build -t npubcash-server .
 ```
@@ -124,7 +124,7 @@ proxy headers will therefore break authentication or produce invalid callbacks.
 | `LNURL_MIN_AMOUNT` | `1000` | Minimum LNURL amount in millisatoshis. |
 | `LNURL_MAX_AMOUNT` | `100000000` | Maximum LNURL amount in millisatoshis. |
 | `USERNAME_MINT` | Disabled | Mint used to receive paid username registrations. |
-| `USERNAME_COST` | Disabled | Username price in satoshis. Both username variables are required to enable the feature. |
+| `USERNAME_COST` | Disabled | Username price in satoshis; zero enables free registration. Both username variables are required to enable the feature. |
 
 ### Nostr zaps
 

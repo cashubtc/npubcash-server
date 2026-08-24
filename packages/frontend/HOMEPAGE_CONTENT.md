@@ -66,7 +66,7 @@ The dark-mode-only header uses the `npub.cash` wordmark without a logo icon. It 
 - `Home`
 - `Wallets` — anchor link to the compatible-wallets section
 - `How it works` — anchor link on the homepage
-- `Docs` — only after a working documentation URL is confirmed
+- `Docs` — [project documentation](https://cashubtc.github.io/npubcash-server/)
 - `Source` — [cashubtc/npubcash-server](https://github.com/cashubtc/npubcash-server)
 
 Do not add a header CTA. The current homepage exposes Home and a first-party Wallet; the new homepage replaces the wallet route with a compatible-wallets section and keeps the technical explanation and source easy to reach.
@@ -169,8 +169,8 @@ Use a three-step native diagram with accessible text rather than relying on the 
 
 > When you return, open an integrated wallet and connect your Nostr signer. It finds your paid quotes and mints the corresponding Cashu ecash from the mint.
 
-**Supporting link:** `Read the technical docs`
-Do not publish this link until a working documentation target replaces or restores `https://docs.cashu-address.com/`.
+**Supporting link:** `Read the technical docs` —
+[project documentation](https://cashubtc.github.io/npubcash-server/)
 
 ### 6. Trust model
 
@@ -271,7 +271,7 @@ Avoid the current draft's “Create your Lightning address in seconds”; openin
 - `npub.cash`
 - `Built with Lightning, Cashu ecash, and Nostr.`
 - `Source` — [cashubtc/npubcash-server](https://github.com/cashubtc/npubcash-server)
-- `Documentation` — only after the destination is confirmed working
+- `Documentation` — [project documentation](https://cashubtc.github.io/npubcash-server/)
 - `Nostr` — the maintainer/project profile currently linked from the live homepage
 - `MIT License`
 - `Status` or `Experimental` if there is a real status/risk destination
@@ -337,7 +337,7 @@ Avoid these unsupported or misleading claims:
 | Cashu-Address explanation | Keep, rewrite around the actual quote lifecycle | The live copy says the server mints and holds ecash, while the current server stores and tracks mint quotes for later wallet claiming. |
 | Three-step Alice/Bob flow | Keep the three-step structure, modernize the copy | It is easy to scan, but the existing text contains errors and overstates default locking. |
 | Embedded Excalidraw diagram | Replace with a native, accessible diagram when implementing | This avoids an external runtime dependency and duplicates the written three-step explanation cleanly. |
-| External Cashu-Address docs link | Block until fixed or replaced | `docs.cashu-address.com` did not resolve during the 2026-08-05 audit. |
+| External Cashu-Address docs link | Replace | Use the deployed project documentation at `https://cashubtc.github.io/npubcash-server/`. |
 | GitHub, X/Twitter, and Nostr footer icons | Keep source and Nostr; verify X/Twitter ownership before publishing | The live page and existing frontend draft point to conflicting social accounts. |
 
 ## Items to confirm before implementation
@@ -345,12 +345,11 @@ Avoid these unsupported or misleading claims:
 These questions do not block the content brief, but they affect final links or runtime copy.
 
 1. Is the product still explicitly experimental? Until confirmed otherwise, keep the warning.
-2. What is the new canonical documentation URL? The live documentation domain currently does not resolve.
-3. Which X/Twitter account, if any, is the official project account?
-4. Should the footer link to the canonical upstream repository, the deployment owner's fork, or both?
-5. Will the new wallet expose preferred-mint selection and NUT-20 quote locking at launch? If not, keep those as explanatory capabilities rather than prominent actions.
-6. Is username purchasing enabled on the production instance at launch? The homepage should hide its username CTA if the feature is disabled.
-7. Should live LNURL limits be surfaced on the homepage or only at payment time? The hosted endpoint currently allows 1 to 100,000 sats, but these values are configuration and must not be hard-coded.
+2. Which X/Twitter account, if any, is the official project account?
+3. Should the footer link to the canonical upstream repository, the deployment owner's fork, or both?
+4. Will the new wallet expose preferred-mint selection and NUT-20 quote locking at launch? If not, keep those as explanatory capabilities rather than prominent actions.
+5. Is username purchasing enabled on the production instance at launch? The homepage should hide its username CTA if the feature is disabled.
+6. Should live LNURL limits be surfaced on the homepage or only at payment time? The hosted endpoint currently allows 1 to 100,000 sats, but these values are configuration and must not be hard-coded.
 
 ## Evidence reviewed
 

@@ -23,7 +23,7 @@ bun add npubcash-sdk
 ```ts
 import { NPCClient, JWTAuthProvider, ConsoleLogger } from "npubcash-sdk";
 
-const baseUrl = "https://npubx.cash"; // Your NpubCash server
+const baseUrl = "https://npub.cash"; // Your NpubCash server
 
 // Browser example: Nostr signer from a browser extension (NIP-07)
 const signer = async (template: any) => window.nostr!.signEvent(template);
@@ -66,7 +66,7 @@ import WebSocket from "ws";
 
 import { NPCClient, JWTAuthProvider } from "npubcash-sdk";
 
-const baseUrl = "https://npubx.cash";
+const baseUrl = "https://npub.cash";
 
 // Provide a Nostr signer compatible with NIP-98 (implementation-specific)
 const signer = async (template: any) => {
