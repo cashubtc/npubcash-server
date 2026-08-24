@@ -3,7 +3,7 @@ name: Deploy documentation
 on:
   push:
     branches:
-      - main
+      - v3
     paths:
       - .github/workflows/docs-deploy.yml
       - bun.lock
