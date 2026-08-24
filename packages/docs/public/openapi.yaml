@@ -12,6 +12,8 @@ servers:
   - url: https://npub.cash
     description: Public npubcash service
 tags:
+  - name: Provider
+    description: Public provider capabilities and feature terms.
   - name: Wallet
     description: Paid Cashu mint quotes associated with a Nostr identity.
   - name: User
@@ -23,6 +25,28 @@ tags:
   - name: NIP-05
     description: Public NIP-05 username resolution.
 paths:
+  /api/v2/info:
+    get:
+      tags: [Provider]
+      operationId: getProviderInfo
+      summary: Discover provider capabilities
+      description: |
+        Returns public feature availability and advisory payment terms. A
+        payment request returned by a later 402 response remains authoritative.
+      security: []
+      responses:
+        "200":
+          description: Provider capabilities for this server instance.
+          headers:
+            Cache-Control:
+              description: The response may be cached for five minutes.
+              schema:
+                type: string
+                example: public, max-age=300
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProviderInfoResponse"
   /api/v2/wallet/quotes:
     get:
       tags: [Wallet]
@@ -343,6 +367,55 @@ components:
           const: true
         message:
           type: string
+    UsernamePaymentTerms:
+      type: object
+      required: [amount, unit, mints]
+      properties:
+        amount:
+          type: integer
+          minimum: 0
+        unit:
+          const: sat
+        mints:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            format: uri
+    UsernameFeature:
+      oneOf:
+        - type: object
+          required: [enabled]
+          properties:
+            enabled:
+              const: false
+        - type: object
+          required: [enabled, payment]
+          properties:
+            enabled:
+              const: true
+            payment:
+              $ref: "#/components/schemas/UsernamePaymentTerms"
+    ProviderInfo:
+      type: object
+      required: [version, features]
+      properties:
+        version:
+          const: 2
+        features:
+          type: object
+          required: [username]
+          properties:
+            username:
+              $ref: "#/components/schemas/UsernameFeature"
+    ProviderInfoResponse:
+      type: object
+      required: [error, data]
+      properties:
+        error:
+          const: false
+        data:
+          $ref: "#/components/schemas/ProviderInfo"
     User:
       type: object
       required: [pubkey, mintUrl, lockQuote]
