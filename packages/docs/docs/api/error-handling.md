@@ -42,6 +42,10 @@ LNURL discovery and invoice failures follow the LNURL error shape:
 Some recipient errors intentionally use HTTP 200 because LNURL clients inspect
 the response body. Do not rely on the HTTP status alone for LNURL requests.
 
+NIP-05 lookup failures also currently use HTTP 200, with the authenticated
+API's `{ "error": true, "message": "..." }` shape. Check the body returned by
+`/.well-known/nostr.json` before reading its `names` and `relays` maps.
+
 ## SDK errors
 
 SDK HTTP methods throw `ApiError`, which exposes both `message` and

@@ -222,6 +222,9 @@ authenticated API's error shape.
 
 `GET /.well-known/nostr.json?name={username}`
 
+The `name` query parameter is optional. Omitting it or requesting an unknown
+username returns empty `names` and `relays` maps.
+
 ```bash
 curl "https://npub.cash/.well-known/nostr.json?name=alice"
 ```
@@ -234,6 +237,10 @@ curl "https://npub.cash/.well-known/nostr.json?name=alice"
   "relays": {}
 }
 ```
+
+The endpoint currently reports an internal lookup failure with HTTP 200 and an
+`{ "error": true, "message": "..." }` body, so clients should inspect the
+response body before using the mappings.
 
 ## Quote updates over WebSocket
 

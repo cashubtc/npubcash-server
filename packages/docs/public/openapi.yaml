@@ -287,29 +287,23 @@ paths:
       parameters:
         - name: name
           in: query
-          required: true
+          required: false
+          description: >-
+            Purchased username to resolve. When omitted or unknown, the server
+            returns empty name and relay mappings.
           schema:
             type: string
       responses:
         "200":
-          description: NIP-05 name and relay mappings.
+          description: >-
+            NIP-05 mappings, empty mappings for a missing or unknown name, or a
+            lookup failure encoded in the response body.
           content:
             application/json:
               schema:
-                type: object
-                required: [names, relays]
-                properties:
-                  names:
-                    type: object
-                    additionalProperties:
-                      type: string
-                  relays:
-                    type: object
-                    additionalProperties:
-                      type: array
-                      items:
-                        type: string
-                        format: uri
+                oneOf:
+                  - $ref: "#/components/schemas/Nip05Response"
+                  - $ref: "#/components/schemas/ApiError"
 components:
   securitySchemes:
     Nip98:
@@ -436,6 +430,21 @@ components:
               type: integer
             limit:
               type: integer
+    Nip05Response:
+      type: object
+      required: [names, relays]
+      properties:
+        names:
+          type: object
+          additionalProperties:
+            type: string
+        relays:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+              format: uri
     LnurlPayResponse:
       type: object
       required: [callback, minSendable, maxSendable, metadata, tag]
