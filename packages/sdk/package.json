@@ -1,6 +1,11 @@
 {
   "name": "npubcash-sdk",
   "version": "1.0.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cashubtc/npubcash-server.git",
+    "directory": "packages/sdk"
+  },
   "type": "module",
   "main": "./dist/npc-sdk.cjs",
   "module": "./dist/npc-sdk.mjs",

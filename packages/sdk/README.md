@@ -150,6 +150,15 @@ import type { ProviderInfo, Quote, User } from "npubcash-sdk";
 - ESM: `import { NPCClient } from "npubcash-sdk"`
 - CJS: `const { NPCClient } = require("npubcash-sdk")`
 
+### Publishing
+
+Publishing uses npm trusted publishing and does not require an npm token. Create
+a GitHub release whose tag is `npubcash-sdk-v<major>.<minor>.<patch>`. The tag
+version must exactly match this package's `version`.
+
+The npm package must trust the `cashubtc/npubcash-server` repository and the
+`publish-sdk.yml` GitHub Actions workflow with `npm publish` permission.
+
 ### License
 
 MIT
