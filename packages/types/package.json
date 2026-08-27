@@ -1,28 +1,18 @@
 {
-  "name": "npubcash-types",
-  "version": "0.1.1",
-  "description": "Type definitions for the npub.cash API",
-  "types": "./dist/index.d.ts",
+  "name": "@npubcash/api-contract",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Internal shared HTTP contract for npub.cash",
+  "types": "./src/index.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts"
+      "types": "./src/index.ts"
     }
   },
   "scripts": {
     "build": "tsc",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [
-    "cashu",
-    "nostr"
-  ],
-  "files": [
-    "/dist",
-    "package.json",
-    "README.md"
-  ],
-  "author": "https://github.com/cashubtc",
-  "license": "MIT",
   "devDependencies": {
     "typescript": "^5.4.5"
   }

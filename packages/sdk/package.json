@@ -1,6 +1,6 @@
 {
   "name": "npubcash-sdk",
-  "version": "0.3.2",
+  "version": "1.0.0",
   "type": "module",
   "main": "./dist/npc-sdk.cjs",
   "module": "./dist/npc-sdk.mjs",
@@ -20,10 +20,10 @@
   },
   "dependencies": {
     "@cashu/cashu-ts": "^3.2.2",
-    "nostr-tools": "^2.19.4",
-    "npubcash-types": "workspace:^"
+    "nostr-tools": "^2.19.4"
   },
   "devDependencies": {
+    "@npubcash/api-contract": "workspace:^",
     "typescript": "~5.8.3",
     "vite": "^7.0.4",
     "vite-plugin-dts": "^4.5.4"
