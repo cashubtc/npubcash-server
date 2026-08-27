@@ -53,8 +53,14 @@ jobs:
             );
           }
           EOF
+      - name: Build SDK
+        run: bun run --cwd packages/sdk build
+      - name: Pack SDK
+        working-directory: packages/sdk
+        run: bun pm pack --filename "$RUNNER_TEMP/npubcash-sdk.tgz" --ignore-scripts
       - name: Verify packed SDK consumer
+        env:
+          SDK_TARBALL: ${{ runner.temp }}/npubcash-sdk.tgz
         run: bun run --cwd packages/sdk test:package
       - name: Publish SDK
-        working-directory: packages/sdk
-        run: npm publish --access public
+        run: npm publish "$RUNNER_TEMP/npubcash-sdk.tgz" --access public

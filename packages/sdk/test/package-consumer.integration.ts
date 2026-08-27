@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import {
+  copyFileSync,
   mkdtempSync,
   readFileSync,
   rmSync,
@@ -31,21 +32,26 @@ function run(command: string[], cwd: string) {
 test("packed SDK exposes self-contained public types", () => {
   const fixtureDirectory = mkdtempSync(join(tmpdir(), "npubcash-sdk-consumer-"));
   const tarballName = "npubcash-sdk.tgz";
+  const tarballPath = join(fixtureDirectory, tarballName);
 
   try {
-    run(["bun", "run", "build"], sdkDirectory);
-    run(
-      [
-        "bun",
-        "pm",
-        "pack",
-        "--filename",
-        join(fixtureDirectory, tarballName),
-        "--ignore-scripts",
-        "--quiet",
-      ],
-      sdkDirectory,
-    );
+    if (process.env.SDK_TARBALL) {
+      copyFileSync(resolve(process.env.SDK_TARBALL), tarballPath);
+    } else {
+      run(["bun", "run", "build"], sdkDirectory);
+      run(
+        [
+          "bun",
+          "pm",
+          "pack",
+          "--filename",
+          tarballPath,
+          "--ignore-scripts",
+          "--quiet",
+        ],
+        sdkDirectory,
+      );
+    }
 
     writeFileSync(
       join(fixtureDirectory, "package.json"),
