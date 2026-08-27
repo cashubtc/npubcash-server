@@ -28,7 +28,7 @@ function run(command: string[], cwd: string) {
   ).toBe(0);
 }
 
-test("the packed SDK exposes self-contained public types", () => {
+test("packed SDK exposes self-contained public types", () => {
   const fixtureDirectory = mkdtempSync(join(tmpdir(), "npubcash-sdk-consumer-"));
   const tarballName = "npubcash-sdk.tgz";
 

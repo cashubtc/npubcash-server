@@ -16,7 +16,8 @@
     "dist"
   ],
   "scripts": {
-    "build": "vite build"
+    "build": "vite build",
+    "test:package": "bun test ./test/package-consumer.integration.ts"
   },
   "dependencies": {
     "@cashu/cashu-ts": "^3.2.2",
