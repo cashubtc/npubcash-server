@@ -37,7 +37,7 @@ This is a **Bun monorepo** with five packages:
 - **@npubcash/server** (`packages/server/`) - Express.js backend with WebSocket support
 - **@npubcash/frontend** (`packages/frontend/`) - React 19 homepage built with Vite, Tailwind CSS, and shadcn/ui
 - **npubcash-sdk** (`packages/sdk/`) - Publishable client library for the npubcash API
-- **npubcash-types** (`packages/types/`) - Shared TypeScript type definitions
+- **@npubcash/api-contract** (`packages/types/`) - Private HTTP contract shared by the server and SDK implementations
 - **@npubcash/docs** (`packages/docs/`) - VitePress documentation site
 
 ### Server Architecture

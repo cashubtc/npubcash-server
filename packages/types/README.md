@@ -1,4 +1,5 @@
-# Type definitions for npub.cash API
+# Internal npub.cash HTTP contract
 
-This package provides shared request, response, provider, user, and wallet types
-for the npub.cash v2 API.
+`@npubcash/api-contract` is a private workspace module containing the shared
+request and response types used by the server and SDK implementations. It is
+not published. Consumers import public resource types from `npubcash-sdk`.

@@ -1,4 +1,4 @@
-import type { UsernamePaymentTerms } from "npubcash-types";
+import type { UsernamePaymentTerms } from "@npubcash/api-contract";
 import { encodeCBOR } from "@/utils/cbor";
 
 export function createCashuPaymentTerms(

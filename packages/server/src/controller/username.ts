@@ -11,7 +11,7 @@ import {
   getUserService,
 } from "@/config";
 import { config } from "../config/index";
-import { SetUsernamePayload } from "npubcash-types";
+import type { SetUsernamePayload } from "@npubcash/api-contract";
 
 export async function usernameController(
   req: Request<unknown, unknown, SetUsernamePayload>,

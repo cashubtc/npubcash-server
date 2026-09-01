@@ -1,6 +1,11 @@
 {
   "name": "npubcash-sdk",
-  "version": "0.3.2",
+  "version": "1.0.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cashubtc/npubcash-server.git",
+    "directory": "packages/sdk"
+  },
   "type": "module",
   "main": "./dist/npc-sdk.cjs",
   "module": "./dist/npc-sdk.mjs",
@@ -16,14 +21,15 @@
     "dist"
   ],
   "scripts": {
-    "build": "vite build"
+    "build": "vite build",
+    "test:package": "bun test ./test/package-consumer.integration.ts"
   },
   "dependencies": {
     "@cashu/cashu-ts": "^3.2.2",
-    "nostr-tools": "^2.19.4",
-    "npubcash-types": "workspace:^"
+    "nostr-tools": "^2.19.4"
   },
   "devDependencies": {
+    "@npubcash/api-contract": "workspace:^",
     "typescript": "~5.8.3",
     "vite": "^7.0.4",
     "vite-plugin-dts": "^4.5.4"

@@ -1,4 +1,4 @@
-import type { UserResponse } from "npubcash-types";
+import type { User, UserResponse } from "@npubcash/api-contract";
 
 import type { Logger } from "./logger";
 import type { ApiResponse, RequestOptions } from "./types";
@@ -34,7 +34,7 @@ export class SettingsManager {
    * @param mintUrl Fully-qualified Cashu mint URL.
    * @returns Updated user settings resource.
    */
-  async setMintUrl(mintUrl: string): Promise<UserResponse> {
+  async setMintUrl(mintUrl: string): Promise<User> {
     try {
       const response = await this._authenticatedRequest<UserResponse>(
         "/api/v2/user/mint",
@@ -47,7 +47,7 @@ export class SettingsManager {
         }
       );
       this.logger?.info("Mint URL updated successfully");
-      return response;
+      return response.data.user;
     } catch (error) {
       this.logger?.error("Error updating mint URL:", error);
       throw error;
@@ -59,7 +59,7 @@ export class SettingsManager {
    * @param lockQuotes When true, new quotes are locked by default.
    * @returns Updated user settings resource.
    */
-  async setLock(lockQuotes: boolean): Promise<UserResponse> {
+  async setLock(lockQuotes: boolean): Promise<User> {
     try {
       const response = await this._authenticatedRequest<UserResponse>(
         "/api/v2/user/lock",
@@ -72,7 +72,7 @@ export class SettingsManager {
         }
       );
       this.logger?.info("Lock setting updated successfully");
-      return response;
+      return response.data.user;
     } catch (error) {
       this.logger?.error("Error updating lock setting:", error);
       throw error;

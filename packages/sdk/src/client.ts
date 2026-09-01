@@ -6,7 +6,7 @@ import type {
   ProviderInfoResponse,
   UserResponse,
   User,
-} from "npubcash-types";
+} from "@npubcash/api-contract";
 
 import { SettingsManager } from "./settings";
 import { type Logger, NullLogger } from "./logger";
@@ -121,11 +121,11 @@ export class NPCClient {
         ...(token ? { "X-Cashu": token } : {}),
       },
     };
-    const res = await this._authenticatedRequest(
+    const res = await this._authenticatedRequest<UserResponse>(
       API_PATHS.USERNAME,
       requestOptions,
     );
-    return res;
+    return res.data.user;
   }
 
   /**
