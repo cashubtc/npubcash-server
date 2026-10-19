@@ -114,3 +114,32 @@ jobs:
 
           smoke_start postgres postgres://postgres:postgres@127.0.0.1:5432/npubcash
           smoke_start sqlite /tmp/npubcash-ci.sqlite
+
+  deploy-production:
+    name: Deploy production to Fly.io
+    needs: [test, build, production-runtime]
+    if: >-
+      github.repository == 'Egge21M/npubcash-server' &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/prod'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: production
+      url: https://npub.cash
+    concurrency:
+      group: fly-npubcash-v3
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Fly CLI
+        uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1
+      - name: Deploy production
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          if [ -z "$FLY_API_TOKEN" ]; then
+            echo "::error::Set FLY_API_TOKEN to an app-scoped deploy token for npubcash-v3."
+            exit 1
+          fi
+          flyctl deploy --config fly.production.toml --remote-only --ha=false

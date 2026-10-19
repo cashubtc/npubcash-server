@@ -5,8 +5,76 @@ for installation, database, proxy, and environment configuration. The published
 version is available on the
 [documentation site](https://cashubtc.github.io/npubcash-server/docs/server/deployment).
 
-This file retains detailed mint-monitoring and v2-to-v3 cutover notes that are
-useful to operators of existing installations.
+This file retains fork-specific production deployment, mint-monitoring, and
+v2-to-v3 cutover notes that are useful to operators of existing installations.
+
+## Production deployments from the fork
+
+The `prod` branch of `Egge21M/npubcash-server` deploys to the `npubcash-v3` Fly
+app in Amsterdam using `fly.production.toml`. The default `fly.toml` targets
+the separate `nightly-npubcash` SQLite app; always select the production config
+explicitly for production commands.
+
+The [Build workflow](../.github/workflows/build.yml) deploys a push to `prod`
+only after its tests (including PostgreSQL integration tests), build, Docker
+build, and production runtime checks succeed. Pull requests, other branches,
+and other repositories do not deploy production. Deploy jobs run one at a time
+and an active deployment is not canceled by a newer push.
+
+### One-time setup
+
+1. Enable GitHub Actions in the fork.
+2. Log in with `fly auth login`, then inspect the existing app:
+
+   ```sh
+   fly status --app npubcash-v3
+   fly secrets list --app npubcash-v3
+   ```
+
+   The app needs its production `DATABASE_URL`, `JWT_SECRET` (or `MNEMONIC`),
+   and, with Nostr enabled, `ZAP_SECRET_KEY` (or `MNEMONIC`) and
+   `DEFAULT_RELAYS`. These runtime secrets stay on Fly. Keep one application
+   instance running: quote-monitor events are process-local. The workflow
+   uses `--ha=false` to avoid creating a spare Machine; it does not scale down
+   extra Machines that already exist.
+
+3. Create an app-scoped deploy token and store it as the fork's Actions secret
+   `FLY_API_TOKEN`. This Bash snippet passes the token directly to GitHub
+   without printing it:
+
+   ```bash
+   (
+     set -euo pipefail
+     deploy_token="$(fly tokens create deploy --app npubcash-v3 --expiry 8760h)"
+     test -n "$deploy_token"
+     printf '%s' "$deploy_token" |
+       gh secret set FLY_API_TOKEN --repo Egge21M/npubcash-server
+   )
+   ```
+
+   Replace this token before its one-year expiry. An environment secret in
+   the GitHub `production` environment also works; the deploy job uses that
+   environment.
+
+4. Push the workflow to `prod`. This starts CI and, when all checks pass, the
+   first automated deployment. Follow the `Build` run in the fork's Actions
+   tab and verify the release with `fly status --app npubcash-v3`.
+
+### Releasing changes
+
+Merge the changes intended for production into `prod` and push it to the
+fork. Only code present on `prod` is released; updates to `v3` do not deploy
+automatically. If a deployment fails after CI succeeds, fix the cause and
+re-run the failed job for the current `prod` commit in GitHub Actions.
+
+For a manual deployment of the checked-out revision, use:
+
+```sh
+fly deploy --config fly.production.toml --remote-only --ha=false
+```
+
+See Fly's [GitHub Actions deployment guide](https://fly.io/docs/launch/continuous-deployment-with-github-actions/)
+for the token and workflow integration.
 
 ## Mint quote monitoring
 
