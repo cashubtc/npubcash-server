@@ -37,7 +37,7 @@
     "@types/jsonwebtoken": "^9.0.9",
     "@types/pg": "^8.11.13",
     "@types/ws": "^8.5.13",
-    "npubcash-types": "workspace:^",
+    "@npubcash/api-contract": "workspace:^",
     "typescript": "^5.8.3"
   }
 }

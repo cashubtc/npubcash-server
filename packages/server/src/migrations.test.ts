@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { DatabaseAdapter, QueryResult } from "./database/adapter";
 import { SqliteAdapter } from "./database/sqliteAdapter";
-import { runMigrations } from "./migrations";
+import { migrations, runMigrations } from "./migrations";
 
 class V2PostgresAdapter implements DatabaseAdapter {
   readonly type = "postgres" as const;
@@ -52,8 +52,9 @@ class InitializedV3PostgresAdapter implements DatabaseAdapter {
           { id: "003_recipient_blocks" },
           { id: "004_mint_quote_polling_queue" },
           { id: "005_per_mint_quote_polling_queue" },
+          { id: "006_lnurl_verification_tokens" },
         ] as T[],
-        rowCount: 5,
+        rowCount: 6,
       };
     }
 
@@ -106,6 +107,37 @@ class BaselineOnlyPostgresAdapter implements DatabaseAdapter {
 }
 
 describe("runMigrations", () => {
+  test("adds verification tokens to existing SQLite quotes and can retry the migration", async () => {
+    const adapter = new SqliteAdapter(":memory:");
+    try {
+      const migration = migrations.find(
+        (entry) => entry.id === "006_lnurl_verification_tokens",
+      )!;
+      for (const sql of migrations[0].sql!.sqlite) await adapter.query(sql);
+      await adapter.query(
+        `INSERT INTO mint_quotes (unit, mint_url, payment_request, quote_id, expires_at, amount, pubkey, state)
+         VALUES ('sat', 'https://mint.example.com', 'lnbc-existing', 'existing', '2026-09-08', 1, 'pubkey', 'PAID')`,
+      );
+      await migration.execFn!(adapter);
+      await adapter.query("UPDATE mint_quotes SET verification_token = ?", [
+        "ab".repeat(32),
+      ]);
+      await migration.execFn!(adapter);
+      const result = await adapter.query(
+        "SELECT payment_request, state, verification_token FROM mint_quotes",
+      );
+      expect(result.rows).toEqual([
+        {
+          payment_request: "lnbc-existing",
+          state: "PAID",
+          verification_token: "ab".repeat(32),
+        },
+      ]);
+    } finally {
+      await adapter.close();
+    }
+  });
+
   test("refuses a v2 PostgreSQL database based only on its migration marker", async () => {
     const adapter = new V2PostgresAdapter();
 
@@ -166,6 +198,7 @@ describe("runMigrations", () => {
         { id: "003_recipient_blocks" },
         { id: "004_mint_quote_polling_queue" },
         { id: "005_per_mint_quote_polling_queue" },
+        { id: "006_lnurl_verification_tokens" },
       ]);
       expect(tables.rows).toEqual([
         { name: "_migrations" },
@@ -230,6 +263,7 @@ describe("runMigrations", () => {
       "003_recipient_blocks",
       "004_mint_quote_polling_queue",
       "005_per_mint_quote_polling_queue",
+      "006_lnurl_verification_tokens",
     ]);
     expect(adapter.schemaStatements.join("\n")).toContain(
       "CREATE TABLE IF NOT EXISTS mint_quote_mint_retries",

@@ -1,48 +1,67 @@
-import { afterEach, describe, expect, mock, test } from "bun:test";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  mock,
+  spyOn,
+  test,
+} from "bun:test";
 import { PaymentRequiredError } from "@/errors";
 import type { NextFunction, Request, Response } from "express";
+import { getEncodedToken, type Token } from "@cashu/cashu-ts";
 
-const mintUrl = "https://mint.example.com";
-const createdUser = { pubkey: "pubkey", username: "alice" };
-const decodedToken = { mint: mintUrl, proofs: [{ amount: 1000 }] };
-const redeemedProofs = [{ amount: 1000 }];
+process.env.MINTURL ??= "https://mint.example.com";
+process.env.JWT_SECRET ??= "test-jwt-secret";
 
-const usernameConfig = {
-  enabled: true,
-  mintUrl,
-  amount: 0,
-};
-
-const validateAndParseUsername = mock((username: string) => username);
-const usernameExists = mock(async (_username: string) => false);
-const setUsername = mock(async (_pubkey: string, _username: string) =>
-  createdUser,
-);
-const getDecodedToken = mock((_token: string) => decodedToken);
-const redeemToken = mock(async (_token: typeof decodedToken) => redeemedProofs);
-const saveProofs = mock(async (_proofs: typeof redeemedProofs) => {});
-
-mock.module("@/config", () => ({
-  getCommunicatorService: () => ({ redeemToken }),
-  getProofService: () => ({ saveProofs }),
-  getUserService: () => ({
-    setUsername,
-    usernameExists,
-    validateAndParseUsername,
-  }),
-}));
-
-mock.module("../config/index", () => ({
-  config: { usernameConfig },
-}));
-
-mock.module("@cashu/cashu-ts", () => ({ getDecodedToken }));
-
+const { SqliteAdapter } = await import("@/database/sqliteAdapter");
+const { runMigrations } = await import("@/migrations");
+const { createRepositories } =
+  await import("@/infrastructure/db/repositoryFactory");
+const { initializeAppServices } = await import("@/config");
+const { config } = await import("@/config/index");
 const { usernameController } = await import("./username");
 
-afterEach(() => {
+const mintUrl = "https://mint.example.com";
+const usernameConfig = { enabled: true, mintUrl, amount: 0 };
+const decodedToken: Token = {
+  mint: mintUrl,
+  unit: "sat",
+  proofs: [
+    {
+      amount: 1000,
+      id: "00".repeat(8),
+      secret: "test-payment",
+      C: "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+    },
+  ],
+};
+const encodedToken = getEncodedToken(decodedToken);
+const redeemedProofs = decodedToken.proofs;
+let adapter: InstanceType<typeof SqliteAdapter>;
+let services: Awaited<ReturnType<typeof initializeAppServices>>;
+let originalUsernameConfig: typeof config.usernameConfig;
+
+beforeEach(async () => {
+  originalUsernameConfig = config.usernameConfig;
   usernameConfig.amount = 0;
-  mock.clearAllMocks();
+  Object.assign(config, { usernameConfig });
+  adapter = new SqliteAdapter(":memory:");
+  await runMigrations(adapter);
+  services = await initializeAppServices(
+    createRepositories(adapter, { mintUrl }),
+  );
+  spyOn(services.userService, "setUsername");
+  spyOn(services.communicatorService, "redeemToken").mockResolvedValue(
+    redeemedProofs,
+  );
+  spyOn(services.proofService, "saveProofs");
+});
+
+afterEach(async () => {
+  mock.restore();
+  Object.assign(config, { usernameConfig: originalUsernameConfig });
+  await adapter.close();
 });
 
 describe("usernameController", () => {
@@ -54,14 +73,18 @@ describe("usernameController", () => {
     await usernameController(req, res, next as NextFunction);
 
     expect(header).not.toHaveBeenCalled();
-    expect(getDecodedToken).not.toHaveBeenCalled();
-    expect(redeemToken).not.toHaveBeenCalled();
-    expect(saveProofs).not.toHaveBeenCalled();
-    expect(setUsername).toHaveBeenCalledWith("pubkey", "alice");
+    expect(services.communicatorService.redeemToken).not.toHaveBeenCalled();
+    expect(services.proofService.saveProofs).not.toHaveBeenCalled();
+    expect(services.userService.setUsername).toHaveBeenCalledWith(
+      "pubkey",
+      "alice",
+    );
     expect(status).toHaveBeenCalledWith(201);
     expect(json).toHaveBeenCalledWith({
       error: false,
-      data: { user: createdUser },
+      data: {
+        user: expect.objectContaining({ pubkey: "pubkey", name: "alice" }),
+      },
     });
     expect(next).not.toHaveBeenCalled();
   });
@@ -78,21 +101,27 @@ describe("usernameController", () => {
     expect(next).toHaveBeenCalledTimes(1);
     expect(next.mock.calls[0]?.[0]).toBeInstanceOf(PaymentRequiredError);
     expect(next.mock.calls[0]?.[0]).toMatchObject({ amount: 1000, mintUrl });
-    expect(setUsername).not.toHaveBeenCalled();
+    expect(services.userService.setUsername).not.toHaveBeenCalled();
   });
 
   test("redeems and saves a valid payment before creating a username", async () => {
     usernameConfig.amount = 1000;
-    const { req } = createRequest("token");
+    const { req } = createRequest(encodedToken);
     const { res, status } = createResponse();
     const next = mock((_error?: unknown) => {});
 
     await usernameController(req, res, next as NextFunction);
 
-    expect(getDecodedToken).toHaveBeenCalledWith("token");
-    expect(redeemToken).toHaveBeenCalledWith(decodedToken);
-    expect(saveProofs).toHaveBeenCalledWith(redeemedProofs);
-    expect(setUsername).toHaveBeenCalledWith("pubkey", "alice");
+    expect(services.communicatorService.redeemToken).toHaveBeenCalledWith(
+      expect.objectContaining(decodedToken),
+    );
+    expect(services.proofService.saveProofs).toHaveBeenCalledWith(
+      redeemedProofs,
+    );
+    expect(services.userService.setUsername).toHaveBeenCalledWith(
+      "pubkey",
+      "alice",
+    );
     expect(status).toHaveBeenCalledWith(201);
     expect(next).not.toHaveBeenCalled();
   });

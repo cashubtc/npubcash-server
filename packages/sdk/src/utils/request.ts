@@ -1,4 +1,4 @@
-import type { ErrorResponse } from "npubcash-types";
+import type { ErrorResponse } from "@npubcash/api-contract";
 import { NullLogger, type Logger } from "../logger";
 import { ApiError, type ApiResponse } from "../types";
 

@@ -55,8 +55,9 @@ authoritative.
 
 - `getInfo(): Promise<User>` returns the current mint, quote-locking preference,
   and optional username.
-- `setUsername(username, token?)` implements the Cashu payment flow for a paid
-  username. The feature may be disabled by the server operator.
+- `setUsername(username, token?): Promise<User>` implements the Cashu payment
+  flow for a paid username and returns the updated recipient. The feature may
+  be disabled by the server operator.
 
 Call `setUsername` without a token first. When the server requires payment, the
 SDK throws `PaymentRequiredError` with a decoded Cashu payment request. Pay it
@@ -137,5 +138,9 @@ Package entry points:
 - CommonJS: `dist/npc-sdk.cjs`
 - Type declarations: `dist/index.d.ts`
 
-The SDK does not currently re-export API resource types such as `Quote`. Install
-and import `npubcash-types` directly when explicit resource types are needed.
+The SDK exports its public resource types directly and its declaration file is
+self-contained:
+
+```ts
+import type { ProviderInfo, Quote, User } from "npubcash-sdk";
+```

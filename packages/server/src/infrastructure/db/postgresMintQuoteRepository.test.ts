@@ -173,6 +173,41 @@ async function withLivePostgresRepositories(
 }
 
 postgresTest(
+  "PostgreSQL persists unique verification tokens independently of quote IDs",
+  async () => {
+    await withLivePostgresRepositories(
+      "quote_verification",
+      async ({ first, second }) => {
+        const input = {
+          mintUrl: "https://mint.example.com",
+          paymentRequest: "lnbc-verify",
+          unit: "sat",
+          quoteId: "upstream-quote",
+          expiresAt: new Date(Date.now() + 60_000),
+          amount: 1,
+          pubkey: "pubkey",
+          locked: false,
+          verificationToken: "ab".repeat(32),
+        };
+        const quote = await first.create(input);
+        expect(
+          await second.getByVerificationToken(input.verificationToken),
+        ).toEqual(quote);
+        expect(
+          await second.getByVerificationToken(input.quoteId),
+        ).toBeUndefined();
+        await expect(
+          first.create({ ...input, quoteId: "another-quote" }),
+        ).rejects.toThrow();
+        // Legacy/imported quotes can coexist without a verification token.
+        await first.create({ ...input, verificationToken: undefined });
+        await first.create({ ...input, verificationToken: undefined });
+      },
+    );
+  },
+);
+
+postgresTest(
   "PostgreSQL claims due unpaid quotes oldest-first without duplicate concurrent claims",
   async () => {
     await withLivePostgresRepositories(

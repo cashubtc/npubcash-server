@@ -4,7 +4,7 @@ import type {
   ProviderInfoResponse,
   QuotesResponse,
   UserResponse,
-} from "npubcash-types";
+} from "@npubcash/api-contract";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Nostr Event Types

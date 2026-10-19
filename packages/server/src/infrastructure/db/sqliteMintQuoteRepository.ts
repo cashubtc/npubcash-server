@@ -46,8 +46,8 @@ export class SqliteMintQuoteRepository
 
   async create(input: CreateMintQuoteInput): Promise<MintQuote> {
     const query = `
-INSERT INTO mint_quotes (mint_url, payment_request, unit, quote_id, expires_at, amount, pubkey, state, serialized_zap_request, locked)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO mint_quotes (mint_url, payment_request, unit, quote_id, expires_at, amount, pubkey, state, serialized_zap_request, locked, verification_token)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 RETURNING *`;
     const res = await this.db.query<MintQuoteRow>(query, [
       input.mintUrl,
@@ -60,6 +60,7 @@ RETURNING *`;
       "UNPAID",
       input.serializedZapRequest ?? null,
       input.locked ? 1 : 0,
+      input.verificationToken ?? null,
     ]);
     if (res.rowCount === 0) {
       throw new Error("Failed to create new mint quote");
@@ -71,6 +72,15 @@ RETURNING *`;
     const res = await this.db.query<MintQuoteRow>(
       "SELECT * FROM mint_quotes WHERE id = ?",
       [id],
+    );
+    const row = res.rows[0];
+    return row ? this.castRowToQuote(row) : undefined;
+  }
+
+  async getByVerificationToken(token: string): Promise<MintQuote | undefined> {
+    const res = await this.db.query<MintQuoteRow>(
+      "SELECT * FROM mint_quotes WHERE verification_token = ?",
+      [token],
     );
     const row = res.rows[0];
     return row ? this.castRowToQuote(row) : undefined;

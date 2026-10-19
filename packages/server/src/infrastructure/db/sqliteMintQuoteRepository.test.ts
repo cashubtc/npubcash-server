@@ -17,6 +17,33 @@ afterEach(async () => {
 });
 
 describe("SqliteMintQuoteRepository", () => {
+  test("persists unique verification tokens independently of quote IDs", async () => {
+    const input = {
+      mintUrl: "https://mint.example.com",
+      paymentRequest: "lnbc-verify",
+      unit: "sat",
+      quoteId: "upstream-quote",
+      expiresAt: new Date(Date.now() + 60_000),
+      amount: 1,
+      pubkey: "pubkey",
+      locked: false,
+      verificationToken: "ab".repeat(32),
+    };
+    const quote = await repository.create(input);
+    const recreated = new SqliteMintQuoteRepository(adapter);
+    expect(
+      await recreated.getByVerificationToken(input.verificationToken),
+    ).toEqual(quote);
+    expect(
+      await recreated.getByVerificationToken(input.quoteId),
+    ).toBeUndefined();
+    await expect(
+      repository.create({ ...input, quoteId: "another-quote" }),
+    ).rejects.toThrow();
+    await repository.create({ ...input, verificationToken: undefined });
+    await repository.create({ ...input, verificationToken: undefined });
+  });
+
   test("returns only unexpired unpaid quotes for WebSocket recovery", async () => {
     const at = new Date("2026-08-10T12:00:00.000Z");
     await repository.create({

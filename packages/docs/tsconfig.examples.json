@@ -4,8 +4,7 @@
     "baseUrl": ".",
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "paths": {
-      "npubcash-sdk": ["../sdk/src/index.ts"],
-      "npubcash-types": ["../types/src/index.ts"]
+      "npubcash-sdk": ["../sdk/src/index.ts"]
     }
   },
   "include": ["examples/**/*.ts"]

@@ -1,5 +1,5 @@
 import { createCashuPaymentTerms } from "@/domain/payment/paymentRequest";
-import type { ProviderInfo } from "npubcash-types";
+import type { ProviderInfo } from "@npubcash/api-contract";
 
 type UsernameConfig =
   | { enabled: false }

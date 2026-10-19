@@ -269,4 +269,29 @@ export const migrations: Migration[] = [
       ],
     },
   },
+  {
+    id: "006_lnurl_verification_tokens",
+    sql: {
+      postgres: [
+        "ALTER TABLE mint_quotes ADD COLUMN IF NOT EXISTS verification_token TEXT",
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_mint_quotes_verification_token ON mint_quotes(verification_token)",
+      ],
+      sqlite: [],
+    },
+    execFn: async (db) => {
+      if (db.type !== "sqlite") return;
+
+      const columns = await db.query<{ name: string }>(
+        "PRAGMA table_info(mint_quotes)",
+      );
+      if (!columns.rows.some((column) => column.name === "verification_token")) {
+        await db.query(
+          "ALTER TABLE mint_quotes ADD COLUMN verification_token TEXT",
+        );
+      }
+      await db.query(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_mint_quotes_verification_token ON mint_quotes(verification_token)",
+      );
+    },
+  },
 ];

@@ -93,12 +93,14 @@ Return types are fully inferred from method signatures; explicit type imports ar
 - `constructor(baseUrl: string, authProvider: AuthProvider)`
 - `setLogger(logger: Logger): void`
 - `getProviderInfo(): Promise<ProviderInfo>` — public provider capabilities
+- `getInfo(): Promise<User>` — authenticated recipient information
+- `setUsername(username: string, token?: string): Promise<User>`
 - `getQuotesSince(since: number): Promise<Quote[]>` — UNIX seconds
 - `getAllQuotes(): Promise<Quote[]>`
 - `subscribe(onUpdate: (quoteId: string) => void, onError?: (msg: string) => void): () => void` — disposer
 - `settings: SettingsManager`
-  - `setMintUrl(mintUrl: string): Promise<UserResponse>`
-  - `setLock(lockQuotes: boolean): Promise<UserResponse>`
+  - `setMintUrl(mintUrl: string): Promise<User>`
+  - `setLock(lockQuotes: boolean): Promise<User>`
 
 #### AuthProvider
 
@@ -135,12 +137,27 @@ dispose();
 
 ### TypeScript
 
-The SDK is written in TypeScript and ships type declarations. Return types are inferred from method signatures, so you generally do not need to import any types. If you want explicit type names (e.g., `Quote`), you may import them from the transitive dependency `npubcash-types`—no separate install required.
+The SDK is written in TypeScript and ships self-contained type declarations.
+Return types are inferred from method signatures, and public resource types can
+be imported directly from `npubcash-sdk`:
+
+```ts
+import type { ProviderInfo, Quote, User } from "npubcash-sdk";
+```
 
 ### Module formats
 
 - ESM: `import { NPCClient } from "npubcash-sdk"`
 - CJS: `const { NPCClient } = require("npubcash-sdk")`
+
+### Publishing
+
+Publishing uses npm trusted publishing and does not require an npm token. Create
+a GitHub release whose tag is `npubcash-sdk-v<major>.<minor>.<patch>`. The tag
+version must exactly match this package's `version`.
+
+The npm package must trust the `cashubtc/npubcash-server` repository and the
+`publish-sdk.yml` GitHub Actions workflow with `npm publish` permission.
 
 ### License
 

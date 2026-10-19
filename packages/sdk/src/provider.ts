@@ -1,7 +1,7 @@
 import { getToken } from "nostr-tools/nip98";
 import { authenticatedRequest } from "./utils/request";
 import type { Logger } from "./logger";
-import type { Nip98Response } from "npubcash-types";
+import type { Nip98Response } from "@npubcash/api-contract";
 import type { SigningFunc } from "./types";
 
 /**

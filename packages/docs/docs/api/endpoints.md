@@ -251,12 +251,47 @@ curl "https://npub.cash/.well-known/lnurlp/npub1...?amount=100000"
 ```json
 {
   "pr": "lnbc1...",
-  "routes": []
+  "routes": [],
+  "verify": "https://npub.cash/lnurl/verify/894e7f7e..."
 }
 ```
 
 LNURL errors use `{ "status": "ERROR", "reason": "..." }` rather than the
 authenticated API's error shape.
+
+### Verify invoice payment
+
+Follow the `verify` URL returned by the invoice callback:
+
+`GET /lnurl/verify/{token}`
+
+The [LUD-21](https://github.com/lnurl/luds/blob/luds/21.md) response reports the
+original invoice and whether its persisted quote state is `PAID` or `ISSUED`:
+
+```json
+{
+  "status": "OK",
+  "settled": true,
+  "preimage": null,
+  "pr": "lnbc1..."
+}
+```
+
+`preimage` is always `null`, including after settlement: Cashu mint quotes do not
+expose the incoming payment preimage. Clients that require a preimage as proof
+of payment cannot obtain that proof from this endpoint.
+
+Status follows background WebSocket and polling observations, so it may lag the
+actual payment. `settled: false` means settlement has not been recorded. Checking
+this URL does not trigger a mint request. Responses use `Cache-Control: no-store`.
+
+No authentication is required; anyone holding the URL can see that invoice and
+its status. The token is separate from the mint's secret quote ID. Previously
+issued URLs remain usable after invoice expiry or a recipient block. Invoices
+created before verification support was added have no verification URL.
+
+Unknown or malformed tokens return HTTP 200 with
+`{ "status": "ERROR", "reason": "Not found" }`.
 
 ### Resolve a NIP-05 username
 

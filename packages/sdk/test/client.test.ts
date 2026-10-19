@@ -40,3 +40,54 @@ test("provider discovery does not request or send authentication", async () => {
   expect(authCalls).toBe(0);
   expect(authorization).toBeNull();
 });
+
+test("setting a username returns the recipient", async () => {
+  const recipient = {
+    pubkey: "f".repeat(64),
+    name: "alice",
+    mintUrl: "https://mint.example",
+    lockQuote: false,
+  };
+  const authProvider: AuthProvider = {
+    async getAuthToken() {
+      return "Bearer test";
+    },
+    async getNostrToken() {
+      return "unused";
+    },
+  };
+  globalThis.fetch = async () =>
+    Response.json({ error: false, data: { user: recipient } });
+
+  const result = await new NPCClient(
+    "https://npub.cash",
+    authProvider,
+  ).setUsername("alice");
+
+  expect(result).toEqual(recipient);
+});
+
+test("updating settings returns the recipient", async () => {
+  const recipient = {
+    pubkey: "f".repeat(64),
+    name: "alice",
+    mintUrl: "https://new-mint.example",
+    lockQuote: true,
+  };
+  const authProvider: AuthProvider = {
+    async getAuthToken() {
+      return "Bearer test";
+    },
+    async getNostrToken() {
+      return "unused";
+    },
+  };
+  globalThis.fetch = async () =>
+    Response.json({ error: false, data: { user: recipient } });
+  const client = new NPCClient("https://npub.cash", authProvider);
+
+  expect(await client.settings.setMintUrl(recipient.mintUrl)).toEqual(
+    recipient,
+  );
+  expect(await client.settings.setLock(true)).toEqual(recipient);
+});

@@ -21,7 +21,7 @@ tags:
   - name: Authentication
     description: NIP-98 to JWT authentication exchange.
   - name: Lightning Address
-    description: Public LNURL-pay discovery and invoice creation.
+    description: Public LNURL-pay discovery, invoice creation, and payment verification.
   - name: NIP-05
     description: Public NIP-05 username resolution.
 paths:
@@ -265,7 +265,7 @@ paths:
       summary: Discover a recipient or request an invoice
       description: |
         Without `amount`, returns an LNURL-pay discovery response. With an
-        amount in millisatoshis, returns a BOLT11 invoice.
+        amount in millisatoshis, returns a BOLT11 invoice and a verification URL.
       parameters:
         - name: user
           in: path
@@ -295,6 +295,47 @@ paths:
                 oneOf:
                   - $ref: "#/components/schemas/LnurlPayResponse"
                   - $ref: "#/components/schemas/LnurlInvoiceResponse"
+                  - $ref: "#/components/schemas/LnurlError"
+        "500":
+          description: The LNURL service is temporarily unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LnurlError"
+  /lnurl/verify/{token}:
+    get:
+      tags: [Lightning Address]
+      operationId: verifyLnurlPayment
+      security: []
+      summary: Check whether an LNURL invoice has been paid
+      description: |
+        Follow the `verify` URL returned when requesting an invoice. The token
+        grants access to that invoice's status without authentication. Settlement
+        reflects persisted PAID or ISSUED state from background mint monitoring
+        and may lag the payment. The preimage is always null, including after
+        settlement, because Cashu mint quotes do not expose it. Clients requiring
+        a preimage as proof of payment cannot use this response for that purpose.
+      parameters:
+        - name: token
+          in: path
+          required: true
+          description: Opaque verification token supplied in the callback response.
+          schema:
+            type: string
+            pattern: "^[0-9a-f]{64}$"
+      responses:
+        "200":
+          description: Payment status, or an LNURL error for an unknown or malformed token.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/LnurlVerifyResponse"
                   - $ref: "#/components/schemas/LnurlError"
         "500":
           description: The LNURL service is temporarily unavailable.
@@ -541,13 +582,32 @@ components:
           type: string
     LnurlInvoiceResponse:
       type: object
-      required: [pr, routes]
+      required: [pr, routes, verify]
       properties:
         pr:
           type: string
         routes:
           type: array
           items: {}
+        verify:
+          type: string
+          format: uri
+          description: URL for checking this invoice's payment status.
+    LnurlVerifyResponse:
+      type: object
+      required: [status, settled, preimage, pr]
+      properties:
+        status:
+          const: OK
+        settled:
+          type: boolean
+          description: True when the persisted quote state is PAID or ISSUED.
+        preimage:
+          type: "null"
+          description: Always null; incoming-payment preimages are unavailable.
+        pr:
+          type: string
+          description: The original BOLT11 invoice.
     LnurlError:
       type: object
       required: [status, reason]

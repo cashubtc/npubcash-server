@@ -46,8 +46,8 @@ export class PostgresMintQuoteRepository
 
   async create(input: CreateMintQuoteInput): Promise<MintQuote> {
     const query = `
-INSERT INTO mint_quotes (mint_url, payment_request, unit, quote_id, expires_at, amount, pubkey, state, serialized_zap_request, locked)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+INSERT INTO mint_quotes (mint_url, payment_request, unit, quote_id, expires_at, amount, pubkey, state, serialized_zap_request, locked, verification_token)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 RETURNING *`;
     const res = await this.db.query<MintQuoteRow>(query, [
       input.mintUrl,
@@ -60,6 +60,7 @@ RETURNING *`;
       "UNPAID",
       input.serializedZapRequest ?? null,
       input.locked,
+      input.verificationToken ?? null,
     ]);
     if (res.rowCount === 0) {
       throw new Error("Failed to create new mint quote");
@@ -71,6 +72,15 @@ RETURNING *`;
     const res = await this.db.query<MintQuoteRow>(
       "SELECT * FROM mint_quotes WHERE id = $1",
       [id],
+    );
+    const row = res.rows[0];
+    return row ? this.castRowToQuote(row) : undefined;
+  }
+
+  async getByVerificationToken(token: string): Promise<MintQuote | undefined> {
+    const res = await this.db.query<MintQuoteRow>(
+      "SELECT * FROM mint_quotes WHERE verification_token = $1",
+      [token],
     );
     const row = res.rows[0];
     return row ? this.castRowToQuote(row) : undefined;

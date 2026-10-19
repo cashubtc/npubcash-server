@@ -1,6 +1,6 @@
 import { config } from "@/config/index";
 import { createProviderInfo } from "@/domain/provider/providerInfo";
-import type { ProviderInfoResponse } from "npubcash-types";
+import type { ProviderInfoResponse } from "@npubcash/api-contract";
 import type { Request, Response } from "express";
 
 export function getProviderInfo(_req: Request, res: Response) {

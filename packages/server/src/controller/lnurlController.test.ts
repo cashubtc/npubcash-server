@@ -7,10 +7,13 @@ process.env.JWT_SECRET ??= "test-jwt-secret";
 
 const { SqliteAdapter } = await import("@/database/sqliteAdapter");
 const { runMigrations } = await import("@/migrations");
-const { createRepositories } = await import(
-  "@/infrastructure/db/repositoryFactory"
-);
-const { getCommunicatorService, initializeAppServices } = await import("@/config");
+const { createRepositories } =
+  await import("@/infrastructure/db/repositoryFactory");
+const {
+  getCommunicatorService,
+  getMintQuoteRepository,
+  initializeAppServices,
+} = await import("@/config");
 const { eventBus } = await import("@/events");
 const { RecipientUnavailableError } = await import("@/errors");
 const { lnurlController } = await import("./lnurlController");
@@ -161,7 +164,21 @@ test("publishes a persisted quote and returns despite a failing event listener",
     await persistenceChecked;
 
     expect(result.error).toBeUndefined();
-    expect(result.payload).toEqual({ pr: "lnbc-created", routes: [] });
+    expect(result.payload).toEqual({
+      pr: "lnbc-created",
+      routes: [],
+      verify: expect.stringMatching(
+        /^http:\/\/npub\.cash\/lnurl\/verify\/[0-9a-f]{64}$/,
+      ),
+    });
+    const token = new URL(
+      (result.payload as { verify: string }).verify,
+    ).pathname
+      .split("/")
+      .pop()!;
+    expect(
+      (await getMintQuoteRepository().getByVerificationToken(token))?.id,
+    ).toBe(eventQuoteId!);
     expect(persistedBeforePolling).toBe(true);
     expect(eventQuoteId).toBeNumber();
   } finally {
