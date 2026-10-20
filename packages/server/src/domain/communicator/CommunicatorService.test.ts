@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import { deriveKeysetId, type Token } from "@cashu/cashu-ts";
+import {
+  deriveKeysetId,
+  getDecodedToken,
+  getEncodedToken,
+  getEncodedTokenV4,
+  type Token,
+} from "@cashu/cashu-ts";
 import type { MintRequestBudget } from "@/infrastructure/MintRequestBudget";
 import { BudgetedMintRequestExecutor } from "@/infrastructure/MintRequestExecutor";
 import { createCashuWalletFactory } from "./CashuWalletFactory";
@@ -59,7 +65,7 @@ describe("CommunicatorService", () => {
     service = new CommunicatorService({ walletFactory });
   });
 
-  test("budgets the HTTP request that creates an ordinary mint quote", async () => {
+  test("budgets the mint requests needed for an ordinary mint quote", async () => {
     await expect(
       service.createMintQuote(
         21,
@@ -72,14 +78,24 @@ describe("CommunicatorService", () => {
       request: "lnbc1invoice",
     });
 
-    expect(budget.mintUrls).toEqual(["https://mint.example.com"]);
-    expect(requests.map(({ url }) => url)).toEqual([
+    expect(budget.mintUrls).toEqual([
+      "https://mint.example.com",
+      "https://mint.example.com",
+      "https://mint.example.com",
+      "https://mint.example.com",
+    ]);
+    expect(requestedUrls(requests)).toEqual([
+      "https://mint.example.com/v1/info",
+      "https://mint.example.com/v1/keysets",
+      "https://mint.example.com/v1/keys",
       "https://mint.example.com/v1/mint/quote/bolt11",
     ]);
-    expect(requestBody(requests[0])).toEqual({ unit: "sat", amount: 21 });
+    expect(quoteRequestBodies(requests)).toEqual([
+      { unit: "sat", amount: 21 },
+    ]);
   });
 
-  test("budgets both HTTP requests needed for a locked mint quote", async () => {
+  test("budgets the mint requests needed for a locked mint quote", async () => {
     const nostrPublicKey = "22".repeat(32);
 
     await expect(
@@ -94,42 +110,46 @@ describe("CommunicatorService", () => {
       request: "lnbc1locked",
     });
 
-    expect(budget.mintUrls).toEqual([
-      "https://mint.example.com",
-      "https://mint.example.com",
-    ]);
-    expect(requests.map(({ url }) => url)).toEqual([
+    expect(requestedUrls(requests)).toEqual([
       "https://mint.example.com/v1/info",
+      "https://mint.example.com/v1/keysets",
+      "https://mint.example.com/v1/keys",
       "https://mint.example.com/v1/mint/quote/bolt11",
     ]);
-    expect(requestBody(requests[1])).toEqual({
-      unit: "sat",
-      amount: 34,
-      pubkey: `02${nostrPublicKey}`,
-    });
+    expect(quoteRequestBodies(requests)).toEqual([
+      {
+        unit: "sat",
+        amount: 34,
+        pubkey: `02${nostrPublicKey}`,
+      },
+    ]);
   });
 
-  test("budgets every HTTP request needed to redeem a token", async () => {
+  test("loads keyset keys before redeeming a V4 token", async () => {
     const token = {
-      mint: "HTTPS://TOKEN-MINT.EXAMPLE.COM/",
-      proofs: [],
+      mint: "https://token-mint.example.com",
+      unit: "sat",
+      proofs: [
+        {
+          id: keysetId,
+          amount: 1,
+          secret: "00".repeat(32),
+          C: mintKeys[1],
+        },
+      ],
     } as Token;
 
-    await expect(service.redeemToken(token)).resolves.toEqual([]);
+    await expect(service.redeemToken(token)).resolves.toHaveLength(1);
 
-    expect(budget.mintUrls).toEqual([
-      "https://token-mint.example.com",
-      "https://token-mint.example.com",
-      "https://token-mint.example.com",
-    ]);
-    expect(requests.map(({ url }) => url)).toEqual([
+    expect(requestedUrls(requests)).toEqual([
+      "https://token-mint.example.com/v1/info",
       "https://token-mint.example.com/v1/keysets",
-      `https://token-mint.example.com/v1/keys/${keysetId}`,
+      "https://token-mint.example.com/v1/keys",
       "https://token-mint.example.com/v1/swap",
     ]);
   });
 
-  test("shares one wallet and budget lane across equivalent mint URLs", async () => {
+  test("shares one wallet, keyset cache, and budget lane across equivalent mint URLs", async () => {
     await service.createMintQuote(
       5,
       { pubkey: "33".repeat(32), lockQuote: false },
@@ -142,11 +162,8 @@ describe("CommunicatorService", () => {
     );
 
     expect(walletCreations).toBe(1);
-    expect(budget.mintUrls).toEqual([
-      "https://mint.example.com",
-      "https://mint.example.com",
-    ]);
-    expect(requests.map(requestBody)).toEqual([
+    expect(budget.mintUrls).toHaveLength(5);
+    expect(quoteRequestBodies(requests)).toEqual([
       { unit: "sat", amount: 5 },
       { unit: "sat", amount: 8 },
     ]);
@@ -163,8 +180,47 @@ describe("CommunicatorService", () => {
   });
 });
 
-function requestBody(request: RecordedRequest | undefined): unknown {
-  return JSON.parse(String(request?.init?.body));
+describe("cashu-ts token decoding", () => {
+  const shortKeysetId = "0100aabbccddeeff0011223344556677";
+  const token = {
+    mint: "https://mint.example.com",
+    unit: "sat",
+    proofs: [
+      {
+        id: shortKeysetId,
+        amount: 1,
+        secret: "00".repeat(32),
+        C: mintKeys[1],
+      },
+    ],
+  } as Token;
+
+  test("decodes V3 and V4 tokens when the mint keyset ids are known", () => {
+    const v3 = getEncodedToken(token, { version: 3 });
+    const v4 = getEncodedTokenV4(token);
+
+    expect(getDecodedToken(v3, [shortKeysetId]).proofs[0]?.id).toBe(
+      shortKeysetId,
+    );
+    const decodedV4 = getDecodedToken(v4, [shortKeysetId]);
+    expect(decodedV4.proofs[0]?.id).toBe(shortKeysetId);
+    expect(decodedV4.proofs[0]?.amount).toBe(1);
+    expect(decodedV4.unit).toBe("sat");
+  });
+
+  test("rejects V4 tokens without mint keyset ids", () => {
+    expect(() => getDecodedToken(getEncodedTokenV4(token))).toThrow();
+  });
+});
+
+function requestedUrls(recorded: RecordedRequest[]): string[] {
+  return recorded.map(({ url }) => url);
+}
+
+function quoteRequestBodies(recorded: RecordedRequest[]): unknown[] {
+  return recorded
+    .filter(({ url }) => url.endsWith("/v1/mint/quote/bolt11"))
+    .map(({ init }) => JSON.parse(String(init?.body)));
 }
 
 function mintResponse(url: string, init?: RequestInit): Response {
@@ -183,13 +239,15 @@ function mintResponse(url: string, init?: RequestInit): Response {
       ],
     });
   }
-  if (url.endsWith(`/v1/keys/${keysetId}`)) {
+  if (url.endsWith("/v1/keys")) {
     return Response.json({
       keysets: [{ id: keysetId, unit: "sat", keys: mintKeys }],
     });
   }
   if (url.endsWith("/v1/swap")) {
-    return Response.json({ signatures: [] });
+    return Response.json({
+      signatures: [{ id: keysetId, amount: 1, C_: mintKeys[1] }],
+    });
   }
   if (url.endsWith("/v1/mint/quote/bolt11")) {
     const body = JSON.parse(String(init?.body)) as {

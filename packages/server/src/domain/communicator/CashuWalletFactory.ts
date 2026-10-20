@@ -1,7 +1,7 @@
 import { createCashuMintRequest } from "@/infrastructure/CashuMintRequest";
 import type { MintRequestExecutor } from "@/infrastructure/MintRequestExecutor";
 import { normalizeUrl } from "@/utils/utils";
-import { CashuMint, CashuWallet } from "@cashu/cashu-ts";
+import { Mint, Wallet } from "@cashu/cashu-ts";
 import type { CommunicatorWalletFactory } from "./CommunicatorService";
 
 type FetchLike = (
@@ -24,6 +24,27 @@ export function createCashuWalletFactory(
       requestExecutor: options.requestExecutor,
       fetch: options.fetch,
     });
-    return new CashuWallet(new CashuMint(normalizedMintUrl, request));
+    const wallet = new Wallet(
+      new Mint(normalizedMintUrl, { customRequest: request }),
+    );
+    // cashu-ts v3 keeps no state about the mint until loadMint() runs: quotes read
+    // mint info and V4 token swaps need the keyset keys before the wallet is usable.
+    let mintLoad: Promise<void> | undefined;
+    const ensureMint = () => (mintLoad ??= wallet.loadMint());
+
+    return {
+      receive: async (token) => {
+        await ensureMint();
+        return wallet.receive(token);
+      },
+      createMintQuote: async (amount) => {
+        await ensureMint();
+        return wallet.createMintQuote(amount);
+      },
+      createLockedMintQuote: async (amount, publicKey) => {
+        await ensureMint();
+        return wallet.createLockedMintQuote(amount, publicKey);
+      },
+    };
   };
 }

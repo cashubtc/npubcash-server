@@ -1,9 +1,10 @@
 import { normalizeUrl } from "@/utils/utils";
-import type {
-  LockedMintQuoteResponse,
-  MintQuoteResponse,
-  Proof,
-  Token,
+import {
+  getTokenMetadata,
+  type LockedMintQuoteResponse,
+  type MintQuoteResponse,
+  type Proof,
+  type Token,
 } from "@cashu/cashu-ts";
 import type { Logger } from "winston";
 
@@ -12,7 +13,7 @@ interface CommunicatorServiceOptions {
 }
 
 export interface CommunicatorWallet {
-  receive(token: Token): Promise<Proof[]>;
+  receive(token: Token | string): Promise<Proof[]>;
   createMintQuote(amount: number): Promise<MintQuoteResponse>;
   createLockedMintQuote(
     amount: number,
@@ -32,10 +33,11 @@ export class CommunicatorService {
     this.walletFactory = options.walletFactory;
   }
 
-  async redeemToken(token: Token, logger?: Logger) {
-    logger?.info(`Receiving proofs on mint ${token.mint}`);
-    const normalizedMintUrl = normalizeUrl(token.mint);
-    const wallet = this.getWallet(normalizedMintUrl);
+  async redeemToken(token: Token | string, logger?: Logger) {
+    const mintUrl =
+      typeof token === "string" ? getTokenMetadata(token).mint : token.mint;
+    logger?.info(`Receiving proofs on mint ${mintUrl}`);
+    const wallet = this.getWallet(normalizeUrl(mintUrl));
     return wallet.receive(token);
   }
 

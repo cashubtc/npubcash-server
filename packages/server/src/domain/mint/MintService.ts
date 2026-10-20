@@ -1,4 +1,4 @@
-import { CashuMint, type GetInfoResponse } from "@cashu/cashu-ts";
+import { Mint as CashuMint, type GetInfoResponse } from "@cashu/cashu-ts";
 import { MintRepository } from "./MintRepository";
 import { Mint } from "./Mint";
 import { BadRequestError } from "@/errors";

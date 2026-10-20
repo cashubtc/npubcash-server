@@ -113,7 +113,7 @@ describe("usernameController", () => {
     await usernameController(req, res, next as NextFunction);
 
     expect(services.communicatorService.redeemToken).toHaveBeenCalledWith(
-      expect.objectContaining(decodedToken),
+      encodedToken,
     );
     expect(services.proofService.saveProofs).toHaveBeenCalledWith(
       redeemedProofs,
@@ -121,6 +121,33 @@ describe("usernameController", () => {
     expect(services.userService.setUsername).toHaveBeenCalledWith(
       "pubkey",
       "alice",
+    );
+    expect(status).toHaveBeenCalledWith(201);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test("accepts a V4 token with a short keyset id", async () => {
+    usernameConfig.amount = 1000;
+    const v4Token = getEncodedToken(
+      {
+        ...decodedToken,
+        proofs: [
+          {
+            ...decodedToken.proofs[0]!,
+            id: "0100aabbccddeeff0011223344556677",
+          },
+        ],
+      },
+      { version: 4 },
+    );
+    const { req } = createRequest(v4Token);
+    const { res, status } = createResponse();
+    const next = mock((_error?: unknown) => {});
+
+    await usernameController(req, res, next as NextFunction);
+
+    expect(services.communicatorService.redeemToken).toHaveBeenCalledWith(
+      v4Token,
     );
     expect(status).toHaveBeenCalledWith(201);
     expect(next).not.toHaveBeenCalled();
