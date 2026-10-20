@@ -1,12 +1,12 @@
 import { Mint } from "@/domain/mint/Mint";
 import { MintRepository } from "@/domain/mint/MintRepository";
 import { DatabaseAdapter } from "@/database/adapter";
-import { MintInfo } from "@cashu/cashu-ts";
+import { GetInfoResponse } from "@cashu/cashu-ts";
 
 type PostgresMint = {
   last_checked: Date;
   mint_url: string;
-  mint_info: MintInfo;
+  mint_info: GetInfoResponse;
 };
 
 export class PostgresMintRepository implements MintRepository {

@@ -1,44 +1,43 @@
-import { MintQuote } from "@/domain/mintQuote/MintQuote";
-import type { MintQuoteMonitor } from "@/domain/mintQuoteMonitor/MintQuoteMonitor";
 import { normalizeUrl } from "@/utils/utils";
-import { Mint, Wallet, type KeyChainCache, type Token } from "@cashu/cashu-ts";
-import { MintCommunicator } from "almnd";
+import {
+  getTokenMetadata,
+  type LockedMintQuoteResponse,
+  type MintQuoteResponse,
+  type Proof,
+  type Token,
+} from "@cashu/cashu-ts";
 import type { Logger } from "winston";
 
+interface CommunicatorServiceOptions {
+  walletFactory: CommunicatorWalletFactory;
+}
+
+export interface CommunicatorWallet {
+  receive(token: Token | string): Promise<Proof[]>;
+  createMintQuote(amount: number): Promise<MintQuoteResponse>;
+  createLockedMintQuote(
+    amount: number,
+    publicKey: string,
+  ): Promise<LockedMintQuoteResponse>;
+}
+
+export type CommunicatorWalletFactory = (
+  mintUrl: string,
+) => CommunicatorWallet;
+
 export class CommunicatorService {
-  private readonly communicators: { [mintUrl: string]: MintCommunicator } = {};
-  private walletCache = new Map<string, any>();
+  private readonly walletFactory: CommunicatorWalletFactory;
+  private readonly wallets = new Map<string, CommunicatorWallet>();
 
-  constructor(private readonly mintQuoteMonitor: MintQuoteMonitor) {}
-
-  private async getWallet(mintUrl: string) {
-    const cached = this.walletCache.get(mintUrl);
-    if (cached) return cached;
-
-    const mint = new Mint(mintUrl);
-    const [mintInfo, { keysets }] = await Promise.all([
-      mint.getInfo(),
-      mint.getKeys(),
-    ]);
-
-    const wallet = new Wallet(mint);
-    wallet.loadMintFromCache(mintInfo, {
-      mintUrl,
-      unit: "sat",
-      keysets: keysets.map((ks) => ({
-        id: ks.id,
-        unit: ks.unit,
-        active: ks.active ?? true,
-        keys: ks.keys,
-      })),
-    } satisfies KeyChainCache);
-    this.walletCache.set(mintUrl, wallet);
-    return wallet;
+  constructor(options: CommunicatorServiceOptions) {
+    this.walletFactory = options.walletFactory;
   }
 
-  async redeemToken(token: Token, logger?: Logger) {
-    logger?.info(`Receiving proofs on mint ${token.mint}`);
-    const wallet = await this.getWallet(token.mint);
+  async redeemToken(token: Token | string, logger?: Logger) {
+    const mintUrl =
+      typeof token === "string" ? getTokenMetadata(token).mint : token.mint;
+    logger?.info(`Receiving proofs on mint ${mintUrl}`);
+    const wallet = this.getWallet(normalizeUrl(mintUrl));
     return wallet.receive(token);
   }
 
@@ -47,46 +46,25 @@ export class CommunicatorService {
     userData: { pubkey: string; lockQuote: boolean },
     mintUrl: string,
   ) {
+    const normalizedMintUrl = normalizeUrl(mintUrl);
+    const wallet = this.getWallet(normalizedMintUrl);
     if (userData.lockQuote) {
-      const res = await this.getCommunicator(mintUrl).getLockedMintQuote(
+      const res = await wallet.createLockedMintQuote(
         amount,
-        userData.pubkey,
+        `02${userData.pubkey}`,
       );
       return { locked: true, ...res };
     }
-    const res = await this.getCommunicator(mintUrl).getMintQuote(amount);
+    const res = await wallet.createMintQuote(amount);
     return { locked: false, ...res };
   }
 
-  async createQuoteSubscription(quote: MintQuote, reqLogger: Logger) {
-    reqLogger.info("[CommSvc] Monitoring mint quote", {
-      mintUrl: normalizeUrl(quote.mintUrl),
-      quoteId: quote.quoteId,
-    });
-    await this.mintQuoteMonitor.watch(quote);
-  }
-
-  async startQuoteMonitoring(): Promise<void> {
-    await this.mintQuoteMonitor.start();
-  }
-
-  async shutdown(): Promise<void> {
-    await this.mintQuoteMonitor.stop();
-  }
-
-  getCommunicator(mintUrl: string) {
-    const parsedUrl = normalizeUrl(mintUrl);
-    if (this.communicators[parsedUrl]) {
-      return this.communicators[parsedUrl];
+  private getWallet(normalizedMintUrl: string): CommunicatorWallet {
+    let wallet = this.wallets.get(normalizedMintUrl);
+    if (!wallet) {
+      wallet = this.walletFactory(normalizedMintUrl);
+      this.wallets.set(normalizedMintUrl, wallet);
     }
-    const communicator = new MintCommunicator(parsedUrl, {
-      initialPollingTimeout: { mint: 10_000, melt: 10_000, proof: 10_000 },
-      backoffFunction: (retry) =>
-        Math.min(5_000 * Math.pow(2, retry), 600_000),
-      throttleCapacity: 10,
-      throttleTimeout: 3_500,
-    });
-    this.communicators[parsedUrl] = communicator;
-    return communicator;
+    return wallet;
   }
 }

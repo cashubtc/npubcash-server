@@ -20,6 +20,8 @@ import { Event } from "nostr-tools";
 import { config } from "@/config/index";
 import { getPublicRequestUrl } from "@/utils/publicRequest";
 import { RecipientBlockedError } from "@/domain/recipientBlock/RecipientBlocks";
+import { eventBus } from "@/events";
+import { randomBytes } from "crypto";
 
 export async function lnurlController(
   req: Request<
@@ -44,12 +46,12 @@ export async function lnurlController(
     const userdata = await userService.extractUserdataFromUserParam(userParam);
     await recipientBlocks.assertCanReceive(userdata.pubkey);
 
+    const publicOrigin = getPublicRequestUrl(
+      req,
+      config.allowedHostnames,
+    ).origin;
     if (!amount) {
       logger.debug("Returning LNURL Reponse for " + userdata.username);
-      const publicOrigin = getPublicRequestUrl(
-        req,
-        config.allowedHostnames,
-      ).origin;
       const lnurlResponse = createLnurlResponse(
         userdata.username,
         publicOrigin,
@@ -75,6 +77,7 @@ export async function lnurlController(
         userdata,
         userdata.mintUrl,
       );
+    const verificationToken = randomBytes(32).toString("hex");
     const mintQuote = await mintQuoteRepository.create({
       unit: "sat",
       quoteId: quote,
@@ -85,13 +88,15 @@ export async function lnurlController(
       pubkey: userdata.pubkey,
       serializedZapRequest: nostr,
       locked,
+      verificationToken,
     });
 
-    await communicatorService.createQuoteSubscription(mintQuote, logger);
+    eventBus.emit("mintQuote.created", mintQuote);
 
     res.json({
       pr: request,
       routes: [],
+      verify: new URL(`/lnurl/verify/${verificationToken}`, publicOrigin).toString(),
     });
   } catch (error) {
     if (error instanceof RecipientBlockedError) {

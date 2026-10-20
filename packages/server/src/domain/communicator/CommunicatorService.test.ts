@@ -1,133 +1,271 @@
-import { describe, test, expect, mock, beforeEach } from "bun:test";
-import type { MintQuoteMonitor } from "@/domain/mintQuoteMonitor/MintQuoteMonitor";
-import { getEncodedToken, getEncodedTokenV4, createRandomSecretKey, createRandomRawBlindedMessage, type Token, getDecodedToken } from "@cashu/cashu-ts";
+import { beforeEach, describe, expect, test } from "bun:test";
+import {
+  deriveKeysetId,
+  getDecodedToken,
+  getEncodedToken,
+  getEncodedTokenV4,
+  type Token,
+} from "@cashu/cashu-ts";
+import type { MintRequestBudget } from "@/infrastructure/MintRequestBudget";
+import { BudgetedMintRequestExecutor } from "@/infrastructure/MintRequestExecutor";
+import { createCashuWalletFactory } from "./CashuWalletFactory";
+import {
+  CommunicatorService,
+  type CommunicatorWalletFactory,
+} from "./CommunicatorService";
 
-// Break the import cycle CommunicatorService → @/config/index → config.ts → CommunicatorService
-mock.module("@/config/index", () => ({
-  config: { nostr: { nostrEnabled: false } },
-}));
-mock.module("@/utils/nostr", () => ({
-  handleZapRequest: () => Promise.resolve(),
-}));
-mock.module("@/events", () => ({
-  eventBus: { on: () => {}, emit: () => {} },
-}));
-mock.module("@/utils/logger", () => ({
-  logger: { info: () => {}, debug: () => {}, error: () => {} },
-}));
+interface RecordedRequest {
+  url: string;
+  init: RequestInit | undefined;
+}
 
-// V4 token decode fix: mint.getKeys() (no args) must be used ONCE per mint,
-// and the keys (per keyset) must be handed to the Wallet keyset cache. No per-keyset loop.
-const getKeysMock = mock(() =>
-  Promise.resolve({
-    keysets: [
-      { id: "ks_sat", unit: "sat", active: true, keys: { 1: "pubkey1", 2: "pubkey2" } },
-      { id: "ks_usd", unit: "usd", active: false, keys: { 1: "pubkey3" } },
-    ],
-  }),
-);
-const getInfoMock = mock(() => Promise.resolve({ name: "test mint" }));
-const receiveMock = mock((token: Token) => Promise.resolve({ token }));
+class RecordingBudget implements MintRequestBudget {
+  readonly mintUrls: string[] = [];
 
-const loadCacheCalls: unknown[] = [];
+  async schedule<T>(
+    mintUrl: string,
+    request: () => Promise<T> | T,
+  ): Promise<T> {
+    this.mintUrls.push(mintUrl);
+    return request();
+  }
+}
 
-mock.module("@cashu/cashu-ts", () => ({
-  Mint: class {
-    constructor(public url: string) {}
-    getInfo = getInfoMock;
-    getKeys = getKeysMock;
-  },
-  Wallet: class {
-    loadMintFromCache = mock((_info: unknown, cache: unknown) => {
-      loadCacheCalls.push(cache);
-    });
-    receive = receiveMock;
-  },
-}));
+const mintKeys = {
+  1: "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+};
+const keysetId = deriveKeysetId(mintKeys);
 
-const fakeRepo = {} as unknown as MintQuoteMonitor;
+describe("CommunicatorService", () => {
+  let requests: RecordedRequest[];
+  let budget: RecordingBudget;
+  let walletCreations: number;
+  let service: CommunicatorService;
 
-describe("CommunicatorService.redeemToken (V4 token decoding)", () => {
   beforeEach(() => {
-    getKeysMock.mockClear();
-    receiveMock.mockClear();
-  });
-
-  test("keysets fetched in ONE getKeys() call, keys included — no per-keyset loop", async () => {
-    const { CommunicatorService } = await import("./CommunicatorService");
-    const svc = new CommunicatorService(fakeRepo);
-
-    const token = { mint: "https://mint.example", proofs: [] } as unknown as Token;
-    await svc.redeemToken(token);
-
-    // The fix: single call, no keyset-id argument
-    expect(getKeysMock).toHaveBeenCalledTimes(1);
-    expect(getKeysMock.mock.calls[0]!.length).toBe(0);
-
-    // Wallet.receive gets the exact token
-    expect(receiveMock).toHaveBeenCalledWith(token);
-  });
-
-  test("wallet cached per mint — second redeem reuses keysets without re-fetching", async () => {
-    const { CommunicatorService } = await import("./CommunicatorService");
-    const svc = new CommunicatorService(fakeRepo);
-
-    const token = { mint: "https://mint.example", proofs: [] } as unknown as Token;
-    await svc.redeemToken(token);
-    await svc.redeemToken(token);
-
-    expect(getKeysMock).toHaveBeenCalledTimes(1); // cached after first call
-    expect(receiveMock).toHaveBeenCalledTimes(2);
-  });
-
-  test("keyset cache handed to Wallet includes keys from the single getKeys call", async () => {
-    const { CommunicatorService } = await import("./CommunicatorService");
-    const svc = new CommunicatorService(fakeRepo);
-
-    const token = { mint: "https://mint.example", proofs: [] } as unknown as Token;
-    await svc.redeemToken(token);
-
-    const cache = loadCacheCalls[0];
-
-    expect(cache).toEqual({
-      mintUrl: "https://mint.example",
-      unit: "sat",
-      keysets: [
-        { id: "ks_sat", unit: "sat", active: true, keys: { 1: "pubkey1", 2: "pubkey2" } },
-        { id: "ks_usd", unit: "usd", active: false, keys: { 1: "pubkey3" } },
-      ],
+    requests = [];
+    budget = new RecordingBudget();
+    walletCreations = 0;
+    const requestExecutor = new BudgetedMintRequestExecutor({
+      requestBudget: budget,
+      timeoutMs: 1_000,
     });
+    const createWallet = createCashuWalletFactory({
+      requestExecutor,
+      fetch: async (input, init) => {
+        const url = input.toString();
+        requests.push({ url, init });
+        return mintResponse(url, init);
+      },
+    });
+    const walletFactory: CommunicatorWalletFactory = (mintUrl) => {
+      walletCreations += 1;
+      return createWallet(mintUrl);
+    };
+    service = new CommunicatorService({ walletFactory });
   });
 
-  test("decode v3/v4 token both", async () => {
-    const keyId = "0100aabbccddeeff0011223344556677";
-    const { B_ } = createRandomRawBlindedMessage();
-    const C = B_.toHex();
-    const secret = Buffer.from(createRandomSecretKey()).toString("hex");
+  test("budgets the mint requests needed for an ordinary mint quote", async () => {
+    await expect(
+      service.createMintQuote(
+        21,
+        { pubkey: "11".repeat(32), lockQuote: false },
+        "HTTPS://MINT.EXAMPLE.COM/",
+      ),
+    ).resolves.toMatchObject({
+      locked: false,
+      quote: "quote-id",
+      request: "lnbc1invoice",
+    });
 
-    const mock_token = {
-      mint: "https://mint.example", proofs: [{
-        id: keyId,
-        amount: 1,
-        secret: secret,
-        C: C
-      }]
-    }
-    const keysets = [ keyId ];
-    const v3 = getEncodedToken(mock_token, { version: 3 });
-    const v4 = getEncodedTokenV4(mock_token);
-    const decoded4 = getDecodedToken(v4, keysets);
+    expect(budget.mintUrls).toEqual([
+      "https://mint.example.com",
+      "https://mint.example.com",
+      "https://mint.example.com",
+      "https://mint.example.com",
+    ]);
+    expect(requestedUrls(requests)).toEqual([
+      "https://mint.example.com/v1/info",
+      "https://mint.example.com/v1/keysets",
+      "https://mint.example.com/v1/keys",
+      "https://mint.example.com/v1/mint/quote/bolt11",
+    ]);
+    expect(quoteRequestBodies(requests)).toEqual([
+      { unit: "sat", amount: 21 },
+    ]);
+  });
 
-    //decode both
-    expect(getDecodedToken(v3, keysets).proofs[0].id).toBe(keyId);
-    expect(decoded4.proofs[0].id).toBe(keyId);
+  test("budgets the mint requests needed for a locked mint quote", async () => {
+    const nostrPublicKey = "22".repeat(32);
 
-    //throw when no keysets provided
-    expect(() => getDecodedToken(v3)).toThrow();
-    expect(() => getDecodedToken(v4)).toThrow();
+    await expect(
+      service.createMintQuote(
+        34,
+        { pubkey: nostrPublicKey, lockQuote: true },
+        "HTTPS://MINT.EXAMPLE.COM/",
+      ),
+    ).resolves.toMatchObject({
+      locked: true,
+      quote: "locked-quote-id",
+      request: "lnbc1locked",
+    });
 
-    //check deceded correctly
-    expect(decoded4.proofs[0].amount).toBe(1);
-    expect(decoded4.unit).toBe("sat");
+    expect(requestedUrls(requests)).toEqual([
+      "https://mint.example.com/v1/info",
+      "https://mint.example.com/v1/keysets",
+      "https://mint.example.com/v1/keys",
+      "https://mint.example.com/v1/mint/quote/bolt11",
+    ]);
+    expect(quoteRequestBodies(requests)).toEqual([
+      {
+        unit: "sat",
+        amount: 34,
+        pubkey: `02${nostrPublicKey}`,
+      },
+    ]);
+  });
+
+  test("loads keyset keys before redeeming a V4 token", async () => {
+    const token = {
+      mint: "https://token-mint.example.com",
+      unit: "sat",
+      proofs: [
+        {
+          id: keysetId,
+          amount: 1,
+          secret: "00".repeat(32),
+          C: mintKeys[1],
+        },
+      ],
+    } as Token;
+
+    await expect(service.redeemToken(token)).resolves.toHaveLength(1);
+
+    expect(requestedUrls(requests)).toEqual([
+      "https://token-mint.example.com/v1/info",
+      "https://token-mint.example.com/v1/keysets",
+      "https://token-mint.example.com/v1/keys",
+      "https://token-mint.example.com/v1/swap",
+    ]);
+  });
+
+  test("shares one wallet, keyset cache, and budget lane across equivalent mint URLs", async () => {
+    await service.createMintQuote(
+      5,
+      { pubkey: "33".repeat(32), lockQuote: false },
+      "HTTPS://MINT.EXAMPLE.COM/",
+    );
+    await service.createMintQuote(
+      8,
+      { pubkey: "33".repeat(32), lockQuote: false },
+      "https://mint.example.com",
+    );
+
+    expect(walletCreations).toBe(1);
+    expect(budget.mintUrls).toHaveLength(5);
+    expect(quoteRequestBodies(requests)).toEqual([
+      { unit: "sat", amount: 5 },
+      { unit: "sat", amount: 8 },
+    ]);
+  });
+
+  test("propagates failures from cashu-ts", async () => {
+    await expect(
+      service.createMintQuote(
+        999,
+        { pubkey: "44".repeat(32), lockQuote: false },
+        "https://mint.example.com",
+      ),
+    ).rejects.toThrow("mint quote failed");
   });
 });
+
+describe("cashu-ts token decoding", () => {
+  const shortKeysetId = "0100aabbccddeeff0011223344556677";
+  const token = {
+    mint: "https://mint.example.com",
+    unit: "sat",
+    proofs: [
+      {
+        id: shortKeysetId,
+        amount: 1,
+        secret: "00".repeat(32),
+        C: mintKeys[1],
+      },
+    ],
+  } as Token;
+
+  test("decodes V3 and V4 tokens when the mint keyset ids are known", () => {
+    const v3 = getEncodedToken(token, { version: 3 });
+    const v4 = getEncodedTokenV4(token);
+
+    expect(getDecodedToken(v3, [shortKeysetId]).proofs[0]?.id).toBe(
+      shortKeysetId,
+    );
+    const decodedV4 = getDecodedToken(v4, [shortKeysetId]);
+    expect(decodedV4.proofs[0]?.id).toBe(shortKeysetId);
+    expect(decodedV4.proofs[0]?.amount).toBe(1);
+    expect(decodedV4.unit).toBe("sat");
+  });
+
+  test("rejects V4 tokens without mint keyset ids", () => {
+    expect(() => getDecodedToken(getEncodedTokenV4(token))).toThrow();
+  });
+});
+
+function requestedUrls(recorded: RecordedRequest[]): string[] {
+  return recorded.map(({ url }) => url);
+}
+
+function quoteRequestBodies(recorded: RecordedRequest[]): unknown[] {
+  return recorded
+    .filter(({ url }) => url.endsWith("/v1/mint/quote/bolt11"))
+    .map(({ init }) => JSON.parse(String(init?.body)));
+}
+
+function mintResponse(url: string, init?: RequestInit): Response {
+  if (url.endsWith("/v1/info")) {
+    return Response.json({
+      name: "Test mint",
+      pubkey: mintKeys[1],
+      version: "test/1.0",
+      nuts: { 20: { supported: true } },
+    });
+  }
+  if (url.endsWith("/v1/keysets")) {
+    return Response.json({
+      keysets: [
+        { id: keysetId, unit: "sat", active: true, input_fee_ppk: 0 },
+      ],
+    });
+  }
+  if (url.endsWith("/v1/keys")) {
+    return Response.json({
+      keysets: [{ id: keysetId, unit: "sat", keys: mintKeys }],
+    });
+  }
+  if (url.endsWith("/v1/swap")) {
+    return Response.json({
+      signatures: [{ id: keysetId, amount: 1, C_: mintKeys[1] }],
+    });
+  }
+  if (url.endsWith("/v1/mint/quote/bolt11")) {
+    const body = JSON.parse(String(init?.body)) as {
+      amount: number;
+      pubkey?: string;
+    };
+    if (body.amount === 999) {
+      return Response.json({ error: "mint quote failed" }, { status: 500 });
+    }
+    return Response.json({
+      quote: body.pubkey ? "locked-quote-id" : "quote-id",
+      request: body.pubkey ? "lnbc1locked" : "lnbc1invoice",
+      state: "UNPAID",
+      expiry: 1_800_000_000,
+      amount: body.amount,
+      unit: "sat",
+      ...(body.pubkey ? { pubkey: body.pubkey } : {}),
+    });
+  }
+  return Response.json({ error: "unexpected request" }, { status: 500 });
+}

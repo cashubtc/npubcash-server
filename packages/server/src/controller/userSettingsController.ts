@@ -5,7 +5,7 @@ import {
   SetLockQuotesPayload,
   SetMintPayload,
   UserResponse,
-} from "npubcash-types";
+} from "@npubcash/api-contract";
 import { NextFunction, Request, Response } from "express";
 
 export async function getUserSettings(

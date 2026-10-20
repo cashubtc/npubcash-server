@@ -1,9 +1,10 @@
 import type { PaymentRequest } from "@cashu/cashu-ts";
 import type {
   Nip98Response,
+  ProviderInfoResponse,
   QuotesResponse,
   UserResponse,
-} from "npubcash-types";
+} from "@npubcash/api-contract";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Nostr Event Types
@@ -43,7 +44,11 @@ export interface AuthProvider {
 // API Types
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type ApiResponse = QuotesResponse | UserResponse | Nip98Response;
+export type ApiResponse =
+  | QuotesResponse
+  | UserResponse
+  | Nip98Response
+  | ProviderInfoResponse;
 
 export interface RequestOptions extends RequestInit {
   params?: Record<string, string | number | boolean>;

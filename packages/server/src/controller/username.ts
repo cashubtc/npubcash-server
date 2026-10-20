@@ -4,14 +4,14 @@ import {
   UsernameTakenError,
 } from "@/errors";
 import { NextFunction, Request, Response } from "express";
-import { Mint, Token, getDecodedToken } from "@cashu/cashu-ts";
+import { getTokenMetadata, type TokenMetadata } from "@cashu/cashu-ts";
 import {
   getCommunicatorService,
   getProofService,
   getUserService,
 } from "@/config";
 import { config } from "../config/index";
-import { SetUsernamePayload } from "npubcash-types";
+import type { SetUsernamePayload } from "@npubcash/api-contract";
 
 export async function usernameController(
   req: Request<unknown, unknown, SetUsernamePayload>,
@@ -45,8 +45,8 @@ export async function usernameController(
       if (!xCashu) {
         throw new PaymentRequiredError(amount, mintUrl);
       }
-      const decodedToken = await validatePayment(xCashu, amount, mintUrl);
-      const newProofs = await communicatorService.redeemToken(decodedToken);
+      const token = validatePayment(xCashu, amount, mintUrl);
+      const newProofs = await communicatorService.redeemToken(token);
       await proofService.saveProofs(newProofs);
     }
     const user = await userService.setUsername(
@@ -60,12 +60,12 @@ export async function usernameController(
   }
 }
 
-async function validatePayment(
+function validatePayment(
   tokenString: string,
   requiredAmount: number,
   requiredMint: string,
   tipsAllowed = true,
-): Promise<Token> {
+): string {
   function throwPaymentError(reason: string): never {
     throw new PaymentRequiredError(
       requiredAmount,
@@ -73,18 +73,18 @@ async function validatePayment(
       "Invalid payment: " + reason,
     );
   }
-  let decodedToken: Token;
+  // cashu-ts v3 only needs the mint's keyset ids to decode short (V4) keyset ids;
+  // the wallet that redeems the token resolves them, so validate on metadata here.
+  let tokenMetadata: TokenMetadata;
   try {
-    const mint = new Mint(requiredMint);
-    const { keysets } = await mint.getKeys();
-    decodedToken = getDecodedToken(tokenString, keysets);
+    tokenMetadata = getTokenMetadata(tokenString);
   } catch (e) {
     return throwPaymentError("invalid token");
   }
-  if (decodedToken.mint !== requiredMint) {
+  if (tokenMetadata.mint !== requiredMint) {
     return throwPaymentError("wrong mint");
   }
-  const paidAmount = decodedToken.proofs.reduce((a, c) => a + c.amount, 0);
+  const paidAmount = tokenMetadata.amount;
   if (tipsAllowed) {
     if (paidAmount < requiredAmount) {
       return throwPaymentError("wrong amount");
@@ -94,5 +94,5 @@ async function validatePayment(
       return throwPaymentError("wrong amount");
     }
   }
-  return decodedToken;
+  return tokenString;
 }

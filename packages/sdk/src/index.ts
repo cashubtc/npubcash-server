@@ -21,6 +21,13 @@ export type {
   EventTemplate,
   SignedEvent,
 } from "./types";
+export type {
+  ProviderInfo,
+  Quote,
+  User,
+  UsernameFeature,
+  UsernamePaymentTerms,
+} from "@npubcash/api-contract";
 
 // Errors
 export { ApiError, PaymentRequiredError } from "./types";

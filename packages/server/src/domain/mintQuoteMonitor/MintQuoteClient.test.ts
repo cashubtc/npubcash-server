@@ -26,15 +26,6 @@ describe("FetchMintQuoteClient", () => {
       fetch: async (input, init) => {
         const url = input.toString();
         starts.push({ at: now, url });
-        if (url.endsWith("/v1/info")) {
-          return new Response(
-            JSON.stringify({
-              nuts: {
-                29: { max_batch_size: 2, methods: ["bolt11"] },
-              },
-            }),
-          );
-        }
         if (init?.method === "POST") {
           const body = JSON.parse(String(init.body)) as { quotes: string[] };
           return new Response(
@@ -70,15 +61,15 @@ describe("FetchMintQuoteClient", () => {
       },
     });
 
-    await client.checkQuotes("https://mint.example.com/", [
-      "quote-1",
-      "quote-2",
-      "quote-3",
-    ]);
+    await client.checkQuotes(
+      "https://mint.example.com/",
+      ["quote-1", "quote-2", "quote-3"],
+      2,
+    );
     await client.checkQuote("https://mint.example.com", "quote-4");
 
-    expect(starts.map(({ at }) => at)).toEqual([0, 1_000, 2_000, 3_000]);
-    expect(waits).toEqual([1_000, 1_000, 1_000]);
+    expect(starts.map(({ at }) => at)).toEqual([0, 1_000, 2_000]);
+    expect(waits).toEqual([1_000, 1_000]);
   });
 
   test("maintains independent token buckets for different mints", async () => {
@@ -155,21 +146,50 @@ describe("FetchMintQuoteClient", () => {
     ]);
   });
 
-  test("uses advertised NUT-29 batch size and preserves quote order", async () => {
+  test("reports when an individual quote request actually starts", async () => {
+    const origin = new Date("2026-08-11T12:00:00.000Z");
+    let elapsedMs = 0;
+    const client = new FetchMintQuoteClient({
+      fetch: async (input) => {
+        const quote = decodeURIComponent(input.toString().split("/").at(-1)!);
+        return new Response(
+          JSON.stringify({
+            quote,
+            request: `lnbc-${quote}`,
+            state: "PAID",
+          }),
+        );
+      },
+      now: () => new Date(origin.getTime() + elapsedMs),
+      timeoutMs: 1_000,
+      rateLimit: {
+        capacity: 1,
+        refillPerMinute: 60,
+        now: () => elapsedMs,
+        wait: async (delayMs) => {
+          elapsedMs += delayMs;
+        },
+      },
+    });
+
+    await client.checkQuote("https://mint.example.com", "quote-1");
+    const result = await client.checkQuote(
+      "https://mint.example.com",
+      "quote-2",
+    );
+
+    expect(result).toMatchObject({
+      kind: "found",
+      requestStartedAt: new Date("2026-08-11T12:00:01.000Z"),
+    });
+  });
+
+  test("uses the provided batch size and preserves quote order", async () => {
     const requests: Array<{ url: string; init?: RequestInit }> = [];
     const client = new FetchMintQuoteClient({
       fetch: async (input, init) => {
         const url = input.toString();
         requests.push({ url, init });
-        if (url.endsWith("/v1/info")) {
-          return new Response(
-            JSON.stringify({
-              nuts: {
-                29: { max_batch_size: 2, methods: ["bolt11"] },
-              },
-            }),
-          );
-        }
         const body = JSON.parse(String(init?.body)) as { quotes: string[] };
         return new Response(
           JSON.stringify(
@@ -189,53 +209,108 @@ describe("FetchMintQuoteClient", () => {
     const result = await client.checkQuotes(
       "https://mint.example.com/",
       ["quote-1", "quote-2", "quote-3"],
+      2,
     );
 
     expect(result.kind).toBe("found");
     if (result.kind === "found") {
-      expect(result.payloads.map((payload) => payload.quote)).toEqual([
+      expect(result.checks.map(({ payload }) => payload.quote)).toEqual([
         "quote-1",
         "quote-2",
         "quote-3",
       ]);
     }
     expect(requests.map((request) => request.url)).toEqual([
-      "https://mint.example.com/v1/info",
       "https://mint.example.com/v1/mint/quote/bolt11/check",
       "https://mint.example.com/v1/mint/quote/bolt11/check",
     ]);
-    expect(requests.slice(1).map((request) => request.init?.method)).toEqual([
+    expect(requests.map((request) => request.init?.method)).toEqual([
       "POST",
       "POST",
     ]);
-    expect(requests.slice(1).map((request) => request.init?.body)).toEqual([
+    expect(requests.map((request) => request.init?.body)).toEqual([
       JSON.stringify({ quotes: ["quote-1", "quote-2"] }),
       JSON.stringify({ quotes: ["quote-3"] }),
     ]);
   });
 
-  test("does not batch when the mint does not advertise NUT-29 for bolt11", async () => {
-    const urls: string[] = [];
+  test("reports when each batched quote request actually starts", async () => {
+    const origin = new Date("2026-08-11T12:00:00.000Z");
+    let elapsedMs = 0;
     const client = new FetchMintQuoteClient({
-      fetch: async (input) => {
-        urls.push(input.toString());
+      fetch: async (input, init) => {
+        const body = JSON.parse(String(init?.body)) as { quotes: string[] };
         return new Response(
-          JSON.stringify({ nuts: { 29: { methods: ["bolt12"] } } }),
+          JSON.stringify(
+            body.quotes.map((quote) => ({
+              quote,
+              request: `lnbc-${quote}`,
+              state: "PAID",
+            })),
+          ),
         );
       },
+      now: () => new Date(origin.getTime() + elapsedMs),
       timeoutMs: 1_000,
+      rateLimit: {
+        capacity: 1,
+        refillPerMinute: 60,
+        now: () => elapsedMs,
+        wait: async (delayMs) => {
+          elapsedMs += delayMs;
+        },
+      },
+    });
+
+    const result = await client.checkQuotes(
+      "https://mint.example.com",
+      ["quote-1", "quote-2", "quote-3"],
+      2,
+    );
+
+    expect(result.kind).toBe("found");
+    if (result.kind === "found") {
+      expect(
+        result.checks.map(({ payload, requestStartedAt }) => ({
+          quoteId: payload.quote,
+          requestStartedAt,
+        })),
+      ).toEqual([
+        {
+          quoteId: "quote-1",
+          requestStartedAt: new Date("2026-08-11T12:00:00.000Z"),
+        },
+        {
+          quoteId: "quote-2",
+          requestStartedAt: new Date("2026-08-11T12:00:00.000Z"),
+        },
+        {
+          quoteId: "quote-3",
+          requestStartedAt: new Date("2026-08-11T12:00:01.000Z"),
+        },
+      ]);
+    }
+  });
+
+  test("rejects an invalid batch size before sending a request", async () => {
+    let requests = 0;
+    const client = new FetchMintQuoteClient({
+      fetch: async () => {
+        requests += 1;
+        return new Response("[]");
+      },
       rateLimit: { capacity: 100 },
     });
 
     expect(
-      await client.checkQuotes("https://mint.example.com", ["quote-1"]),
-    ).toEqual({ kind: "unsupported" });
-    expect(urls).toEqual(["https://mint.example.com/v1/info"]);
+      (await client.checkQuotes("https://mint.example.com", ["quote-1"], 1.5))
+        .kind,
+    ).toBe("invalid_response");
+    expect(requests).toBe(0);
   });
 
   test("rejects a batch response that does not match request order", async () => {
     const responses = [
-      new Response(JSON.stringify({ nuts: { 29: {} } })),
       new Response(
         JSON.stringify([
           {
@@ -261,15 +336,43 @@ describe("FetchMintQuoteClient", () => {
 
     expect(
       (
-        await client.checkQuotes("https://mint.example.com", [
-          "quote-1",
-          "quote-2",
-        ])
+        await client.checkQuotes(
+          "https://mint.example.com",
+          ["quote-1", "quote-2"],
+          2,
+        )
       ).kind,
     ).toBe("invalid_response");
   });
 
+  test("classifies batch 400 as invalid and batch 429 or 5xx as unavailable", async () => {
+    const responses = [
+      new Response("bad request", { status: 400 }),
+      new Response("slow down", { status: 429 }),
+      new Response("upstream failure", { status: 503 }),
+    ];
+    const client = new FetchMintQuoteClient({
+      fetch: async () => responses.shift()!,
+      timeoutMs: 1_000,
+      rateLimit: { capacity: 100 },
+    });
+
+    expect(
+      (await client.checkQuotes("https://mint.example.com", ["quote-1"], 1))
+        .kind,
+    ).toBe("invalid_response");
+    expect(
+      (await client.checkQuotes("https://mint.example.com", ["quote-1"], 1))
+        .kind,
+    ).toBe("mint_unavailable");
+    expect(
+      (await client.checkQuotes("https://mint.example.com", ["quote-1"], 1))
+        .kind,
+    ).toBe("mint_unavailable");
+  });
+
   test("classifies quote responses without throwing", async () => {
+    const requestStartedAt = new Date("2026-08-11T12:00:00.000Z");
     const responses = [
       new Response(
         JSON.stringify({
@@ -280,31 +383,34 @@ describe("FetchMintQuoteClient", () => {
         }),
         { status: 200 },
       ),
-      new Response(
-        JSON.stringify({ detail: "Quote not found", code: 0 }),
-        { status: 400 },
-      ),
+      new Response(JSON.stringify({ detail: "Quote not found", code: 0 }), {
+        status: 400,
+      }),
       new Response("upstream failure", { status: 503 }),
       new Response(JSON.stringify({ state: "PAID" }), { status: 200 }),
     ];
     const client = new FetchMintQuoteClient({
       fetch: async () => responses.shift()!,
+      now: () => requestStartedAt,
       timeoutMs: 1_000,
       rateLimit: { capacity: 100 },
     });
 
-    expect(await client.checkQuote("https://mint.example.com/", "quote-1"))
-      .toEqual({
-        kind: "found",
-        payload: {
-          quote: "quote-1",
-          request: "lnbc1",
-          state: "PAID",
-          expiry: 1_786_000_000,
-        },
-      });
-    expect(await client.checkQuote("https://mint.example.com", "missing"))
-      .toEqual({ kind: "not_found" });
+    expect(
+      await client.checkQuote("https://mint.example.com/", "quote-1"),
+    ).toEqual({
+      kind: "found",
+      payload: {
+        quote: "quote-1",
+        request: "lnbc1",
+        state: "PAID",
+        expiry: 1_786_000_000,
+      },
+      requestStartedAt,
+    });
+    expect(
+      await client.checkQuote("https://mint.example.com", "missing"),
+    ).toEqual({ kind: "not_found", requestStartedAt });
     expect(
       (await client.checkQuote("https://mint.example.com", "quote-1")).kind,
     ).toBe("mint_unavailable");
@@ -372,9 +478,13 @@ describe("FetchMintQuoteClient", () => {
       fetch: async (_input, init) => {
         requestSignal = init?.signal ?? undefined;
         return new Promise<Response>((_resolve, reject) => {
-          requestSignal?.addEventListener("abort", () => reject(requestSignal?.reason), {
-            once: true,
-          });
+          requestSignal?.addEventListener(
+            "abort",
+            () => reject(requestSignal?.reason),
+            {
+              once: true,
+            },
+          );
         });
       },
       timeoutMs: 100,

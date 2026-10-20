@@ -24,7 +24,7 @@ export interface MintQuoteConfig {
 export type CreateMintQuoteInput = Omit<
   MintQuoteConfig,
   "id" | "createdAt" | "state"
->;
+> & { verificationToken?: string };
 
 export class MintQuote implements MintQuoteConfig {
   id: number;
