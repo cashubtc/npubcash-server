@@ -1,5 +1,4 @@
 import type { RequestRateLimiterOptions } from "../../infrastructure/RequestRateLimiter";
-import { createMintFetch, type FetchLike } from "../../infrastructure/MintFetch";
 import {
   PerMintRequestBudget,
   type MintRequestBudget,
@@ -62,6 +61,11 @@ interface FetchMintQuoteClientOptions {
   requestExecutor?: MintRequestExecutor;
 }
 
+type FetchLike = (
+  input: string | URL | Request,
+  init?: RequestInit,
+) => Promise<Response>;
+
 const PAYLOAD_STATES = new Set<MintQuotePayloadState>([
   "UNPAID",
   "PAID",
@@ -123,7 +127,7 @@ export class FetchMintQuoteClient implements MintQuoteClient {
   private readonly requestExecutor: MintRequestExecutor;
 
   constructor(options: FetchMintQuoteClientOptions = {}) {
-    this.fetchImpl = createMintFetch(options.fetch);
+    this.fetchImpl = options.fetch ?? fetch;
     this.now = options.now ?? (() => new Date());
     this.requestExecutor =
       options.requestExecutor ??

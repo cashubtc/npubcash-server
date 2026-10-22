@@ -42,7 +42,6 @@ describe("createCashuMintRequest", () => {
     expect(new Headers(requestInit?.headers)).toEqual(
       new Headers({
         Accept: "application/json, text/plain, */*",
-        "Accept-Encoding": "identity",
         Authorization: "Bearer token",
         "Content-Type": "application/json",
       }),

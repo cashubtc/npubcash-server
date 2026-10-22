@@ -33,7 +33,7 @@ npubcash-server is written in TypeScript and runs on Bun.
 
 ### Prerequisites
 
-- [Bun](https://bun.sh/) 1.3.14 or a compatible release
+- [Bun](https://bun.sh/) 1.4.4 or newer (required for the Brotli CVE-2026-111497 fix)
 
 ### Installation
 
