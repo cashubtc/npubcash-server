@@ -1,4 +1,5 @@
 import type { MintRequestExecutor } from "@/infrastructure/MintRequestExecutor";
+import { createMintFetch, type FetchLike } from "./MintFetch";
 import { normalizeUrl } from "@/utils/utils";
 import {
   HttpResponseError,
@@ -14,11 +15,6 @@ type CashuRequestOptions = {
 
 export type CashuMintRequest = <T>(options: CashuRequestOptions) => Promise<T>;
 
-type FetchLike = (
-  input: string | URL | Request,
-  init?: RequestInit,
-) => Promise<Response>;
-
 interface CashuMintRequestOptions {
   mintUrl: string;
   requestExecutor: MintRequestExecutor;
@@ -30,7 +26,7 @@ export function createCashuMintRequest(
   options: CashuMintRequestOptions,
 ): CashuMintRequest {
   const mintUrl = normalizeUrl(options.mintUrl);
-  const fetchImpl = options.fetch ?? fetch;
+  const fetchImpl = createMintFetch(options.fetch);
 
   return <T>(requestOptions: CashuRequestOptions): Promise<T> => {
     const callerSignal = requestOptions.signal ?? undefined;

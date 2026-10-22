@@ -1,4 +1,5 @@
-import { CashuMint, type GetInfoResponse } from "@cashu/cashu-ts";
+import type { GetInfoResponse } from "@cashu/cashu-ts";
+import { FetchMintInfoLoader } from "@/infrastructure/FetchMintInfoLoader";
 import { MintRepository } from "./MintRepository";
 import { Mint } from "./Mint";
 import { BadRequestError } from "@/errors";
@@ -15,17 +16,13 @@ export interface MintServiceOptions {
   mintInfoLoader?: MintInfoLoader;
 }
 
-const cashuMintInfoLoader: MintInfoLoader = {
-  getMintInfo: async (mintUrl) => new CashuMint(mintUrl).getInfo(),
-};
-
 export class MintService {
   private readonly repo: MintRepository;
   private readonly mintInfoLoader: MintInfoLoader;
 
   constructor(repo: MintRepository, options: MintServiceOptions = {}) {
     this.repo = repo;
-    this.mintInfoLoader = options.mintInfoLoader ?? cashuMintInfoLoader;
+    this.mintInfoLoader = options.mintInfoLoader ?? new FetchMintInfoLoader();
   }
 
   async checkMintUrl(
