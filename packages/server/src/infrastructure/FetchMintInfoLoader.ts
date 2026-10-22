@@ -1,15 +1,15 @@
 import type { MintInfoLoader } from "@/domain/mint/MintService";
-import {
-  BudgetedMintRequestExecutor,
-  type MintRequestExecutor,
-} from "@/infrastructure/MintRequestExecutor";
-import { PerMintRequestBudget } from "./MintRequestBudget";
-import { createMintFetch, type FetchLike } from "./MintFetch";
+import type { MintRequestExecutor } from "@/infrastructure/MintRequestExecutor";
 import { normalizeUrl } from "@/utils/utils";
 import type { GetInfoResponse } from "@cashu/cashu-ts";
 
+type FetchLike = (
+  input: string | URL | Request,
+  init?: RequestInit,
+) => Promise<Response>;
+
 interface FetchMintInfoLoaderOptions {
-  requestExecutor?: MintRequestExecutor;
+  requestExecutor: MintRequestExecutor;
   fetch?: FetchLike;
 }
 
@@ -17,13 +17,9 @@ export class FetchMintInfoLoader implements MintInfoLoader {
   private readonly requestExecutor: MintRequestExecutor;
   private readonly fetchImpl: FetchLike;
 
-  constructor(options: FetchMintInfoLoaderOptions = {}) {
-    this.requestExecutor =
-      options.requestExecutor ??
-      new BudgetedMintRequestExecutor({
-        requestBudget: new PerMintRequestBudget(),
-      });
-    this.fetchImpl = createMintFetch(options.fetch);
+  constructor(options: FetchMintInfoLoaderOptions) {
+    this.requestExecutor = options.requestExecutor;
+    this.fetchImpl = options.fetch ?? fetch;
   }
 
   async getMintInfo(
