@@ -122,7 +122,7 @@ export async function publishZapReceipt(
 ) {
   const defaultRelays = config.nostr.defaultRelays;
   const pubPromises = nostrPool.publish(
-    requestRelays || defaultRelays,
+    requestRelays?.length ? requestRelays : defaultRelays,
     receiptEvent,
   );
   const wrappedPromises = pubPromises.map((promise) =>
@@ -169,7 +169,7 @@ export async function handleZapRequest(
     invoice,
     zapEvent,
   );
-  const pubs = await publishZapReceipt(zapReceipt);
+  const pubs = await publishZapReceipt(zapReceipt, zapRequestData.relays);
   const pubRes = pubs.reduce(
     (a, c) => {
       if (c.status === "fulfilled") {
